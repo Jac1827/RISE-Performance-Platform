@@ -1,0 +1,1987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISE Performance Platform</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#023046;
+    --sky:#549db8;
+    --paper:#ffffff;
+    --mist:#eef5f8;
+    --sand:#f7f4ef;
+    --line:#d6e2e8;
+    --text:#18313c;
+    --muted:#5e7480;
+    --danger:#9f2d2d;
+    --warn:#b0761f;
+    --ok:#2a6b3b;
+    --shadow:0 18px 48px rgba(2,48,70,0.08);
+    --radius:18px;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(84,157,184,0.12), transparent 32%),
+      linear-gradient(180deg, #f8fbfc 0%, #eef5f8 100%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  button,input,select,textarea{font:inherit}
+  button{cursor:pointer}
+  a{color:var(--ink)}
+
+  .hidden{display:none !important}
+  .shell{max-width:1380px;margin:0 auto;padding:0 18px 28px}
+  .topbar{
+    position:sticky;top:0;z-index:20;
+    backdrop-filter:blur(12px);
+    background:rgba(255,255,255,0.82);
+    border-bottom:1px solid rgba(2,48,70,0.08);
+  }
+  .topbar-inner{
+    max-width:1380px;margin:0 auto;padding:16px 18px;
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:16px;min-width:280px}
+  .brand svg{height:42px;width:auto;display:block}
+  .brand-copy{line-height:1.2}
+  .brand-copy strong{display:block;color:var(--ink);font-size:18px;letter-spacing:.02em}
+  .brand-copy span{display:block;color:var(--muted);font-size:12px}
+
+  .nav{display:flex;gap:8px;flex:1;flex-wrap:wrap}
+  .nav-btn{
+    border:none;background:transparent;color:var(--muted);
+    padding:10px 12px;border-radius:999px;font-size:13px;font-weight:600;
+    transition:.16s ease;
+  }
+  .nav-btn:hover{background:rgba(84,157,184,0.12);color:var(--ink)}
+  .nav-btn.active{background:var(--ink);color:#fff;box-shadow:0 10px 22px rgba(2,48,70,0.18)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+
+  .btn{
+    border:1px solid transparent;border-radius:12px;padding:10px 14px;
+    background:#fff;color:var(--ink);font-size:13px;font-weight:700;
+    transition:.16s ease;box-shadow:0 10px 22px rgba(2,48,70,0.05);
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:var(--ink);color:#fff}
+  .btn-accent{background:var(--sky);color:#fff}
+  .btn-soft{background:#fff;border-color:rgba(2,48,70,0.12)}
+  .btn-danger{background:#fff0f0;border-color:#efc9c9;color:var(--danger)}
+  .btn-warn{background:#fff5e6;border-color:#ecd6b1;color:#9a6618}
+  .btn-sm{padding:8px 11px;font-size:12px}
+
+  .page{padding-top:26px}
+  .hero{
+    background:linear-gradient(135deg, rgba(2,48,70,0.98), rgba(84,157,184,0.98));
+    color:#fff;border-radius:28px;padding:28px;box-shadow:var(--shadow);
+    margin-bottom:18px;overflow:hidden;position:relative;
+  }
+  .hero:after{
+    content:"";position:absolute;inset:auto -120px -120px auto;width:260px;height:260px;
+    border-radius:50%;background:rgba(255,255,255,0.08)
+  }
+  .hero h1{font-size:30px;letter-spacing:-.03em;margin-bottom:6px}
+  .hero p{font-size:14px;max-width:720px;color:rgba(255,255,255,0.82)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .card{
+    background:rgba(255,255,255,0.92);border:1px solid rgba(2,48,70,0.09);
+    border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);
+  }
+  .stat-card .label{font-size:12px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+  .stat-card .value{font-size:30px;font-weight:800;color:var(--ink)}
+  .stat-card .sub{font-size:12px;color:var(--muted);margin-top:4px}
+
+  .grid-2{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .grid-2-equal{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+
+  .section-title{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    margin-bottom:14px;
+  }
+  .section-title h2{font-size:18px;color:var(--ink);letter-spacing:-.02em}
+  .section-title p{font-size:12px;color:var(--muted)}
+
+  .table-wrap{overflow:auto;border-radius:14px;border:1px solid rgba(2,48,70,0.08)}
+  table{width:100%;border-collapse:collapse;background:#fff}
+  th,td{padding:12px 12px;border-bottom:1px solid #edf2f5;font-size:13px;vertical-align:top}
+  th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;text-align:left;background:#f7fbfd}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fbfdff}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+    font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  }
+  .badge-pip{background:#fdeeee;color:#8e1d1d}
+  .badge-coaching{background:#fff3df;color:#905f11}
+  .badge-active{background:#e8f4ec;color:#205432}
+  .badge-completed{background:#e8f0f8;color:#25537a}
+  .badge-shop{background:#eef5f8;color:#023046}
+  .badge-archived{background:#f0eef8;color:#4d4487}
+  .badge-alert{background:#fff0f0;color:#8e1d1d}
+  .badge-soft{background:#f2f7fa;color:#4f6470}
+
+  .alert{
+    padding:12px 14px;border-radius:14px;font-size:13px;border:1px solid transparent
+  }
+  .alert-info{background:#eef7fb;border-color:#d5e8f1;color:#19455d}
+  .alert-success{background:#ecf7ef;border-color:#cfe7d6;color:#205432}
+  .alert-warn{background:#fff7ea;border-color:#eedbbb;color:#8a5a18}
+  .alert-danger{background:#fff0f0;border-color:#f3cdcd;color:#8e1d1d}
+
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .muted{color:var(--muted)}
+  .small{font-size:12px}
+  .tiny{font-size:11px}
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
+
+  .form-grid{display:grid;gap:12px}
+  .cols-2{grid-template-columns:repeat(2,1fr)}
+  .cols-3{grid-template-columns:repeat(3,1fr)}
+  .cols-4{grid-template-columns:repeat(4,1fr)}
+  label{display:block;font-size:12px;font-weight:700;color:var(--ink);margin-bottom:5px}
+  input,select,textarea{
+    width:100%;border:1px solid #d5e3ea;background:#fff;border-radius:12px;
+    padding:11px 12px;color:var(--text);outline:none;transition:.16s ease;
+  }
+  input:focus,select:focus,textarea:focus{
+    border-color:rgba(84,157,184,0.8);
+    box-shadow:0 0 0 3px rgba(84,157,184,0.16);
+  }
+  textarea{min-height:100px;resize:vertical}
+  .checkbox-row{display:flex;align-items:flex-start;gap:10px}
+  .checkbox-row input{width:auto;margin-top:3px}
+
+  .pill-row{display:flex;gap:10px;flex-wrap:wrap}
+  .pill{
+    border:1px solid #d7e4eb;background:#fff;padding:9px 12px;border-radius:999px;
+    font-size:12px;font-weight:800;color:var(--muted);cursor:pointer
+  }
+  .pill.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .list-row{
+    display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;
+    padding:12px 0;border-bottom:1px solid #edf2f5
+  }
+  .list-row:last-child{border-bottom:none}
+
+  .progress-wrap{height:8px;border-radius:999px;background:#edf2f5;overflow:hidden}
+  .progress{height:8px;border-radius:999px;background:linear-gradient(90deg,var(--ink),var(--sky))}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(7,24,34,0.48);display:flex;
+    align-items:center;justify-content:center;padding:20px;z-index:50;
+  }
+  .modal{
+    width:min(980px,100%);max-height:92vh;overflow:auto;background:#fff;
+    border-radius:24px;padding:24px;box-shadow:0 30px 80px rgba(0,0,0,0.22);position:relative;
+  }
+  .modal.narrow{width:min(560px,100%)}
+  .close-btn{
+    position:absolute;top:14px;right:14px;width:34px;height:34px;border:none;
+    border-radius:999px;background:#f2f7fa;color:var(--ink);font-size:18px;font-weight:800
+  }
+  .modal h3{font-size:22px;color:var(--ink);margin-bottom:6px}
+  .modal .sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+  .schedule-row{
+    display:grid;grid-template-columns:120px 1fr 120px 140px 90px;gap:10px;
+    align-items:center;padding:10px 0;border-bottom:1px solid #edf2f5
+  }
+  .schedule-row:last-child{border-bottom:none}
+  .schedule-status{font-size:12px;font-weight:700}
+  .status-complete{color:var(--ok)}
+  .status-overdue{color:var(--danger)}
+  .status-open{color:var(--warn)}
+
+  .file-box{
+    border:1.5px dashed #b9d2dd;border-radius:16px;padding:18px;text-align:center;background:#f9fcfd
+  }
+  .file-box strong{display:block;color:var(--ink);margin-bottom:4px}
+
+  .history-card{background:#f7fbfd;border:1px solid #e1edf2;border-radius:16px;padding:14px}
+  .history-card h4{font-size:14px;color:var(--ink);margin-bottom:6px}
+
+  .footer-note{margin-top:16px;font-size:12px;color:var(--muted)}
+
+  @media (max-width:1080px){
+    .stats,.grid-3,.cols-4{grid-template-columns:repeat(2,1fr)}
+    .grid-2,.grid-2-equal,.cols-2,.cols-3{grid-template-columns:1fr}
+    .schedule-row{grid-template-columns:1fr}
+  }
+  @media (max-width:720px){
+    .stats{grid-template-columns:1fr}
+    .hero h1{font-size:24px}
+    .shell{padding:0 14px 22px}
+    .topbar-inner{padding:14px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+<script>
+const STORAGE_KEY = 'rise_performance_platform_github_v1';
+const ROLE_OPTIONS = ['Leasing Professional','Leasing Manager','Assistant Manager','Community Manager','Maintenance Technician','Maintenance Supervisor','Regional Manager','Administrative Assistant','Leasing Consultant','Property Manager'];
+const COMMUNITY_OPTIONS = ['RISE at Nocatee','RISE at Glen Kernan Park','RISE Viera','Pilots Pointe','The Preserve at Tech'];
+const REGIONS = {
+  west:{name:'West Coast / Central FL',short:'West / Central'},
+  east:{name:'East Coast FL',short:'East Coast'},
+  student:{name:'Student Housing',short:'Student'},
+  valdosta:{name:'Valdosta',short:'Valdosta'},
+  jax:{name:'JAX Corporate',short:'JAX'}
+};
+const MEETING_LABEL_OPTIONS = [
+  {value:'1:1',label:'1:1'},
+  {value:'Initial presentation of PIP/Coaching plan',label:'Initial presentation of PIP/Coaching plan'},
+  {value:'Weekly Follow Up',label:'Weekly Follow Up'},
+  {value:'Task Completion Review',label:'Task Completion Review'},
+  {value:'__custom__',label:'Blank / custom meeting type'}
+];
+
+let STATE = loadState();
+let UI = {
+  currentView: STATE.currentView || 'dashboard',
+  planFilter: 'active',
+  selectedWeeklyPlanId: null,
+  newPlanType: 'coaching'
+};
+
+function loadState(){
+  try{
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    return {
+      employees: Array.isArray(stored.employees) ? stored.employees : [],
+      plans: Array.isArray(stored.plans) ? stored.plans : [],
+      currentView: stored.currentView || 'dashboard'
+    };
+  }catch(err){
+    return {employees:[],plans:[],currentView:'dashboard'};
+  }
+}
+
+function saveState(){
+  STATE.currentView = UI.currentView;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+}
+
+function genId(){
+  return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+
+function today(){
+  return new Date().toISOString().slice(0,10);
+}
+
+function formatDate(date){
+  if(!date) return 'Not set';
+  const d = new Date(date + 'T00:00:00');
+  if(Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function addDays(base, days){
+  const d = new Date(base + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+function riseWordmark(){
+  return `
+    <svg viewBox="0 0 354 74" aria-label="RISE logo" role="img">
+      <rect width="354" height="74" fill="none"></rect>
+      <g fill="#023046">
+        <path d="M0 9h28c11 0 19 2.3 24.1 6.8 4.6 4.1 7 9.7 7 16.8v.2c0 11.5-6.4 18.8-15.7 22.2L61 65H43.3L28 57.6V65H0V9zm28 35.5h13.9c6.7 0 10.6-3.2 10.6-8.3V36c0-5.6-4-8.4-10.9-8.4H28v16.9z"></path>
+        <path d="M179.6 49.8l16.3-19.4c10.5 8.3 22.1 12.6 34.4 12.6 7.9 0 12.1-2.7 12.1-7.1v-.2c0-4.3-3.3-6.6-17.1-9.8-21.6-4.9-38.3-11.1-38.3-32v-.2C187 6.6 201.7 0 221.2 0c13.9 0 26.8 3.7 36.4 11.8l-14.6 20.5c-9.6-6.8-20-10.3-29.5-10.3-7.1 0-10.6 2.9-10.6 6.6v.2c0 4.7 3.5 6.8 17.5 10 23.3 5 37.8 12.4 37.8 31.7v.2c0 20.1-15.8 32-40.8 32-14.7 0-31.4-4.9-44.8-15.1z" transform="translate(-8 0) scale(.72) translate(46 9)"></path>
+        <path d="M287 9h59v18.5h-31v9h28v17.1h-28v11H347V65h-60V9z"></path>
+      </g>
+      <g>
+        <rect x="107" y="4" width="23" height="66" fill="#023046"></rect>
+        <rect x="107" y="8" width="12" height="5" fill="#549db8"></rect>
+        <rect x="107" y="19" width="12" height="5" fill="#549db8"></rect>
+        <rect x="107" y="30" width="12" height="5" fill="#549db8"></rect>
+        <rect x="107" y="41" width="12" height="5" fill="#549db8"></rect>
+        <rect x="107" y="52" width="12" height="5" fill="#549db8"></rect>
+        <rect x="107" y="63" width="12" height="5" fill="#549db8"></rect>
+      </g>
+    </svg>
+  `;
+}
+
+function getEmployee(id){
+  return STATE.employees.find(emp => emp.id === id);
+}
+
+function getPlan(id){
+  return STATE.plans.find(plan => plan.id === id);
+}
+
+function activePlans(){
+  return STATE.plans.filter(plan => plan.status === 'active');
+}
+
+function trackedPlans(){
+  return STATE.plans.filter(plan => plan.status !== 'archived');
+}
+
+function planLabel(plan){
+  if(plan.status === 'shop_ordered') return 'Shop Ordered';
+  if(plan.status === 'completed') return 'Completed';
+  if(plan.status === 'archived') return 'Archived';
+  return 'Active';
+}
+
+function planStatusBadgeClass(plan){
+  if(plan.status === 'shop_ordered') return 'badge-shop';
+  if(plan.status === 'completed') return 'badge-completed';
+  if(plan.status === 'archived') return 'badge-archived';
+  return 'badge-active';
+}
+
+function typeBadgeClass(type){
+  return type === 'pip' ? 'badge-pip' : 'badge-coaching';
+}
+
+function scoreClass(score){
+  if(score == null || Number.isNaN(Number(score))) return 'badge-soft';
+  const value = Number(score);
+  if(value >= 84) return 'badge-active';
+  if(value >= 65) return 'badge-coaching';
+  return 'badge-pip';
+}
+
+function daysLeft(plan){
+  return Math.ceil((new Date(plan.reviewDate) - new Date()) / 86400000);
+}
+
+function pctComplete(plan){
+  if(!plan.presentedAt) return 0;
+  const start = new Date(plan.presentedAt);
+  const end = new Date(plan.reviewDate);
+  const now = new Date();
+  if(end <= start) return 100;
+  return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+function parseActionItems(text){
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const parts = line.split('|');
+      if(parts.length > 1){
+        return {area: parts[0].trim(), text: parts.slice(1).join('|').trim()};
+      }
+      return {area:'General', text: line};
+    })
+    .filter(item => item.text);
+}
+
+function getSchedule(plan){
+  if(!plan.presentedAt) return [];
+  const schedule = [{
+    schedIdx:0,
+    due:plan.presentedAt,
+    label:'Initial presentation of PIP/Coaching plan',
+    type:'Initial presentation of PIP/Coaching plan'
+  }];
+  let schedIdx = 1;
+  let cursor = addDays(plan.presentedAt, 7);
+  while(cursor < plan.reviewDate){
+    schedule.push({
+      schedIdx,
+      due:cursor,
+      label:'Weekly Follow Up',
+      type:'Weekly Follow Up'
+    });
+    schedIdx += 1;
+    cursor = addDays(cursor, 7);
+  }
+  if(plan.reviewDate !== plan.presentedAt){
+    const last = schedule[schedule.length - 1];
+    if(last && last.due === plan.reviewDate && last.schedIdx !== 0){
+      last.label = 'Task Completion Review';
+      last.type = 'Task Completion Review';
+    }else{
+      schedule.push({
+        schedIdx,
+        due:plan.reviewDate,
+        label:'Task Completion Review',
+        type:'Task Completion Review'
+      });
+    }
+  }
+  return schedule;
+}
+
+function getMeetingRecord(plan, schedIdx){
+  return (plan.meetings || []).find(item => item.schedIdx === schedIdx);
+}
+
+function getMeetingStatus(plan, schedItem){
+  const record = getMeetingRecord(plan, schedItem.schedIdx);
+  if(record) return record.status;
+  if(schedItem.due < today()) return 'past_due';
+  return 'scheduled';
+}
+
+function meetingStatusLabel(status){
+  if(status === 'completed') return 'Completed';
+  if(status === 'past_due') return 'Past Due';
+  return 'Scheduled';
+}
+
+function getMissedMeetings(plan){
+  return getSchedule(plan).filter(item => item.due < today() && getMeetingStatus(plan, item) !== 'completed').length;
+}
+
+function getOverdueActionItems(plan){
+  const lastUpdate = (plan.weeklyUpdates || []).slice(-1)[0];
+  if(!lastUpdate || !Array.isArray(lastUpdate.items)) return 0;
+  return lastUpdate.items.filter(item => item.status === 'incomplete').length;
+}
+
+function getPlanAlerts(plan){
+  const alerts = [];
+  const dl = daysLeft(plan);
+  if(plan.status === 'active' && !plan.presentedAt) alerts.push('Plan not yet presented');
+  if(plan.status === 'active' && plan.presentedAt && !plan.signedDocData) alerts.push('Signed plan missing');
+  if(plan.status === 'active' && dl < 0) alerts.push('Review date passed');
+  const missed = getMissedMeetings(plan);
+  if(missed > 0) alerts.push(missed + ' missed meeting' + (missed > 1 ? 's' : ''));
+  const overdueItems = getOverdueActionItems(plan);
+  if(overdueItems > 0) alerts.push(overdueItems + ' incomplete action item' + (overdueItems > 1 ? 's' : ''));
+  return alerts;
+}
+
+function getUpcomingMeetings(){
+  const meetings = [];
+  activePlans().forEach(plan => {
+    const employee = getEmployee(plan.employeeId);
+    getSchedule(plan).forEach(item => {
+      const record = getMeetingRecord(plan, item.schedIdx);
+      if(record && record.status === 'completed') return;
+      meetings.push({
+        plan,
+        employee,
+        due:item.due,
+        label:item.label,
+        status:record ? record.status : (item.due < today() ? 'past_due' : 'scheduled')
+      });
+    });
+  });
+  return meetings.sort((a,b) => a.due.localeCompare(b.due));
+}
+
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          ${riseWordmark()}
+          <div class="brand-copy">
+            <strong>Performance Platform</strong>
+            <span>GitHub Pages-ready coaching and PIP dashboard</span>
+          </div>
+        </div>
+        <div class="nav">
+          ${[
+            ['dashboard','Dashboard'],
+            ['plans','Active Plans'],
+            ['newplan','+ New Plan'],
+            ['weekly','Weekly Updates'],
+            ['employees','Employees'],
+            ['export','Weekly Export']
+          ].map(([id,label]) => `<button class="nav-btn ${UI.currentView === id ? 'active' : ''}" onclick="switchView('${id}')">${label}</button>`).join('')}
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-soft btn-sm" onclick="seedDemoData()">Load Demo Data</button>
+          <button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset Data</button>
+        </div>
+      </div>
+    </div>
+    <div class="shell">
+      ${renderView()}
+    </div>
+  `;
+}
+
+function switchView(view){
+  UI.currentView = view;
+  saveState();
+  render();
+}
+
+function renderView(){
+  if(UI.currentView === 'plans') return renderPlans();
+  if(UI.currentView === 'newplan') return renderNewPlan();
+  if(UI.currentView === 'weekly') return renderWeekly();
+  if(UI.currentView === 'employees') return renderEmployees();
+  if(UI.currentView === 'export') return renderExport();
+  return renderDashboard();
+}
+
+function renderDashboard(){
+  const plans = trackedPlans();
+  const active = plans.filter(plan => plan.status === 'active');
+  const shopOrdered = plans.filter(plan => plan.status === 'shop_ordered');
+  const upcoming = getUpcomingMeetings().slice(0,8);
+  const attention = active.filter(plan => getPlanAlerts(plan).length);
+
+  return `
+    <div class="page">
+      <div class="hero">
+        <h1>Employee coaching and PIP management in one live page</h1>
+        <p>Track presentations, signed plans, weekly follow-ups, completion reviews, shop-order triggers, and branded exports from a single GitHub-hosted HTML app.</p>
+      </div>
+      <div class="stats">
+        <div class="card stat-card">
+          <div class="label">Active Plans</div>
+          <div class="value">${active.length}</div>
+          <div class="sub">Open coaching and PIP plans</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Employees</div>
+          <div class="value">${STATE.employees.length}</div>
+          <div class="sub">Roster loaded into the page</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Needs Attention</div>
+          <div class="value">${attention.length}</div>
+          <div class="sub">Active plans with alerts</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Shop Ordered</div>
+          <div class="value">${shopOrdered.length}</div>
+          <div class="sub">Plans waiting on a targeted shop</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Upcoming meetings</h2>
+              <p>Pre-populated from each plan's presentation date through review date.</p>
+            </div>
+          </div>
+          ${upcoming.length ? upcoming.map(item => `
+            <div class="list-row">
+              <div>
+                <div class="inline">
+                  <strong>${item.employee ? item.employee.name : 'Unknown employee'}</strong>
+                  <span class="badge ${typeBadgeClass(item.plan.type)}">${item.plan.type.toUpperCase()}</span>
+                  <span class="badge ${item.status === 'past_due' ? 'badge-alert' : 'badge-soft'}">${meetingStatusLabel(item.status)}</span>
+                </div>
+                <div class="small muted" style="margin-top:6px">${item.label} · Due ${formatDate(item.due)} · ${item.employee ? item.employee.community || 'Community not set' : 'Community not set'}</div>
+              </div>
+              <button class="btn btn-sm btn-soft" onclick="openWeeklyForPlan('${item.plan.id}')">Update</button>
+            </div>
+          `).join('') : '<div class="alert alert-info">No scheduled meetings yet. Present a plan to start the weekly cadence.</div>'}
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Attention required</h2>
+              <p>Alerts update from presentation, signed-plan, meeting, and action-item activity.</p>
+            </div>
+          </div>
+          ${attention.length ? attention.map(plan => {
+            const employee = getEmployee(plan.employeeId);
+            return `
+              <div class="history-card" style="margin-bottom:12px">
+                <div class="inline" style="margin-bottom:6px">
+                  <strong>${employee ? employee.name : 'Unknown employee'}</strong>
+                  <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                </div>
+                <div class="small muted" style="margin-bottom:8px">${employee ? employee.community || 'Community not set' : 'Community not set'} · Review ${formatDate(plan.reviewDate)}</div>
+                <div class="inline">${getPlanAlerts(plan).map(alert => `<span class="badge badge-alert">${alert}</span>`).join('')}</div>
+                <div style="margin-top:10px">
+                  <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">Open plan</button>
+                </div>
+              </div>
+            `;
+          }).join('') : '<div class="alert alert-success">No active plans need attention right now.</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPlans(){
+  const tabs = ['active','shop_ordered','completed','archived','all'];
+  const filtered = STATE.plans.filter(plan => {
+    if(UI.planFilter === 'all') return true;
+    return plan.status === UI.planFilter;
+  });
+
+  return `
+    <div class="page">
+      <div class="section-title" style="margin-bottom:18px">
+        <div>
+          <h2>Plan tracker</h2>
+          <p>View each employee plan, signed-document status, alerts, and completion state.</p>
+        </div>
+      </div>
+      <div class="inline" style="margin-bottom:14px">
+        ${tabs.map(tab => `<button class="pill ${UI.planFilter === tab ? 'active' : ''}" onclick="setPlanFilter('${tab}')">${tab === 'shop_ordered' ? 'Shop Ordered' : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Type</th>
+                <th>Review Date</th>
+                <th>Progress</th>
+                <th>Signed Plan</th>
+                <th>Alerts</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.length ? filtered.map(plan => {
+                const employee = getEmployee(plan.employeeId);
+                const alerts = getPlanAlerts(plan);
+                return `
+                  <tr>
+                    <td>
+                      <strong>${employee ? employee.name : 'Unknown employee'}</strong>
+                      <div class="small muted">${employee ? employee.community || 'Community not set' : 'Community not set'}</div>
+                    </td>
+                    <td><span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span></td>
+                    <td>${formatDate(plan.reviewDate)}</td>
+                    <td>
+                      <div class="small muted" style="margin-bottom:6px">${pctComplete(plan)}%</div>
+                      <div class="progress-wrap"><div class="progress" style="width:${pctComplete(plan)}%"></div></div>
+                    </td>
+                    <td>
+                      ${plan.signedDocData ? `<span class="badge badge-active">${plan.signedDocName || 'Uploaded'}</span>` : '<span class="badge badge-alert">Missing</span>'}
+                    </td>
+                    <td>
+                      ${alerts.length ? alerts.map(alert => `<div class="tiny muted">${alert}</div>`).join('') : '<span class="tiny muted">None</span>'}
+                    </td>
+                    <td><span class="badge ${planStatusBadgeClass(plan)}">${planLabel(plan)}</span></td>
+                    <td>
+                      <div class="inline">
+                        <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">View</button>
+                        ${plan.status === 'active' ? `<button class="btn btn-sm btn-primary" onclick="markComplete('${plan.id}')">Complete</button>` : ''}
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('') : `
+                <tr>
+                  <td colspan="8">
+                    <div class="alert alert-info">No plans in this view yet.</div>
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setPlanFilter(filter){
+  UI.planFilter = filter;
+  render();
+}
+
+function renderNewPlan(){
+  const managerDefault = 'Manager Name';
+  return `
+    <div class="page">
+      <div class="grid-2-equal">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>New coaching or PIP plan</h2>
+              <p>Create a plan, define review timing, and load action items for weekly tracking.</p>
+            </div>
+          </div>
+
+          <div class="form-grid cols-2">
+            <div>
+              <label>Employee</label>
+              <select id="np-employee">
+                <option value="">Select employee</option>
+                ${STATE.employees.map(emp => `<option value="${emp.id}">${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label>Manager</label>
+              <input id="np-manager" value="${managerDefault}">
+            </div>
+          </div>
+
+          <div style="margin-top:14px">
+            <label>Plan type</label>
+            <div class="pill-row" style="margin-top:6px">
+              <button class="pill ${UI.newPlanType === 'coaching' ? 'active' : ''}" onclick="setNewPlanType('coaching')">Coaching</button>
+              <button class="pill ${UI.newPlanType === 'pip' ? 'active' : ''}" onclick="setNewPlanType('pip')">PIP</button>
+            </div>
+          </div>
+
+          <div class="form-grid cols-3" style="margin-top:14px">
+            <div>
+              <label>Shop date</label>
+              <input type="date" id="np-shop-date" value="${today()}">
+            </div>
+            <div>
+              <label>Review timeline</label>
+              <select id="np-timeline" onchange="applyTimeline()">
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days</option>
+              </select>
+            </div>
+            <div>
+              <label>Review date</label>
+              <input type="date" id="np-review-date" value="${addDays(today(),30)}">
+            </div>
+          </div>
+
+          <div class="form-grid cols-4" style="margin-top:14px">
+            <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1"></div>
+            <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1"></div>
+            <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1"></div>
+            <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1"></div>
+          </div>
+          <div class="form-grid cols-3" style="margin-top:12px">
+            <div><label>Greeting</label><input type="number" id="np-greeting" min="0" max="100" step="0.1"></div>
+            <div><label>Identifying Needs</label><input type="number" id="np-needs" min="0" max="100" step="0.1"></div>
+            <div><label>Demonstrating / Closing</label><input type="number" id="np-demo-closing" min="0" max="100" step="0.1"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Action items and completion trigger</h2>
+              <p>Enter one action item per line. Use <span class="mono">Area | Action item</span> to group items in exports.</p>
+            </div>
+          </div>
+
+          <div class="checkbox-row" style="margin-bottom:14px">
+            <input type="checkbox" id="np-requires-shop">
+            <div>
+              <label style="margin-bottom:2px">Post-plan shop trigger</label>
+              <div class="small muted">When the plan is completed, the status will change to <strong>Shop Ordered</strong> and a prefilled email to <strong>tea.jihad@risere.com</strong> will open with the employee and community details.</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <label>Notes / context</label>
+            <textarea id="np-notes" placeholder="Context, coaching summary, accountability notes, or supporting details..."></textarea>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <label>Action items</label>
+            <textarea id="np-items" placeholder="Telephone | Develop a written call opening script&#10;On-Site | Close every tour with a direct application ask&#10;Follow-Up | Send same-day follow-up after each tour"></textarea>
+          </div>
+
+          <div class="inline">
+            <button class="btn btn-primary" onclick="createPlan()">Save plan</button>
+            <button class="btn btn-soft" onclick="previewNewPlan()">Preview summary</button>
+          </div>
+          <div id="new-plan-preview" style="margin-top:14px"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setNewPlanType(type){
+  UI.newPlanType = type;
+  render();
+}
+
+function applyTimeline(){
+  const days = Number(document.getElementById('np-timeline').value || 30);
+  document.getElementById('np-review-date').value = addDays(today(), days);
+}
+
+function previewNewPlan(){
+  const employee = getEmployee(document.getElementById('np-employee').value);
+  const items = parseActionItems(document.getElementById('np-items').value);
+  const box = document.getElementById('new-plan-preview');
+  if(!employee){
+    box.innerHTML = '<div class="alert alert-danger">Select an employee first.</div>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="alert alert-info">
+      <strong>${employee.name}</strong> · ${UI.newPlanType.toUpperCase()} · Review ${formatDate(document.getElementById('np-review-date').value)}<br>
+      ${items.length} action items loaded · Updated shop required: ${document.getElementById('np-requires-shop').checked ? 'Yes' : 'No'}
+    </div>
+  `;
+}
+
+function createPlan(){
+  const employeeId = document.getElementById('np-employee').value;
+  if(!employeeId){
+    alert('Select an employee before saving the plan.');
+    return;
+  }
+  const reviewDate = document.getElementById('np-review-date').value;
+  if(!reviewDate){
+    alert('Enter a review date.');
+    return;
+  }
+
+  const plan = {
+    id: genId(),
+    employeeId,
+    type: UI.newPlanType,
+    status: 'active',
+    shopDate: document.getElementById('np-shop-date').value,
+    reviewDate,
+    createdAt: today(),
+    manager: document.getElementById('np-manager').value.trim() || 'Manager Name',
+    notes: document.getElementById('np-notes').value.trim(),
+    overallScore: numberOrNull('np-overall'),
+    telScore: numberOrNull('np-telephone'),
+    onsiteScore: numberOrNull('np-onsite'),
+    followupScore: numberOrNull('np-followup'),
+    greetScore: numberOrNull('np-greeting'),
+    needsScore: numberOrNull('np-needs'),
+    demoScore: numberOrNull('np-demo-closing'),
+    actionItems: parseActionItems(document.getElementById('np-items').value),
+    weeklyUpdates: [],
+    meetings: [],
+    consequences: UI.newPlanType === 'pip',
+    requiresUpdatedShop: document.getElementById('np-requires-shop').checked
+  };
+
+  STATE.plans.push(plan);
+  saveState();
+  UI.currentView = 'plans';
+  render();
+}
+
+function numberOrNull(id){
+  const value = document.getElementById(id).value;
+  return value === '' ? null : Number(value);
+}
+
+function renderEmployees(){
+  return `
+    <div class="page">
+      <div class="grid-2-equal">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Add employee</h2>
+              <p>Build the roster that powers plan creation and exports.</p>
+            </div>
+          </div>
+          <div class="form-grid cols-2">
+            <div><label>Full name</label><input id="emp-name"></div>
+            <div><label>Role</label><input id="emp-role" list="role-options"></div>
+          </div>
+          <div class="form-grid cols-2" style="margin-top:12px">
+            <div><label>Community</label><input id="emp-community" list="community-options"></div>
+            <div>
+              <label>Region</label>
+              <select id="emp-region">
+                <option value="">Select region</option>
+                ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}">${value.name}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:14px">
+            <button class="btn btn-primary" onclick="addEmployee()">Add employee</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Roster</h2>
+              <p>${STATE.employees.length} employees currently loaded.</p>
+            </div>
+          </div>
+          ${STATE.employees.length ? `
+            <div class="stack">
+              ${STATE.employees.map(emp => `
+                <div class="history-card">
+                  <div class="inline" style="justify-content:space-between">
+                    <div>
+                      <strong>${emp.name}</strong>
+                      <div class="small muted">${emp.role || 'No role'} · ${emp.community || 'No community'} · ${REGIONS[emp.region] ? REGIONS[emp.region].short : 'No region'}</div>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="removeEmployee('${emp.id}')">Remove</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="alert alert-info">No employees added yet.</div>'}
+        </div>
+      </div>
+      <datalist id="role-options">${ROLE_OPTIONS.map(role => `<option value="${role}">`).join('')}</datalist>
+      <datalist id="community-options">${COMMUNITY_OPTIONS.map(community => `<option value="${community}">`).join('')}</datalist>
+    </div>
+  `;
+}
+
+function addEmployee(){
+  const name = document.getElementById('emp-name').value.trim();
+  if(!name){
+    alert('Enter the employee name.');
+    return;
+  }
+  STATE.employees.push({
+    id: genId(),
+    name,
+    role: document.getElementById('emp-role').value.trim(),
+    community: document.getElementById('emp-community').value.trim(),
+    region: document.getElementById('emp-region').value
+  });
+  saveState();
+  render();
+}
+
+function removeEmployee(id){
+  if(!confirm('Remove this employee from the roster?')) return;
+  STATE.employees = STATE.employees.filter(emp => emp.id !== id);
+  saveState();
+  render();
+}
+
+function renderWeekly(){
+  const plans = activePlans();
+  if(!UI.selectedWeeklyPlanId && plans[0]) UI.selectedWeeklyPlanId = plans[0].id;
+  const plan = getPlan(UI.selectedWeeklyPlanId);
+  const employee = plan ? getEmployee(plan.employeeId) : null;
+  const schedule = plan ? getSchedule(plan) : [];
+  const updates = plan ? (plan.weeklyUpdates || []).slice().reverse() : [];
+
+  return `
+    <div class="page">
+      <div class="grid-2-equal">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Weekly meetings and review cadence</h2>
+              <p>Select an active plan, log the review held, and update action-item progress from the task list.</p>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <label>Plan</label>
+            <select onchange="selectWeeklyPlan(this.value)">
+              <option value="">Select active plan</option>
+              ${plans.map(item => {
+                const emp = getEmployee(item.employeeId);
+                return `<option value="${item.id}" ${plan && item.id === plan.id ? 'selected' : ''}>${emp ? emp.name : 'Unknown employee'} · ${item.type.toUpperCase()} · ${formatDate(item.reviewDate)}</option>`;
+              }).join('')}
+            </select>
+          </div>
+
+          ${plan ? `
+            <div class="alert ${plan.requiresUpdatedShop ? 'alert-warn' : 'alert-info'}" style="margin-bottom:12px">
+              <strong>${employee ? employee.name : 'Unknown employee'}</strong> · ${employee ? employee.community || 'Community not set' : 'Community not set'}<br>
+              Presented: ${plan.presentedAt ? formatDate(plan.presentedAt) : 'Not yet presented'} · Review date: ${formatDate(plan.reviewDate)} · Updated shop required: ${plan.requiresUpdatedShop ? 'Yes' : 'No'}
+            </div>
+
+            <div class="stack">
+              ${schedule.length ? schedule.map(item => {
+                const record = getMeetingRecord(plan, item.schedIdx);
+                const status = getMeetingStatus(plan, item);
+                return `
+                  <div class="schedule-row">
+                    <div class="small muted">${formatDate(item.due)}</div>
+                    <div>
+                      <strong>${item.label}</strong>
+                      <div class="tiny muted">${record && record.notes ? record.notes : 'Planned review checkpoint'}</div>
+                    </div>
+                    <div class="schedule-status ${status === 'completed' ? 'status-complete' : status === 'past_due' ? 'status-overdue' : 'status-open'}">${meetingStatusLabel(status)}</div>
+                    <div class="tiny muted">${record && record.heldDate ? 'Held ' + formatDate(record.heldDate) : 'Due ' + formatDate(item.due)}</div>
+                    <button class="btn btn-sm btn-soft" onclick="openLogWeek('${plan.id}', ${item.schedIdx})">Log</button>
+                  </div>
+                `;
+              }).join('') : '<div class="alert alert-info">Present the plan first to auto-generate weekly follow-ups.</div>'}
+            </div>
+
+            <div class="card" style="margin-top:16px;background:#f8fbfc">
+              <div class="section-title" style="margin-bottom:10px">
+                <div>
+                  <h2 style="font-size:16px">One-off meeting entry</h2>
+                  <p>Use the standard labels below or add a custom one-time review type.</p>
+                </div>
+              </div>
+              <div class="form-grid cols-2">
+                <div>
+                  <label>Meeting label</label>
+                  <select id="oneoff-type" onchange="toggleCustomMeetingField()">
+                    ${MEETING_LABEL_OPTIONS.map(option => `<option value="${option.value}">${option.label}</option>`).join('')}
+                  </select>
+                </div>
+                <div id="oneoff-custom-wrap" class="hidden">
+                  <label>Custom meeting label</label>
+                  <input id="oneoff-custom" placeholder="Enter one-off meeting type">
+                </div>
+              </div>
+              <div style="margin-top:12px">
+                <button class="btn btn-primary btn-sm" onclick="openOneOffUpdate()">Log one-off meeting</button>
+                ${plan.status === 'active' ? `<button class="btn btn-accent btn-sm" onclick="markComplete('${plan.id}')" style="margin-left:8px">Complete plan</button>` : ''}
+              </div>
+            </div>
+          ` : '<div class="alert alert-info">Select an active plan to begin weekly updates.</div>'}
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Action items and update history</h2>
+              <p>Weekly logs roll up progress, notes, and meeting-type detail for export.</p>
+            </div>
+          </div>
+          ${plan ? `
+            ${renderActionItems(plan)}
+            <div style="margin-top:16px">
+              <h3 style="font-size:16px;color:var(--ink);margin-bottom:10px">Update history</h3>
+              ${updates.length ? updates.map(entry => `
+                <div class="history-card" style="margin-bottom:10px">
+                  <h4>${entry.meetingType || 'Update'} · ${formatDate(entry.date)}</h4>
+                  <div class="small muted" style="margin-bottom:8px">${entry.overallStatus || 'No overall status'}${entry.schedIdx != null ? ' · Scheduled checkpoint' : ' · One-off entry'}</div>
+                  ${entry.notes ? `<div class="small" style="margin-bottom:8px">${entry.notes}</div>` : ''}
+                  <div class="inline">${(entry.items || []).map(item => `<span class="badge ${item.status === 'complete' ? 'badge-active' : item.status === 'partial' ? 'badge-coaching' : 'badge-alert'}">#${item.idx + 1} ${item.status}</span>`).join('')}</div>
+                </div>
+              `).join('') : '<div class="alert alert-info">No weekly updates logged yet.</div>'}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectWeeklyPlan(planId){
+  UI.selectedWeeklyPlanId = planId;
+  render();
+}
+
+function openWeeklyForPlan(planId){
+  UI.selectedWeeklyPlanId = planId;
+  UI.currentView = 'weekly';
+  saveState();
+  render();
+}
+
+function toggleCustomMeetingField(){
+  const wrap = document.getElementById('oneoff-custom-wrap');
+  if(!wrap) return;
+  wrap.classList.toggle('hidden', document.getElementById('oneoff-type').value !== '__custom__');
+}
+
+function openOneOffUpdate(){
+  const plan = getPlan(UI.selectedWeeklyPlanId);
+  if(!plan) return;
+  const selected = document.getElementById('oneoff-type').value;
+  const custom = document.getElementById('oneoff-custom') ? document.getElementById('oneoff-custom').value.trim() : '';
+  openLogWeek(plan.id, null, selected, custom);
+}
+
+function renderActionItems(plan){
+  const latest = (plan.weeklyUpdates || []).slice(-1)[0];
+  if(!(plan.actionItems || []).length){
+    return '<div class="alert alert-info">No action items are attached to this plan yet.</div>';
+  }
+  return `
+    <div class="stack">
+      ${(plan.actionItems || []).map((item, index) => {
+        const current = latest && latest.items ? latest.items.find(entry => entry.idx === index) : null;
+        const badgeClass = !current ? 'badge-soft' : current.status === 'complete' ? 'badge-active' : current.status === 'partial' ? 'badge-coaching' : 'badge-alert';
+        const statusLabel = current ? current.status : 'pending';
+        return `
+          <div class="list-row">
+            <div>
+              <strong>#${index + 1} · ${item.area || 'General'}</strong>
+              <div class="small">${item.text}</div>
+              ${current && current.note ? `<div class="tiny muted" style="margin-top:4px">${current.note}</div>` : ''}
+            </div>
+            <span class="badge ${badgeClass}">${statusLabel}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openLogWeek(planId, schedIdx, preferredType, customLabel){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const scheduleItem = schedIdx != null ? getSchedule(plan).find(item => item.schedIdx === schedIdx) : null;
+  const defaultValue = preferredType || (scheduleItem ? scheduleItem.label : 'Weekly Follow Up');
+  const showCustom = defaultValue === '__custom__';
+  openModal(`
+    <div class="modal">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Log weekly update</h3>
+      <div class="sub">Capture the meeting held, update each action item, and preserve the checkpoint for exports.</div>
+
+      <div class="form-grid cols-2">
+        <div>
+          <label>Date held</label>
+          <input type="date" id="log-date" value="${today()}">
+        </div>
+        <div>
+          <label>Overall status</label>
+          <select id="log-overall">
+            <option value="On track">On track</option>
+            <option value="Needs attention">Needs attention</option>
+            <option value="At risk">At risk</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid cols-2" style="margin-top:12px">
+        <div>
+          <label>Meeting type</label>
+          <select id="log-type" onchange="toggleLogCustomField()">
+            ${MEETING_LABEL_OPTIONS.map(option => `<option value="${option.value}" ${option.value === defaultValue ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+        </div>
+        <div id="log-custom-wrap" class="${showCustom ? '' : 'hidden'}">
+          <label>Custom meeting label</label>
+          <input id="log-custom" value="${customLabel || ''}" placeholder="Enter one-off meeting label">
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Manager notes</label>
+        <textarea id="log-notes" placeholder="What was reviewed, what changed, and what coaching was provided?"></textarea>
+      </div>
+
+      <div style="margin-top:16px">
+        <h3 style="font-size:18px;margin-bottom:10px">Task list review</h3>
+        <div class="stack">
+          ${(plan.actionItems || []).length ? plan.actionItems.map((item, idx) => `
+            <div class="history-card">
+              <strong>#${idx + 1} · ${item.area || 'General'}</strong>
+              <div class="small" style="margin:6px 0 10px">${item.text}</div>
+              <div class="form-grid cols-2">
+                <div>
+                  <label>Status</label>
+                  <select id="item-status-${idx}">
+                    <option value="complete">Complete</option>
+                    <option value="partial">Partial</option>
+                    <option value="incomplete" selected>Incomplete</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Notes</label>
+                  <input id="item-note-${idx}" placeholder="Optional item detail">
+                </div>
+              </div>
+            </div>
+          `).join('') : '<div class="alert alert-info">No action items were attached to this plan.</div>'}
+        </div>
+      </div>
+
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveWeeklyLog('${planId}', ${schedIdx == null ? 'null' : schedIdx})">Save weekly update</button>
+      </div>
+    </div>
+  `);
+}
+
+function toggleLogCustomField(){
+  const wrap = document.getElementById('log-custom-wrap');
+  if(!wrap) return;
+  wrap.classList.toggle('hidden', document.getElementById('log-type').value !== '__custom__');
+}
+
+function saveWeeklyLog(planId, schedIdx){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  if(!plan.weeklyUpdates) plan.weeklyUpdates = [];
+  if(!plan.meetings) plan.meetings = [];
+
+  const selectedType = document.getElementById('log-type').value;
+  const custom = document.getElementById('log-custom') ? document.getElementById('log-custom').value.trim() : '';
+  const finalType = selectedType === '__custom__' ? custom : selectedType;
+  if(!finalType){
+    alert('Enter a custom meeting label.');
+    return;
+  }
+
+  const items = (plan.actionItems || []).map((item, idx) => ({
+    idx,
+    status: document.getElementById('item-status-' + idx).value,
+    note: document.getElementById('item-note-' + idx).value.trim()
+  }));
+
+  plan.weeklyUpdates.push({
+    id: genId(),
+    date: document.getElementById('log-date').value,
+    overallStatus: document.getElementById('log-overall').value,
+    notes: document.getElementById('log-notes').value.trim(),
+    meetingType: finalType,
+    schedIdx,
+    items
+  });
+
+  const meetingRecord = {
+    schedIdx,
+    label: finalType,
+    type: finalType,
+    dueDate: schedIdx == null ? null : ((getSchedule(plan).find(item => item.schedIdx === schedIdx) || {}).due || null),
+    heldDate: document.getElementById('log-date').value,
+    status: 'completed',
+    notes: document.getElementById('log-notes').value.trim()
+  };
+
+  if(schedIdx == null){
+    plan.meetings.push(meetingRecord);
+  }else{
+    const existingIndex = plan.meetings.findIndex(item => item.schedIdx === schedIdx);
+    if(existingIndex >= 0) plan.meetings[existingIndex] = meetingRecord;
+    else plan.meetings.push(meetingRecord);
+  }
+
+  saveState();
+  closeModal();
+  render();
+}
+
+function renderExport(){
+  const plans = trackedPlans();
+  return `
+    <div class="page">
+      <div class="grid-2">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Weekly export center</h2>
+              <p>Export the full plan roster, meeting cadence, due dates, statuses, and last action-item review.</p>
+            </div>
+          </div>
+          <div class="inline" style="margin-bottom:12px">
+            <button class="btn btn-primary" onclick="exportWeeklyExcel()">Export Excel</button>
+            <button class="btn btn-accent" onclick="exportWeeklyPDF()">Export RISE Branded PDF</button>
+          </div>
+          <div class="alert alert-info">The PDF export opens as a branded print view so you can use <strong>Print / Save as PDF</strong> for emailing.</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Export coverage</h2>
+              <p>Everything below is included in the downloadable weekly exports.</p>
+            </div>
+          </div>
+          <div class="stack small">
+            <div>Plan start date from the employee presentation checkpoint</div>
+            <div>Generated weekly follow-up due dates through the review date</div>
+            <div>Meeting types, held dates, and missed checkpoints</div>
+            <div>Signed plan status and filename</div>
+            <div>Action-item status counts from the latest weekly update</div>
+            <div>Shop Ordered status and Tea notification trigger state</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>Tracked plans</h2>
+            <p>Current export preview across all non-archived plans.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Community</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Presented</th>
+                <th>Review Date</th>
+                <th>Signed Plan</th>
+                <th>Meetings</th>
+                <th>Last Update</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${plans.length ? plans.map(plan => {
+                const employee = getEmployee(plan.employeeId);
+                const schedule = getSchedule(plan);
+                const last = (plan.weeklyUpdates || []).slice(-1)[0];
+                const completedMeetings = (plan.meetings || []).filter(item => item.status === 'completed').length;
+                return `
+                  <tr>
+                    <td><strong>${employee ? employee.name : 'Unknown employee'}</strong></td>
+                    <td>${employee ? employee.community || 'Community not set' : 'Community not set'}</td>
+                    <td><span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span></td>
+                    <td><span class="badge ${planStatusBadgeClass(plan)}">${planLabel(plan)}</span></td>
+                    <td>${plan.presentedAt ? formatDate(plan.presentedAt) : 'Not set'}</td>
+                    <td>${formatDate(plan.reviewDate)}</td>
+                    <td>${plan.signedDocData ? plan.signedDocName || 'Uploaded' : 'Missing'}</td>
+                    <td>${completedMeetings}/${schedule.length || 0} completed</td>
+                    <td>${last ? `${formatDate(last.date)} · ${last.meetingType}` : 'No updates yet'}</td>
+                  </tr>
+                `;
+              }).join('') : `
+                <tr><td colspan="9"><div class="alert alert-info">No tracked plans yet.</div></td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openPlanDetail(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const employee = getEmployee(plan.employeeId);
+  const schedule = getSchedule(plan);
+  const alerts = getPlanAlerts(plan);
+  openModal(`
+    <div class="modal">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>${employee ? employee.name : 'Unknown employee'} · ${plan.type.toUpperCase()}</h3>
+      <div class="sub">${employee ? employee.community || 'Community not set' : 'Community not set'} · Created ${formatDate(plan.createdAt)} · Review ${formatDate(plan.reviewDate)}</div>
+
+      ${alerts.length ? `<div class="inline" style="margin-bottom:14px">${alerts.map(alert => `<span class="badge badge-alert">${alert}</span>`).join('')}</div>` : ''}
+
+      <div class="grid-3" style="margin-bottom:16px">
+        <div class="card" style="background:#f8fbfc">
+          <div class="small muted">Overall score</div>
+          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${plan.overallScore != null ? plan.overallScore + '%' : 'N/A'}</div>
+        </div>
+        <div class="card" style="background:#f8fbfc">
+          <div class="small muted">Progress</div>
+          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${pctComplete(plan)}%</div>
+        </div>
+        <div class="card" style="background:#f8fbfc">
+          <div class="small muted">Status</div>
+          <div style="margin-top:8px"><span class="badge ${planStatusBadgeClass(plan)}">${planLabel(plan)}</span></div>
+        </div>
+      </div>
+
+      <div class="grid-2-equal">
+        <div class="card" style="background:#fbfdff">
+          <div class="section-title">
+            <div>
+              <h2 style="font-size:16px">Employee's individual plan</h2>
+              <p>Presentation date, signed document upload, and plan-export actions.</p>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="history-card">
+              <strong>Presentation status</strong>
+              <div class="small muted" style="margin:6px 0 10px">${plan.presentedAt ? 'Presented on ' + formatDate(plan.presentedAt) : 'Not yet presented to employee'}</div>
+              <button class="btn btn-sm ${plan.presentedAt ? 'btn-soft' : 'btn-primary'}" onclick="markPlanPresented('${plan.id}')">${plan.presentedAt ? 'Update presentation date' : 'Mark as presented'}</button>
+            </div>
+            <div class="history-card">
+              <strong>Signed presented coaching / PIP plan</strong>
+              <div class="small muted" style="margin:6px 0 10px">${plan.signedDocData ? 'Uploaded ' + formatDate(plan.signedDocDate) + ' · ' + (plan.signedDocName || 'Signed plan') : 'No signed plan uploaded yet'}</div>
+              <div class="inline">
+                <button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">${plan.signedDocData ? 'Replace upload' : 'Upload signed plan'}</button>
+                ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Download</button>` : ''}
+              </div>
+            </div>
+            <div class="history-card">
+              <strong>Document output</strong>
+              <div class="small muted" style="margin:6px 0 10px">Generate the formal employee plan document in a branded print view.</div>
+              <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="background:#fbfdff">
+          <div class="section-title">
+            <div>
+              <h2 style="font-size:16px">Meeting cadence</h2>
+              <p>Weekly follow-ups auto-run from plan presentation through review date.</p>
+            </div>
+          </div>
+          ${schedule.length ? schedule.map(item => {
+            const record = getMeetingRecord(plan, item.schedIdx);
+            const status = getMeetingStatus(plan, item);
+            return `
+              <div class="schedule-row">
+                <div class="small muted">${formatDate(item.due)}</div>
+                <div><strong>${item.label}</strong></div>
+                <div class="schedule-status ${status === 'completed' ? 'status-complete' : status === 'past_due' ? 'status-overdue' : 'status-open'}">${meetingStatusLabel(status)}</div>
+                <div class="tiny muted">${record && record.heldDate ? 'Held ' + formatDate(record.heldDate) : 'Due ' + formatDate(item.due)}</div>
+                <button class="btn btn-sm btn-soft" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Weekly updates</button>
+              </div>
+            `;
+          }).join('') : '<div class="alert alert-info">Present the plan to generate the weekly cadence.</div>'}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;background:#fbfdff">
+        <div class="section-title">
+          <div>
+            <h2 style="font-size:16px">Required actions</h2>
+            <p>These action items feed directly into the weekly update task review.</p>
+          </div>
+        </div>
+        ${renderActionItems(plan)}
+      </div>
+
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Close</button>
+        <button class="btn btn-primary" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Go to Weekly Updates</button>
+      </div>
+    </div>
+  `);
+}
+
+function markPlanPresented(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Mark plan as presented</h3>
+      <div class="sub">This presentation date starts the required weekly follow-up cadence and dashboard due dates.</div>
+      <label>Presentation date</label>
+      <input type="date" id="presented-date" value="${plan.presentedAt || today()}">
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmPresentation('${planId}')">Save presentation date</button>
+      </div>
+    </div>
+  `);
+}
+
+function confirmPresentation(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const value = document.getElementById('presented-date').value;
+  if(!value){
+    alert('Choose a presentation date.');
+    return;
+  }
+  plan.presentedAt = value;
+  if(!plan.meetings) plan.meetings = [];
+  const initialMeeting = {
+    schedIdx: 0,
+    label: 'Initial presentation of PIP/Coaching plan',
+    type: 'Initial presentation of PIP/Coaching plan',
+    dueDate: value,
+    heldDate: value,
+    status: 'completed',
+    notes: 'Plan presented to employee.'
+  };
+  const existingIndex = plan.meetings.findIndex(item => item.schedIdx === 0);
+  if(existingIndex >= 0) plan.meetings[existingIndex] = initialMeeting;
+  else plan.meetings.push(initialMeeting);
+  saveState();
+  closeModal();
+  openSignedUpload(planId);
+  render();
+}
+
+function openSignedUpload(planId){
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Upload signed plan</h3>
+      <div class="sub">Store the signed presented coaching or PIP plan in the browser for this employee's record.</div>
+      <div class="file-box">
+        <strong>Choose signed document</strong>
+        <div class="small muted">PDF, JPG, PNG, or DOCX</div>
+        <div style="margin-top:12px">
+          <input id="signed-plan-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" onchange="handleSignedUpload('${planId}', event)">
+        </div>
+      </div>
+      <div id="signed-upload-status" style="margin-top:12px"></div>
+    </div>
+  `);
+}
+
+function handleSignedUpload(planId, event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const reader = new FileReader();
+  reader.onload = function(loadEvent){
+    plan.signedDocData = loadEvent.target.result;
+    plan.signedDocName = file.name;
+    plan.signedDocDate = today();
+    saveState();
+    const status = document.getElementById('signed-upload-status');
+    if(status) status.innerHTML = '<div class="alert alert-success">Signed document saved: <strong>' + escapeHtml(file.name) + '</strong></div>';
+    setTimeout(() => {
+      closeModal();
+      render();
+    }, 700);
+  };
+  reader.readAsDataURL(file);
+}
+
+function downloadSignedDoc(planId){
+  const plan = getPlan(planId);
+  if(!plan || !plan.signedDocData) return;
+  const link = document.createElement('a');
+  link.href = plan.signedDocData;
+  link.download = plan.signedDocName || 'signed-plan';
+  link.click();
+}
+
+function openTeaShopOrderEmail(plan){
+  const employee = getEmployee(plan.employeeId);
+  const subject = encodeURIComponent('Targeted shop requested: ' + (employee ? employee.name : 'Employee'));
+  const body = encodeURIComponent(
+    'Tea,\n\n' +
+    'A targeted shop needs to be ordered for the following employee after plan completion:\n\n' +
+    'Employee: ' + (employee ? employee.name : 'Unknown employee') + '\n' +
+    'Community: ' + (employee ? (employee.community || 'Community not set') : 'Community not set') + '\n' +
+    'Plan type: ' + plan.type.toUpperCase() + '\n' +
+    'Plan completion date: ' + today() + '\n\n' +
+    'Please order the updated shop.\n'
+  );
+  window.location.href = 'mailto:tea.jihad@risere.com?subject=' + subject + '&body=' + body;
+}
+
+function markComplete(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  if(plan.requiresUpdatedShop){
+    if(!confirm('Completing this plan will change the status to Shop Ordered and open an email to Tea Jihad. Continue?')) return;
+    plan.status = 'shop_ordered';
+    plan.completedAt = today();
+    plan.shopOrderedAt = today();
+    saveState();
+    openTeaShopOrderEmail(plan);
+  }else{
+    if(!confirm('Mark this plan as completed?')) return;
+    plan.status = 'completed';
+    plan.completedAt = today();
+    saveState();
+  }
+  render();
+}
+
+function exportPlanDocument(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const employee = getEmployee(plan.employeeId);
+  const grouped = {};
+  (plan.actionItems || []).forEach(item => {
+    const key = item.area || 'General';
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(item.text);
+  });
+  const doc = window.open('', '_blank');
+  doc.document.write(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>${employee ? employee.name : 'Employee'} ${plan.type.toUpperCase()} Plan</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#18313c;margin:0;background:#eef5f8}
+        .page{max-width:920px;margin:0 auto;background:#fff;padding:36px 42px 48px}
+        .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;border-bottom:4px solid #549db8;padding-bottom:18px;margin-bottom:22px}
+        .title{font-size:28px;font-weight:800;color:#023046;letter-spacing:-.03em}
+        .subtitle{font-size:13px;color:#5e7480;margin-top:6px}
+        .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${plan.type === 'pip' ? '#fdeeee;color:#8e1d1d' : '#fff3df;color:#905f11'};}
+        table{width:100%;border-collapse:collapse;margin-bottom:18px}
+        th,td{border:1px solid #d6e2e8;padding:10px 11px;font-size:13px;text-align:left;vertical-align:top}
+        th{background:#f7fbfd;color:#5e7480;text-transform:uppercase;font-size:11px;letter-spacing:.08em}
+        h2{font-size:16px;color:#023046;margin:20px 0 10px}
+        .panel{background:#f8fbfc;border:1px solid #dce8ee;border-radius:16px;padding:16px;margin-bottom:18px}
+        .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+        .sig{border:1px solid #d6e2e8;border-radius:14px;padding:22px 16px 14px;min-height:88px}
+        .muted{color:#5e7480}
+        @media print{
+          body{background:#fff}
+          .page{max-width:none;padding:0}
+          button{display:none}
+        }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="hero">
+          <div>
+            ${riseWordmark()}
+            <div class="title">${plan.type === 'pip' ? 'Performance Improvement Plan' : 'Coaching Plan'}</div>
+            <div class="subtitle">Formal employee performance document generated from the live dashboard.</div>
+          </div>
+          <div class="badge">${plan.type.toUpperCase()}</div>
+        </div>
+        <table>
+          <tr><th>Employee</th><td>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</td><th>Community</th><td>${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</td></tr>
+          <tr><th>Role</th><td>${employee ? escapeHtml(employee.role || 'Role not set') : 'Role not set'}</td><th>Manager</th><td>${escapeHtml(plan.manager || 'Manager not set')}</td></tr>
+          <tr><th>Issued</th><td>${formatDate(plan.createdAt)}</td><th>Review Date</th><td>${formatDate(plan.reviewDate)}</td></tr>
+          <tr><th>Presented</th><td>${plan.presentedAt ? formatDate(plan.presentedAt) : 'Not yet presented'}</td><th>Signed Plan</th><td>${plan.signedDocName ? escapeHtml(plan.signedDocName) : 'Not yet uploaded'}</td></tr>
+        </table>
+        <h2>Performance Scores</h2>
+        <table>
+          <tr><th>Overall</th><th>Telephone</th><th>On-Site</th><th>Greeting</th><th>Needs</th><th>Demonstrating / Closing</th><th>Follow-Up</th></tr>
+          <tr>
+            <td>${plan.overallScore != null ? plan.overallScore + '%' : 'N/A'}</td>
+            <td>${plan.telScore != null ? plan.telScore + '%' : 'N/A'}</td>
+            <td>${plan.onsiteScore != null ? plan.onsiteScore + '%' : 'N/A'}</td>
+            <td>${plan.greetScore != null ? plan.greetScore + '%' : 'N/A'}</td>
+            <td>${plan.needsScore != null ? plan.needsScore + '%' : 'N/A'}</td>
+            <td>${plan.demoScore != null ? plan.demoScore + '%' : 'N/A'}</td>
+            <td>${plan.followupScore != null ? plan.followupScore + '%' : 'N/A'}</td>
+          </tr>
+        </table>
+        <h2>Corrective Actions / Focus Areas</h2>
+        ${Object.keys(grouped).length ? Object.entries(grouped).map(([area, items]) => `
+          <div class="panel">
+            <strong>${escapeHtml(area)}</strong>
+            <ol>
+              ${items.map(text => `<li style="margin-top:8px">${escapeHtml(text)}</li>`).join('')}
+            </ol>
+          </div>
+        `).join('') : '<div class="panel">No action items attached to this plan.</div>'}
+        <h2>Manager Notes</h2>
+        <div class="panel">${plan.notes ? escapeHtml(plan.notes).replace(/\n/g, '<br>') : 'No notes entered.'}</div>
+        <h2>Expectations and Accountability</h2>
+        <div class="panel">
+          Weekly follow-up meetings will be completed throughout the plan term. Progress will be reviewed against the action items listed above, with due dates running from the presentation date through the review date.
+          ${plan.requiresUpdatedShop ? '<br><br>An updated targeted shop is required at plan completion. When complete, the plan will move to Shop Ordered and notify Tea Jihad for ordering.' : ''}
+          ${plan.consequences ? '<br><br>Failure to demonstrate sustained improvement within the review period may result in additional corrective action, up to and including termination of employment.' : ''}
+        </div>
+        <div class="sig-grid">
+          <div class="sig"><strong>Employee Signature</strong><div class="muted" style="margin-top:36px">${employee ? escapeHtml(employee.name) : 'Employee'}</div></div>
+          <div class="sig"><strong>Manager Signature</strong><div class="muted" style="margin-top:36px">${escapeHtml(plan.manager || 'Manager')}</div></div>
+        </div>
+        <button onclick="window.print()" style="margin-top:24px;background:#023046;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer">Print / Save as PDF</button>
+      </div>
+    </body>
+    </html>
+  `);
+  doc.document.close();
+}
+
+function exportWeeklyExcel(){
+  const plans = trackedPlans();
+  const wb = XLSX.utils.book_new();
+  const overviewRows = [[
+    'Employee','Community','Region','Plan Type','Status','Plan Start','Review Date','Presented?','Signed Plan','Signed File Name','Updated Shop Required','Meetings Scheduled','Meetings Completed','Missed Meetings','Last Update','Last Meeting Type','Overall Status'
+  ]];
+
+  plans.forEach(plan => {
+    const employee = getEmployee(plan.employeeId);
+    const last = (plan.weeklyUpdates || []).slice(-1)[0];
+    const schedule = getSchedule(plan);
+    overviewRows.push([
+      employee ? employee.name : '',
+      employee ? employee.community || '' : '',
+      employee && employee.region ? (REGIONS[employee.region] ? REGIONS[employee.region].name : employee.region) : '',
+      plan.type.toUpperCase(),
+      planLabel(plan),
+      plan.presentedAt || '',
+      plan.reviewDate || '',
+      plan.presentedAt ? 'Yes' : 'No',
+      plan.signedDocData ? 'Yes' : 'No',
+      plan.signedDocName || '',
+      plan.requiresUpdatedShop ? 'Yes' : 'No',
+      schedule.length,
+      (plan.meetings || []).filter(item => item.status === 'completed').length,
+      getMissedMeetings(plan),
+      last ? last.date : '',
+      last ? last.meetingType : '',
+      last ? last.overallStatus : ''
+    ]);
+  });
+
+  const scheduleRows = [[
+    'Employee','Plan Type','Meeting Label','Due Date','Held Date','Status','Notes'
+  ]];
+  plans.forEach(plan => {
+    const employee = getEmployee(plan.employeeId);
+    getSchedule(plan).forEach(item => {
+      const record = getMeetingRecord(plan, item.schedIdx);
+      scheduleRows.push([
+        employee ? employee.name : '',
+        plan.type.toUpperCase(),
+        item.label,
+        item.due,
+        record ? record.heldDate || '' : '',
+        record ? meetingStatusLabel(record.status) : meetingStatusLabel(getMeetingStatus(plan, item)),
+        record ? record.notes || '' : ''
+      ]);
+    });
+  });
+
+  const itemRows = [[
+    'Employee','Plan Type','Item #','Area','Action Item','Latest Status','Latest Note'
+  ]];
+  plans.forEach(plan => {
+    const employee = getEmployee(plan.employeeId);
+    const latest = (plan.weeklyUpdates || []).slice(-1)[0];
+    (plan.actionItems || []).forEach((item, index) => {
+      const status = latest && latest.items ? latest.items.find(entry => entry.idx === index) : null;
+      itemRows.push([
+        employee ? employee.name : '',
+        plan.type.toUpperCase(),
+        index + 1,
+        item.area || '',
+        item.text,
+        status ? status.status : 'pending',
+        status ? status.note : ''
+      ]);
+    });
+  });
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(overviewRows), 'Overview');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(scheduleRows), 'Meeting Schedule');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(itemRows), 'Action Items');
+  XLSX.writeFile(wb, 'RISE_Weekly_Export_' + today() + '.xlsx');
+}
+
+function exportWeeklyPDF(){
+  const plans = trackedPlans();
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>RISE Weekly Export</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:0;background:#eef5f8;color:#18313c}
+        .page{max-width:1080px;margin:0 auto;padding:34px 40px 48px;background:#fff}
+        .header{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-bottom:4px solid #549db8;padding-bottom:18px;margin-bottom:24px}
+        .title{font-size:30px;font-weight:800;color:#023046;letter-spacing:-.03em}
+        .sub{font-size:13px;color:#5e7480;margin-top:6px}
+        .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+        .tile{border:1px solid #d6e2e8;border-radius:16px;padding:14px;background:#f8fbfc}
+        .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#5e7480}
+        .tile .value{font-size:28px;font-weight:800;color:#023046;margin-top:6px}
+        table{width:100%;border-collapse:collapse;margin-top:10px}
+        th,td{padding:10px;border:1px solid #d6e2e8;text-align:left;font-size:12px;vertical-align:top}
+        th{background:#f7fbfd;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#5e7480}
+        h2{font-size:16px;color:#023046;margin:24px 0 10px}
+        .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:700}
+        .badge-pip{background:#fdeeee;color:#8e1d1d}
+        .badge-coaching{background:#fff3df;color:#905f11}
+        .badge-active{background:#e8f4ec;color:#205432}
+        .badge-completed{background:#e8f0f8;color:#25537a}
+        .badge-shop{background:#eef5f8;color:#023046}
+        @media print{
+          body{background:#fff}
+          .page{max-width:none;padding:0}
+          button{display:none}
+        }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="header">
+          <div>
+            ${riseWordmark()}
+            <div class="title">Weekly Performance Export</div>
+            <div class="sub">Portfolio-wide plan, cadence, and completion reporting as of ${formatDate(today())}</div>
+          </div>
+          <button onclick="window.print()" style="background:#023046;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer">Print / Save as PDF</button>
+        </div>
+        <div class="summary">
+          <div class="tile"><div class="label">Tracked Plans</div><div class="value">${plans.length}</div></div>
+          <div class="tile"><div class="label">Active</div><div class="value">${plans.filter(plan => plan.status === 'active').length}</div></div>
+          <div class="tile"><div class="label">Shop Ordered</div><div class="value">${plans.filter(plan => plan.status === 'shop_ordered').length}</div></div>
+          <div class="tile"><div class="label">Missing Signed Plans</div><div class="value">${plans.filter(plan => plan.status === 'active' && !plan.signedDocData).length}</div></div>
+        </div>
+        <h2>Plan Summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Community</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Presented</th>
+              <th>Review Date</th>
+              <th>Signed Plan</th>
+              <th>Meetings</th>
+              <th>Last Update</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${plans.map(plan => {
+              const employee = getEmployee(plan.employeeId);
+              const last = (plan.weeklyUpdates || []).slice(-1)[0];
+              const schedule = getSchedule(plan);
+              const completed = (plan.meetings || []).filter(item => item.status === 'completed').length;
+              return `
+                <tr>
+                  <td>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</td>
+                  <td>${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</td>
+                  <td><span class="badge ${plan.type === 'pip' ? 'badge-pip' : 'badge-coaching'}">${plan.type.toUpperCase()}</span></td>
+                  <td><span class="badge ${plan.status === 'shop_ordered' ? 'badge-shop' : plan.status === 'completed' ? 'badge-completed' : 'badge-active'}">${escapeHtml(planLabel(plan))}</span></td>
+                  <td>${plan.presentedAt ? formatDate(plan.presentedAt) : 'Not set'}</td>
+                  <td>${formatDate(plan.reviewDate)}</td>
+                  <td>${plan.signedDocName ? escapeHtml(plan.signedDocName) : 'Missing'}</td>
+                  <td>${completed}/${schedule.length || 0}</td>
+                  <td>${last ? escapeHtml(formatDate(last.date) + ' · ' + last.meetingType) : 'No updates yet'}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        <h2>Meeting Schedule Detail</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Plan Type</th>
+              <th>Meeting</th>
+              <th>Due Date</th>
+              <th>Held Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${plans.flatMap(plan => {
+              const employee = getEmployee(plan.employeeId);
+              return getSchedule(plan).map(item => {
+                const record = getMeetingRecord(plan, item.schedIdx);
+                const status = record ? record.status : getMeetingStatus(plan, item);
+                return `
+                  <tr>
+                    <td>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</td>
+                    <td>${plan.type.toUpperCase()}</td>
+                    <td>${escapeHtml(item.label)}</td>
+                    <td>${formatDate(item.due)}</td>
+                    <td>${record && record.heldDate ? formatDate(record.heldDate) : ''}</td>
+                    <td>${escapeHtml(meetingStatusLabel(status))}</td>
+                  </tr>
+                `;
+              });
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function openModal(html){
+  document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+}
+
+function closeModal(){
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+function escapeHtml(value){
+  return String(value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function seedDemoData(){
+  if(!confirm('Load demo data into this browser? Existing saved data will be kept.')) return;
+  if(!STATE.employees.length){
+    const empA = {id:genId(),name:'Brieanna Steed',role:'Leasing Professional',community:'The Preserve at Tech',region:'student'};
+    const empB = {id:genId(),name:'Jordan Alvarez',role:'Leasing Manager',community:'RISE at Nocatee',region:'west'};
+    STATE.employees.push(empA, empB);
+    STATE.plans.push({
+      id: genId(),
+      employeeId: empA.id,
+      type: 'pip',
+      status: 'active',
+      shopDate: today(),
+      reviewDate: addDays(today(), 30),
+      createdAt: today(),
+      presentedAt: today(),
+      manager: 'West Manager',
+      notes: 'Targeted improvement plan focused on needs assessment, closing consistency, and follow-up discipline.',
+      overallScore: 54.5,
+      telScore: 30,
+      onsiteScore: 79,
+      greetScore: 80,
+      needsScore: 80,
+      demoScore: 67,
+      followupScore: 100,
+      actionItems: [
+        {area:'Telephone',text:'Develop a written telephone script approved by manager within 5 business days.'},
+        {area:'Appointment Setting',text:'Offer two specific appointment times on every incoming prospect call.'},
+        {area:'Closing',text:'Ask directly for the application, deposit, or waitlist commitment on every tour.'}
+      ],
+      weeklyUpdates: [],
+      meetings: [{
+        schedIdx:0,
+        label:'Initial presentation of PIP/Coaching plan',
+        type:'Initial presentation of PIP/Coaching plan',
+        dueDate:today(),
+        heldDate:today(),
+        status:'completed',
+        notes:'Plan presented to employee.'
+      }],
+      consequences:true,
+      requiresUpdatedShop:true
+    });
+    STATE.plans.push({
+      id: genId(),
+      employeeId: empB.id,
+      type: 'coaching',
+      status: 'active',
+      shopDate: today(),
+      reviewDate: addDays(today(), 60),
+      createdAt: today(),
+      manager: 'East Manager',
+      notes: 'Coaching plan focused on daily tour structure and guest follow-up rhythm.',
+      overallScore: 73,
+      telScore: 70,
+      onsiteScore: 76,
+      greetScore: 82,
+      needsScore: 72,
+      demoScore: 70,
+      followupScore: 68,
+      actionItems: [
+        {area:'Greeting',text:'Use the prospect name at least three times during each visit.'},
+        {area:'Demonstrating',text:'Tie apartment features back to the resident needs identified at the start of the tour.'},
+        {area:'Follow-Up',text:'Send same-day follow-up communication with next steps after every tour.'}
+      ],
+      weeklyUpdates: [],
+      meetings: [],
+      consequences:false,
+      requiresUpdatedShop:false
+    });
+  }
+  saveState();
+  render();
+}
+
+function resetAllData(){
+  if(!confirm('Clear all saved employees and plans from this browser?')) return;
+  STATE = {employees:[],plans:[],currentView:'dashboard'};
+  UI = {currentView:'dashboard',planFilter:'active',selectedWeeklyPlanId:null,newPlanType:'coaching'};
+  localStorage.removeItem(STORAGE_KEY);
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
