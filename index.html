@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>RISE Performance Platform</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;font-size:14px;color:#333;background:#f5f5f3;min-height:100vh}
+.hidden{display:none!important}
+button{cursor:pointer;font-family:inherit;font-size:13px}
+input,select,textarea{font-family:inherit;font-size:13px;color:#333;background:#fff;border:0.5px solid #bbb;border-radius:8px;padding:8px 10px;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#888;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+label{font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500}
+.btn{padding:8px 16px;border-radius:8px;border:0.5px solid #bbb;background:#fff;color:#333;transition:background .15s;cursor:pointer}
+.btn:hover{background:#f0f0ee}
+.btn-primary{background:#1B3A4B;color:#fff;border-color:#1B3A4B}
+.btn-primary:hover{background:#14303f}
+.btn-danger{background:#8B0000;color:#fff;border-color:#8B0000}
+.btn-danger:hover{background:#6d0000}
+.btn-warn{background:#C9943C;color:#fff;border-color:#C9943C}
+.btn-warn:hover{background:#b0832f}
+.btn-sm{padding:5px 10px;font-size:12px}
+.card{background:#fff;border:0.5px solid #e0e0e0;border-radius:12px;padding:16px 20px}
+.badge{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-pip{background:#FDECEA;color:#8B0000}
+.badge-coaching{background:#FFF8E1;color:#5D4037}
+.badge-active{background:#EAF3DE;color:#27500A}
+.badge-complete{background:#E6F1FB;color:#0C447C}
+.badge-admin{background:#EEEDFE;color:#3C3489}
+.badge-partial{background:#FFF8E1;color:#5D4037}
+.badge-incomplete{background:#FDECEA;color:#8B0000}
+.badge-overdue{background:#FDECEA;color:#8B0000}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat-card{background:#f5f5f3;border-radius:8px;padding:14px 16px}
+.stat-label{font-size:12px;color:#666;margin-bottom:6px}
+.stat-val{font-size:22px;font-weight:500}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:500;color:#666;padding:8px 10px;border-bottom:0.5px solid #e0e0e0}
+td{padding:9px 10px;border-bottom:0.5px solid #e0e0e0;font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.nav{background:#fff;border-bottom:0.5px solid #e0e0e0;padding:0 16px;display:flex;align-items:center;gap:0;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.nav-logo{font-size:14px;font-weight:500;color:#1B3A4B;padding:12px 0;margin-right:16px;border-right:0.5px solid #e0e0e0;padding-right:16px;white-space:nowrap}
+.nav-accent{color:#C9943C}
+.nav-tab{padding:12px 11px;font-size:12px;color:#666;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.nav-tab.active{color:#1B3A4B;border-bottom-color:#1B3A4B;font-weight:500}
+.nav-tab:hover:not(.active){color:#333;background:#f5f5f3}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.page{padding:16px 20px;max-width:1300px;margin:0 auto}
+.page-title{font-size:19px;font-weight:500;margin-bottom:3px}
+.page-sub{font-size:13px;color:#666;margin-bottom:16px}
+.section-title{font-size:14px;font-weight:500;margin-bottom:10px}
+.form-row{display:grid;gap:10px}
+.form-row.cols2{grid-template-columns:1fr 1fr}
+.form-row.cols3{grid-template-columns:1fr 1fr 1fr}
+.form-row.cols4{grid-template-columns:1fr 1fr 1fr 1fr}
+.form-group{margin-bottom:10px}
+.alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:10px}
+.alert-info{background:#E6F1FB;color:#0C447C;border:0.5px solid #B5D4F4}
+.alert-danger{background:#FDECEA;color:#8B0000;border:0.5px solid #F7C1C1}
+.alert-success{background:#EAF3DE;color:#27500A;border:0.5px solid #C0DD97}
+.alert-warn{background:#FFF8E1;color:#5D4037;border:0.5px solid #FAC775}
+.progress-bar-wrap{height:6px;background:#e8e8e8;border-radius:3px;overflow:hidden}
+.progress-bar{height:6px;border-radius:3px}
+.score-chip{display:inline-flex;align-items:center;justify-content:center;width:48px;height:22px;border-radius:20px;font-size:11px;font-weight:500}
+.score-bad{background:#FDECEA;color:#8B0000}
+.score-warn{background:#FFF8E1;color:#5D4037}
+.score-ok{background:#EAF3DE;color:#1B5E20}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#fff;border-radius:12px;padding:22px;width:700px;max-width:96vw;max-height:92vh;overflow-y:auto;border:0.5px solid #ccc}
+.modal-wide{width:920px}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:3px}
+.modal-sub{font-size:13px;color:#666;margin-bottom:14px}
+.close-btn{background:none;border:none;font-size:18px;color:#888;cursor:pointer;float:right;line-height:1}
+.tabs{display:flex;border-bottom:0.5px solid #e0e0e0;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:8px 13px;font-size:13px;color:#666;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab.active{color:#333;border-bottom-color:#1B3A4B;font-weight:500}
+.chip{padding:4px 10px;border-radius:20px;font-size:12px;background:#f5f5f3;border:0.5px solid #ddd;cursor:pointer;display:inline-block}
+.chip.selected{background:#1B3A4B;color:#fff;border-color:#1B3A4B}
+.file-drop{border:1.5px dashed #bbb;border-radius:10px;padding:24px;text-align:center;cursor:pointer;color:#888}
+.file-drop:hover{background:#f5f5f3}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f5f3}
+.login-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:12px;padding:30px;width:380px}
+.region-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500}
+.r-west{background:#E1F5EE;color:#085041}
+.r-east{background:#E6F1FB;color:#0C447C}
+.r-student{background:#EEEDFE;color:#3C3489}
+.r-admin{background:#FAEEDA;color:#633806}
+.r-valdosta{background:#FDECEA;color:#8B0000}
+.r-jax{background:#EAF3DE;color:#27500A}
+.action-row{display:grid;grid-template-columns:32px 1fr 120px 120px 120px;gap:8px;align-items:start;padding:8px 0;border-bottom:0.5px solid #f0f0ee}
+.action-row:last-child{border-bottom:none}
+.status-btn{padding:3px 8px;border-radius:12px;font-size:11px;border:0.5px solid;cursor:pointer;white-space:nowrap}
+.s-complete{background:#EAF3DE;color:#27500A;border-color:#C0DD97}
+.s-partial{background:#FFF8E1;color:#5D4037;border-color:#FAC775}
+.s-incomplete{background:#FDECEA;color:#8B0000;border-color:#F7C1C1}
+.s-pending{background:#f5f5f3;color:#888;border-color:#ddd}
+.meeting-row{display:grid;grid-template-columns:1fr 120px 100px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0f0ee}
+.meeting-row:last-child{border-bottom:none}
+.combo-input{position:relative}
+.combo-input input{width:100%}
+.combo-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid #bbb;border-radius:0 0 8px 8px;z-index:50;max-height:160px;overflow-y:auto;display:none}
+.combo-dropdown.open{display:block}
+.combo-option{padding:7px 10px;cursor:pointer;font-size:13px}
+.combo-option:hover{background:#f5f5f3}
+a.inline-link{color:#1B3A4B;text-decoration:none;font-weight:500}
+a.inline-link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const REGIONS={
+  west:{name:'West Coast / Central FL',short:'West/C.FL',cls:'r-west'},
+  east:{name:'East Coast FL',short:'East FL',cls:'r-east'},
+  student:{name:'Student Housing',short:'Student',cls:'r-student'},
+  valdosta:{name:'Valdosta',short:'Valdosta',cls:'r-valdosta'},
+  jax:{name:'JAX Corporate',short:'JAX',cls:'r-jax'}
+};
+
+const ROLE_OPTIONS=['Leasing Professional','Leasing Manager','Assistant Manager','Community Manager','Maintenance Technician','Maintenance Supervisor','Regional Manager','Administrative Assistant','Leasing Consultant','Property Manager'];
+const COMMUNITY_OPTIONS=['RISE at Nocatee','RISE at Glen Kernan Park','RISE Viera','Pilots Pointe','The Preserve at Tech'];
+const CUSTOM_MEETING_OPTION='__custom__';
+const ADHOC_SCHEDULE_OPTION='__adhoc__';
+const MEETING_TYPE_OPTIONS=[
+  {value:'1:1',label:'1:1'},
+  {value:'Initial presentation of PIP/Coaching plan',label:'Initial presentation of PIP/Coaching plan'},
+  {value:'Weekly Follow Up',label:'Weekly Follow Up'},
+  {value:'Task Completion Review',label:'Task Completion Review'},
+  {value:CUSTOM_MEETING_OPTION,label:'Custom / one-off meeting'}
+];
+
+const DEFAULT_USERS=[
+  {id:'admin',name:'Admin',pin:'0000',role:'admin',region:null},
+  {id:'mgr_west',name:'West Manager',pin:'1111',role:'manager',region:'west'},
+  {id:'mgr_east',name:'East Manager',pin:'2222',role:'manager',region:'east'},
+  {id:'mgr_student1',name:'Student Manager 1',pin:'3333',role:'manager',region:'student'},
+  {id:'mgr_student2',name:'Student Manager 2',pin:'4444',role:'manager',region:'student'},
+  {id:'mgr_valdosta',name:'Valdosta Manager',pin:'5555',role:'manager',region:'valdosta'},
+  {id:'mgr_jax',name:'JAX Manager',pin:'6666',role:'manager',region:'jax'},
+];
+
+let STATE={
+  users:JSON.parse(localStorage.getItem('rise_users2')||JSON.stringify(DEFAULT_USERS)),
+  employees:JSON.parse(localStorage.getItem('rise_employees2')||'[]'),
+  plans:JSON.parse(localStorage.getItem('rise_plans2')||'[]'),
+  currentUser:null,
+  currentView:'dashboard',
+};
+
+function save(){
+  localStorage.setItem('rise_users2',JSON.stringify(STATE.users));
+  localStorage.setItem('rise_employees2',JSON.stringify(STATE.employees));
+  localStorage.setItem('rise_plans2',JSON.stringify(STATE.plans));
+}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function scoreClass(s){if(s===null||s===undefined)return '';s=parseFloat(s);if(s>=84)return 'score-ok';if(s>=65)return 'score-warn';return 'score-bad';}
+function daysLeft(plan){return Math.ceil((new Date(plan.reviewDate)-new Date())/86400000);}
+function pctComplete(plan){const s=new Date(plan.createdAt),e=new Date(plan.reviewDate),n=new Date();return Math.min(100,Math.max(0,Math.round(((n-s)/(e-s))*100)));}
+function visiblePlans(){const u=STATE.currentUser;if(!u)return[];if(u.role==='admin')return STATE.plans;return STATE.plans.filter(p=>{const emp=STATE.employees.find(e=>e.id===p.employeeId);return emp&&emp.region===u.region;});}
+function visibleEmployees(){const u=STATE.currentUser;if(!u)return[];if(u.role==='admin')return STATE.employees;return STATE.employees.filter(e=>e.region===u.region);}
+function regionLabel(r){if(!r)return '<span class="region-badge r-admin">All Regions</span>';const reg=REGIONS[r];if(!reg)return r;return `<span class="region-badge ${reg.cls}">${reg.short}</span>`;}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function formatPlanStatus(status){
+  if(status==='shop_ordered')return 'Shop Ordered';
+  if(status==='completed')return 'Completed';
+  if(status==='archived')return 'Archived';
+  if(status==='active')return 'Active';
+  return String(status||'').replace(/_/g,' ');
+}
+function getPlanStatusBadgeClass(status){
+  if(status==='active')return 'badge-active';
+  if(status==='shop_ordered')return 'badge-partial';
+  if(status==='archived')return 'badge-admin';
+  return 'badge-complete';
+}
+function isStandardMeetingType(type){return MEETING_TYPE_OPTIONS.some(opt=>opt.value===type&&opt.value!==CUSTOM_MEETING_OPTION);}
+function renderMeetingTypeOptions(selected=''){
+  const chosen=isStandardMeetingType(selected)?selected:CUSTOM_MEETING_OPTION;
+  return MEETING_TYPE_OPTIONS.map(opt=>`<option value="${opt.value}" ${opt.value===chosen?'selected':''}>${opt.label}</option>`).join('');
+}
+function toggleMeetingCustomInput(selectId,wrapId){
+  const wrap=document.getElementById(wrapId);
+  const sel=document.getElementById(selectId);
+  if(wrap&&sel)wrap.classList.toggle('hidden',sel.value!==CUSTOM_MEETING_OPTION);
+}
+function getSelectedMeetingType(selectId,customId){
+  const selected=document.getElementById(selectId)?.value||'';
+  if(selected===CUSTOM_MEETING_OPTION)return document.getElementById(customId)?.value.trim()||'One-off meeting';
+  return selected||'1:1';
+}
+function parseMeetingRef(ref){
+  const raw=String(ref);
+  if(raw.startsWith('manual-'))return{kind:'manual',index:parseInt(raw.slice(7),10)};
+  const idx=parseInt(raw,10);
+  return{kind:'scheduled',index:Number.isFinite(idx)?idx:null};
+}
+function getMeetingArrayIndexBySchedIdx(plan,schedIdx){return(plan.meetings||[]).findIndex(m=>m.schedIdx===schedIdx);}
+function getResolvedScheduleMeeting(plan,sched){
+  const existing=(plan.meetings||[]).find(m=>m.schedIdx===sched.schedIdx);
+  if(existing){
+    const resolvedStatus=existing.status==='completed'?'completed':(sched.due<todayStr()?'past_due':(existing.status||'scheduled'));
+    return{...sched,...existing,due:sched.due,dueDate:existing.dueDate||sched.due,heldDate:existing.heldDate||existing.date||'',label:existing.label||existing.type||sched.type,status:resolvedStatus};
+  }
+  return{...sched,dueDate:sched.due,heldDate:'',label:sched.type,status:sched.due<todayStr()?'past_due':'scheduled',notes:''};
+}
+function getResolvedSchedule(plan){return getSchedule(plan).map(s=>getResolvedScheduleMeeting(plan,s));}
+function getManualMeetings(plan){return(plan.meetings||[]).map((m,actualIdx)=>({...m,actualIdx})).filter(m=>m.schedIdx===undefined);}
+function getUpcomingMeetingsForPlan(plan){
+  const scheduled=getResolvedSchedule(plan).filter(m=>m.status!=='completed'&&((m.dueDate||m.due||'')>=todayStr())).map(m=>({...m,sortDate:m.dueDate||m.due}));
+  const manual=getManualMeetings(plan).filter(m=>m.status==='scheduled'&&((m.dueDate||m.date||m.heldDate||'')>=todayStr())).map(m=>({...m,label:m.label||m.type||'1:1',sortDate:m.dueDate||m.date||m.heldDate||''}));
+  return[...scheduled,...manual].sort((a,b)=>(a.sortDate||'').localeCompare(b.sortDate||''));
+}
+function getNextRequiredMeeting(plan){return getResolvedSchedule(plan).find(m=>m.status!=='completed')||null;}
+function renderScheduleOptions(plan,selectedSchedIdx){
+  const opts=getResolvedSchedule(plan).filter(m=>m.status!=='completed'||m.schedIdx===selectedSchedIdx);
+  return[`<option value="${ADHOC_SCHEDULE_OPTION}" ${selectedSchedIdx===null||selectedSchedIdx===undefined?'selected':''}>One-off / manual meeting</option>`,...opts.map(m=>`<option value="${m.schedIdx}" ${m.schedIdx===selectedSchedIdx?'selected':''}>${m.label||m.type} — due ${m.due}</option>`)].join('');
+}
+function syncWeeklyLogSchedule(planId){
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  const schedRef=document.getElementById('lw-sched-ref')?.value;
+  if(!schedRef||schedRef===ADHOC_SCHEDULE_OPTION)return;
+  const sched=getSchedule(plan).find(s=>s.schedIdx===parseInt(schedRef,10));
+  if(!sched)return;
+  const meetingType=document.getElementById('lw-meeting-type');
+  const dueDate=document.getElementById('lw-due-date');
+  if(meetingType){meetingType.value=sched.type;toggleMeetingCustomInput('lw-meeting-type','lw-custom-wrap');}
+  if(dueDate)dueDate.value=sched.due;
+}
+function getRiseWordmarkSVG(){
+  return `<svg viewBox="0 0 520 122" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RISE">
+    <rect width="520" height="122" fill="none"/>
+    <g fill="#023046">
+      <path d="M8 84V20h56c23 0 37 12 37 31 0 14-8 24-21 28l25 39H72L52 84H39v34H8zm31-26h22c11 0 18-6 18-16 0-11-7-16-18-16H39v32z"/>
+      <path d="M262 106c-18 0-33-5-45-15l13-19c9 8 21 12 33 12 13 0 21-5 21-13 0-7-5-11-17-15l-19-6c-20-6-31-18-31-35 0-23 20-39 49-39 18 0 33 5 45 16l-13 19c-9-7-18-11-30-11-11 0-18 5-18 13 0 7 6 11 18 15l18 6c21 7 31 18 31 35 0 24-19 38-55 38z"/>
+      <path d="M352 20h97v25h-66v18h59v24h-59v31h-31V20z"/>
+    </g>
+    <g transform="translate(135 12)">
+      <rect x="28" y="0" width="33" height="96" fill="#023046"/>
+      <rect x="0" y="0" width="28" height="96" fill="#549db8"/>
+      <rect x="1" y="8" width="26" height="6" fill="#ffffff"/>
+      <rect x="1" y="24" width="26" height="6" fill="#ffffff"/>
+      <rect x="1" y="40" width="26" height="6" fill="#ffffff"/>
+      <rect x="1" y="56" width="26" height="6" fill="#ffffff"/>
+      <rect x="1" y="72" width="26" height="6" fill="#ffffff"/>
+    </g>
+    <line x1="8" y1="116" x2="512" y2="116" stroke="#549db8" stroke-width="4"/>
+  </svg>`;
+}
+
+function getMissedMeetings(plan){
+  if(!plan.presentedAt)return 0;
+  let missed=getResolvedSchedule(plan).filter(m=>m.status==='past_due').length;
+  if(plan.meetings)missed+=plan.meetings.filter(m=>m.schedIdx===undefined&&m.status==='past_due').length;
+  return missed;
+}
+function getOverdueActionItems(plan){
+  if(!plan.weeklyUpdates)return 0;
+  let count=0;
+  plan.weeklyUpdates.forEach(w=>{
+    if(w.items)w.items.forEach(a=>{if(a.status==='incomplete')count++;});
+  });
+  return count;
+}
+function getPlanAlerts(plan){
+  const alerts=[];
+  const dl=daysLeft(plan);
+  if(dl<0&&plan.status==='active')alerts.push({type:'overdue',msg:'Review date passed'});
+  if(!plan.presentedAt&&plan.status==='active')alerts.push({type:'presentation',msg:'Plan not yet presented to employee'});
+  const missed=getMissedMeetings(plan);
+  if(missed>0)alerts.push({type:'meeting',msg:`${missed} missed meeting${missed>1?'s':''}`});
+  if(plan.presentedAt&&!plan.signedDocData&&plan.status==='active')alerts.push({type:'signed',msg:'Signed plan document missing'});
+  const overdueItems=getOverdueActionItems(plan);
+  if(overdueItems>0)alerts.push({type:'items',msg:`${overdueItems} incomplete action item${overdueItems>1?'s':''}`});
+  return alerts;
+}
+function getTotalOverdueCount(){
+  return visiblePlans().filter(p=>p.status==='active').reduce((acc,p)=>acc+(getPlanAlerts(p).length>0?1:0),0);
+}
+
+function render(){
+  const app=document.getElementById('app');
+  if(!STATE.currentUser){app.innerHTML=renderLogin();return;}
+  app.innerHTML=renderShell();
+  renderView();
+}
+function renderLogin(){
+  return `<div class="login-wrap"><div class="login-card">
+    <div style="font-size:22px;font-weight:500;color:#1B3A4B;margin-bottom:3px">RISE <span style="color:#C9943C">Residential</span></div>
+    <div style="font-size:13px;color:#888;margin-bottom:22px">Leasing Performance Platform</div>
+    <div class="form-group"><label>Username</label><input id="li-user" placeholder="Enter username"></div>
+    <div class="form-group"><label>PIN</label><input id="li-pin" type="password" placeholder="Enter PIN" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="li-err" class="alert alert-danger hidden">Invalid username or PIN.</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="doLogin()">Sign In</button>
+    <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid #eee;font-size:11px;color:#aaa">
+      Defaults: admin/0000 · west/1111 · east/2222 · student1/3333 · student2/4444 · valdosta/5555 · jax/6666
+    </div>
+  </div></div>`;
+}
+function doLogin(){
+  const u=document.getElementById('li-user').value.trim().toLowerCase();
+  const p=document.getElementById('li-pin').value.trim();
+  const match=STATE.users.find(x=>x.id===u||x.name.toLowerCase()===u||x.name.toLowerCase().replace(/\s+/g,'_')===u.replace(/\s+/g,'_'));
+  if(match&&match.pin===p){STATE.currentUser=match;STATE.currentView='dashboard';render();}
+  else{document.getElementById('li-err').classList.remove('hidden');}
+}
+function renderShell(){
+  const u=STATE.currentUser;
+  const tabs=[
+    {id:'dashboard',label:'Dashboard'},
+    {id:'plans',label:'Active Plans'},
+    {id:'newplan',label:'+ New Plan'},
+    {id:'weekly',label:'Weekly Updates'},
+    {id:'employees',label:'Employees'},
+    {id:'export',label:'Weekly Export'},
+    ...(u.role==='admin'?[{id:'settings',label:'Settings'}]:[]),
+  ];
+  return `<div class="nav">
+    <div class="nav-logo">RISE <span class="nav-accent">Performance</span></div>
+    ${tabs.map(t=>`<div class="nav-tab ${STATE.currentView===t.id?'active':''}" onclick="switchView('${t.id}')">${t.label}</div>`).join('')}
+    <div class="nav-right">
+      ${u.role==='admin'?'<span class="badge badge-admin">Admin</span>':regionLabel(u.region)}
+      <span style="font-size:12px;color:#888">${u.name}</span>
+      <button class="btn btn-sm" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+  <div id="view-container"></div>
+  <div id="modal-container"></div>`;
+}
+function switchView(v){STATE.currentView=v;render();}
+function logout(){STATE.currentUser=null;render();}
+function renderView(){
+  const c=document.getElementById('view-container');if(!c)return;
+  switch(STATE.currentView){
+    case 'dashboard':c.innerHTML=renderDashboard();break;
+    case 'plans':c.innerHTML=renderPlans();break;
+    case 'newplan':c.innerHTML=renderNewPlan();break;
+    case 'weekly':c.innerHTML=renderWeeklyUpdates();break;
+    case 'employees':c.innerHTML=renderEmployees();break;
+    case 'export':c.innerHTML=renderExport();break;
+    case 'settings':c.innerHTML=renderSettings();break;
+    default:c.innerHTML=renderDashboard();
+  }
+}
+
+function renderDashboard(){
+  const plans=visiblePlans();
+  const active=plans.filter(p=>p.status==='active');
+  const pips=active.filter(p=>p.type==='pip');
+  const coaching=active.filter(p=>p.type==='coaching');
+  const overdueCount=getTotalOverdueCount();
+  const u=STATE.currentUser;
+  const scopeLabel=u.role==='admin'?'All Regions':(REGIONS[u.region]?.name||'');
+  const alertPlans=active.filter(p=>getPlanAlerts(p).length>0);
+
+  return `<div class="page">
+    <div class="page-title">Dashboard</div>
+    <div class="page-sub">${scopeLabel} — ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+    <div class="grid4" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-label">Active plans</div><div class="stat-val">${active.length}</div></div>
+      <div class="stat-card"><div class="stat-label">PIPs</div><div class="stat-val" style="color:#8B0000">${pips.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Coaching plans</div><div class="stat-val" style="color:#5D4037">${coaching.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Needs attention</div><div class="stat-val" style="color:${overdueCount>0?'#8B0000':'inherit'}">${overdueCount}</div></div>
+    </div>
+
+    ${alertPlans.length>0?`<div class="card" style="margin-bottom:14px;border-left:3px solid #8B0000">
+      <div class="section-title" style="color:#8B0000">Attention required (${alertPlans.length})</div>
+      ${alertPlans.map(p=>{
+        const emp=STATE.employees.find(e=>e.id===p.employeeId);
+        const alerts=getPlanAlerts(p);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid #f0f0ee">
+          <span style="font-weight:500;font-size:13px;min-width:160px">${emp?emp.name:'—'}</span>
+          <span class="badge ${p.type==='pip'?'badge-pip':'badge-coaching'}">${p.type.toUpperCase()}</span>
+          <div style="flex:1;display:flex;flex-wrap:wrap;gap:6px">${alerts.map(a=>`<span class="badge badge-overdue">${a.msg}</span>`).join('')}</div>
+          <button class="btn btn-sm" onclick="openPlanDetail('${p.id}')">View</button>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    <div class="grid2">
+      <div class="card">
+        <div class="section-title">Active plans</div>
+        ${active.length===0?'<div style="color:#888;font-size:13px">No active plans.</div>':
+        `<table><thead><tr><th>Employee</th><th>Type</th><th>Progress</th><th>Days left</th><th></th></tr></thead><tbody>
+        ${active.slice(0,8).map(p=>{
+          const emp=STATE.employees.find(e=>e.id===p.employeeId);
+          const pct=pctComplete(p);const dl=daysLeft(p);
+          const hasAlert=getPlanAlerts(p).length>0;
+          return `<tr>
+            <td><div style="font-weight:500">${emp?emp.name:'—'}${hasAlert?' <span style="color:#8B0000;font-size:11px">!</span>':''}</div><div style="font-size:11px;color:#888">${emp?emp.community||'':''}</div></td>
+            <td><span class="badge ${p.type==='pip'?'badge-pip':'badge-coaching'}">${p.type.toUpperCase()}</span></td>
+            <td style="min-width:70px"><div style="font-size:11px;color:#888;margin-bottom:2px">${pct}%</div><div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%;background:${p.type==='pip'?'#8B0000':'#C9943C'}"></div></div></td>
+            <td style="color:${dl<0?'#8B0000':dl<7?'#E65100':'inherit'};font-size:13px">${dl<0?'Overdue':dl+' d'}</td>
+            <td><button class="btn btn-sm" onclick="openPlanDetail('${p.id}')">View</button></td>
+          </tr>`;
+        }).join('')}</tbody></table>`}
+      </div>
+      <div class="card">
+        <div class="section-title">Upcoming meetings</div>
+        ${(()=>{
+          const upcoming=[];
+          active.forEach(p=>{
+            getUpcomingMeetingsForPlan(p).forEach(m=>{
+              const emp=STATE.employees.find(e=>e.id===p.employeeId);
+              upcoming.push({plan:p,emp,meeting:m});
+            });
+          });
+          upcoming.sort((a,b)=>new Date(a.meeting.sortDate||a.meeting.due||a.meeting.date)-new Date(b.meeting.sortDate||b.meeting.due||b.meeting.date));
+          if(upcoming.length===0)return '<div style="color:#888;font-size:13px">No upcoming meetings scheduled.</div>';
+          return upcoming.slice(0,6).map(({plan,emp,meeting})=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid #f0f0ee">
+              <div style="flex:1">
+                <div style="font-weight:500;font-size:13px">${emp?emp.name:'—'}</div>
+                <div style="font-size:11px;color:#888">${meeting.label||meeting.type||'Meeting'} · ${(meeting.dueDate||meeting.due||meeting.date||'—')}</div>
+              </div>
+              <span class="badge ${plan.type==='pip'?'badge-pip':'badge-coaching'}">${plan.type.toUpperCase()}</span>
+            </div>`).join('');
+        })()}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderPlans(){
+  const plans=visiblePlans();
+  const tab=window._planTab||'active';
+  const filtered=plans.filter(p=>tab==='completed'?p.status==='completed':tab==='shop_ordered'?p.status==='shop_ordered':tab==='archived'?p.status==='archived':tab==='all'?true:p.status==='active');
+  return `<div class="page">
+    <div class="page-title">Plans</div>
+    <div class="tabs">
+      <div class="tab ${tab==='active'?'active':''}" onclick="window._planTab='active';renderView()">Active (${plans.filter(p=>p.status==='active').length})</div>
+      <div class="tab ${tab==='completed'?'active':''}" onclick="window._planTab='completed';renderView()">Completed (${plans.filter(p=>p.status==='completed').length})</div>
+      <div class="tab ${tab==='shop_ordered'?'active':''}" onclick="window._planTab='shop_ordered';renderView()">Shop Ordered (${plans.filter(p=>p.status==='shop_ordered').length})</div>
+      <div class="tab ${tab==='archived'?'active':''}" onclick="window._planTab='archived';renderView()">Archived (${plans.filter(p=>p.status==='archived').length})</div>
+      <div class="tab ${tab==='all'?'active':''}" onclick="window._planTab='all';renderView()">All (${plans.length})</div>
+    </div>
+    <div class="card">
+    ${filtered.length===0?'<div style="color:#888;padding:10px 0">No plans found.</div>':
+    `<table><thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Shop date</th><th>Overall</th><th>Review date</th><th>Progress</th><th>Alerts</th><th>Status</th>${tab==='archived'?'<th>Archived</th><th>Reason</th>':''}<th></th></tr></thead><tbody>
+    ${filtered.map(p=>{
+      const emp=STATE.employees.find(e=>e.id===p.employeeId);
+      const pct=pctComplete(p);const dl=daysLeft(p);
+      const alerts=getPlanAlerts(p);
+      const signedPlanLine=p.status==='active'
+        ? (!p.presentedAt
+            ? `Presented plan: <button class="btn btn-sm" style="padding:2px 8px;margin-left:4px" onclick="markPlanPresented('${p.id}')">Mark presented</button>`
+            : (p.signedDocData
+                ? `Signed plan: <a href="#" class="inline-link" onclick="viewSignedDoc('${p.id}',0);return false">${p.signedDocName||'On file'}</a>`
+                : `Signed plan: <button class="btn btn-sm" style="padding:2px 8px;margin-left:4px" onclick="uploadSignedDoc('${p.id}',0)">Upload</button>`))
+        : '';
+      return `<tr>
+        <td><div style="font-weight:500">${emp?emp.name:'—'}</div><div style="font-size:11px;color:#888">${emp?emp.community||'':''}</div>${signedPlanLine?`<div style="font-size:11px;color:#666;margin-top:4px">${signedPlanLine}</div>`:''}</td>
+        <td>${emp?regionLabel(emp.region):'—'}</td>
+        <td><span class="badge ${p.type==='pip'?'badge-pip':'badge-coaching'}">${p.type.toUpperCase()}</span></td>
+        <td style="font-size:12px">${p.shopDate||'—'}</td>
+        <td><span class="score-chip ${scoreClass(p.overallScore)}">${p.overallScore!=null?p.overallScore+'%':'—'}</span></td>
+        <td style="font-size:12px;color:${dl<0&&p.status==='active'?'#8B0000':dl<7&&p.status==='active'?'#E65100':'inherit'}">${p.reviewDate||'—'}</td>
+        <td style="min-width:70px"><div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%;background:${p.type==='pip'?'#8B0000':'#C9943C'}"></div></div></td>
+        <td>${alerts.length>0?alerts.map(a=>`<span class="badge badge-overdue" style="font-size:10px">${a.msg}</span>`).join(' '):'<span style="color:#888;font-size:12px">None</span>'}</td>
+        <td><span class="badge ${getPlanStatusBadgeClass(p.status)}">${formatPlanStatus(p.status)}</span></td>
+        ${tab==='archived'?`<td style="font-size:11px;color:#888">${p.archivedAt||'—'}</td><td style="font-size:11px;color:#888">${p.archiveReason||'—'}</td>`:''}
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openPlanDetail('${p.id}')">View</button>
+          ${p.status==='active'&&!p.signedDocData?`<button class="btn btn-sm" onclick="${p.presentedAt?`uploadSignedDoc('${p.id}',0)`:`markPlanPresented('${p.id}')`}">${p.presentedAt?'Upload signed plan':'Present plan'}</button>`:''}
+          ${p.status==='active'?`<button class="btn btn-sm btn-warn" onclick="openWeeklyUpdate('${p.id}')">Update</button>`:''}
+          ${p.status==='active'?`<button class="btn btn-sm btn-primary" onclick="markComplete('${p.id}')">${p.requiresUpdatedShop?'Complete + order shop':'Complete'}</button>`:''}
+          ${p.status!=='archived'?`<button class="btn btn-sm" style="background:#f5f5f3;border-color:#bbb;color:#555" onclick="archivePlan('${p.id}')">Archive</button>`:`<button class="btn btn-sm btn-primary" onclick="unarchivePlan('${p.id}')">Restore</button>`}
+          <button class="btn btn-sm btn-danger" onclick="deletePlan('${p.id}')">Delete</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`}
+    </div>
+  </div>`;
+}
+
+function openTeaShopOrderEmail(plan){
+  const emp=STATE.employees.find(e=>e.id===plan.employeeId);
+  const employeeName=emp?emp.name:'Employee';
+  const communityName=emp?emp.community||'Unknown community':'Unknown community';
+  const subject=`Targeted shop order needed - ${employeeName}`;
+  const body=[
+    'Hi Tea,',
+    '',
+    'A targeted shop needs to be ordered for the following employee:',
+    '',
+    `Employee: ${employeeName}`,
+    `Community: ${communityName}`,
+    `Plan Type: ${(plan.type||'').toUpperCase()}`,
+    `Plan Status: ${formatPlanStatus(plan.status)}`,
+    '',
+    'Please place the updated targeted shop order.',
+    '',
+    'Thank you,'
+  ].join('\n');
+  const link=document.createElement('a');
+  link.href=`mailto:tea.jihad@risere.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  link.click();
+  plan.shopOrderEmailTriggeredAt=todayStr();
+}
+function markComplete(id){
+  const p=STATE.plans.find(x=>x.id===id);
+  if(!p)return;
+  const needsUpdatedShop=!!p.requiresUpdatedShop;
+  const confirmMsg=needsUpdatedShop
+    ? 'Complete this plan and mark it as Shop Ordered? This will open a prefilled email to Tea to request the targeted shop.'
+    : 'Mark this plan as completed?';
+  if(!confirm(confirmMsg))return;
+  p.completedAt=todayStr();
+  if(needsUpdatedShop){
+    p.status='shop_ordered';
+    p.shopOrderedAt=todayStr();
+    openTeaShopOrderEmail(p);
+  }else{
+    p.status='completed';
+  }
+  save();
+  render();
+}
+function archivePlan(id){
+  const p=STATE.plans.find(x=>x.id===id);
+  if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const name=emp?emp.name:'this employee';
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:440px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Archive plan</div>
+    <div class="modal-sub">${p.type.toUpperCase()} — ${name}</div>
+    <div class="alert alert-warn" style="margin-bottom:12px">Archiving will remove this plan from the Active view and all dashboard counts. It can be restored at any time from the Archived tab. No data will be lost.</div>
+    <div class="form-group"><label>Archive reason (optional)</label>
+      <select id="arch-reason">
+        <option value="">— Select reason —</option>
+        <option value="Plan period expired">Plan period expired</option>
+        <option value="Employee resolved performance issues">Employee resolved performance issues</option>
+        <option value="Employee separated from company">Employee separated from company</option>
+        <option value="Plan superseded by new plan">Plan superseded by new plan</option>
+        <option value="Plan issued in error">Plan issued in error</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea id="arch-notes" rows="2" placeholder="Optional archival notes..."></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn" onclick="confirmArchive('${id}')">Archive plan</button>
+    </div>
+  </div></div>`;
+}
+
+function confirmArchive(id){
+  const p=STATE.plans.find(x=>x.id===id);
+  if(!p)return;
+  p.status='archived';
+  p.archivedAt=new Date().toISOString().slice(0,10);
+  p.archiveReason=document.getElementById('arch-reason').value;
+  p.archiveNotes=document.getElementById('arch-notes').value;
+  save();closeModal();renderView();
+}
+
+function unarchivePlan(id){
+  const p=STATE.plans.find(x=>x.id===id);
+  if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  if(confirm('Restore this plan to Active status for '+(emp?emp.name:'this employee')+'?')){
+    p.status='active';
+    p.archivedAt=null;p.archiveReason=null;p.archiveNotes=null;
+    save();renderView();
+  }
+}
+
+function deletePlan(id){
+  const p=STATE.plans.find(x=>x.id===id);
+  if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const name=emp?emp.name:'this employee';
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:440px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Delete plan</div>
+    <div class="modal-sub">${p.type.toUpperCase()} — ${name}</div>
+    <div class="alert alert-danger" style="margin-bottom:12px"><strong>This action is permanent.</strong> All plan data, action items, weekly updates, meeting logs, and signed documents will be deleted and cannot be recovered. Consider archiving instead if you may need this record later.</div>
+    <div style="margin-bottom:12px"><label style="font-size:13px">Type <strong>DELETE</strong> to confirm:</label><input id="del-confirm" placeholder="Type DELETE to confirm" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete('${id}')">Permanently delete</button>
+    </div>
+  </div></div>`;
+}
+
+function confirmDelete(id){
+  const val=document.getElementById('del-confirm').value.trim();
+  if(val!=='DELETE'){alert('Please type DELETE to confirm.');return;}
+  STATE.plans=STATE.plans.filter(x=>x.id!==id);
+  save();closeModal();renderView();
+}
+
+function renderPlanDocumentSection(p){
+  if(!p.presentedAt){
+    return `<div class="section-title">Employee's individual plan</div>
+      <div class="card" style="margin-bottom:14px;background:#fafaf8;padding:14px 16px">
+        <div class="alert alert-info" style="margin-bottom:10px">Mark the coaching/PIP plan as presented before uploading the signed copy.</div>
+        <button class="btn btn-primary btn-sm" onclick="markPlanPresented('${p.id}')">Mark as presented</button>
+      </div>`;
+  }
+  return `<div class="section-title">Employee's individual plan</div>
+    <div class="card" style="margin-bottom:14px;background:#fafaf8;padding:14px 16px">
+      <div class="grid2" style="margin-bottom:10px">
+        <div class="stat-card">
+          <div class="stat-label">Presentation date</div>
+          <div style="font-size:16px;font-weight:500">${p.presentedAt}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Signed presented plan</div>
+          <div style="font-size:16px;font-weight:500">${p.signedDocData?(p.signedDocName||'On file'):'Not uploaded'}</div>
+          <div style="font-size:11px;color:#888;margin-top:4px">${p.signedDocDate?`Saved ${p.signedDocDate}`:'Upload the signed coaching/PIP document for this employee.'}</div>
+        </div>
+      </div>
+      ${p.signedDocData
+        ? `<div class="alert alert-success" style="margin-bottom:10px">Signed plan on file: <strong>${p.signedDocName}</strong></div>`
+        : `<div class="alert alert-warn" style="margin-bottom:10px">The plan has been presented, but the employee-signed coaching/PIP document has not been uploaded yet.</div>`}
+      <input type="file" id="detail-signed-upload-${p.id}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" onchange="handleSignedDocUploadFromDetail('${p.id}',event)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('detail-signed-upload-${p.id}').click()">${p.signedDocData?'Replace signed plan':'Upload signed plan'}</button>
+        ${p.signedDocData?`<button class="btn btn-sm" onclick="viewSignedDoc('${p.id}',0)">Download current file</button>`:''}
+        <button class="btn btn-sm" onclick="markPlanPresented('${p.id}')">Update presentation date</button>
+      </div>
+      <div id="detail-signed-status-${p.id}" style="margin-top:8px"></div>
+    </div>`;
+}
+
+function openPlanDetail(id){
+  const p=STATE.plans.find(x=>x.id===id);if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const pct=pctComplete(p);const dl=daysLeft(p);
+  const alerts=getPlanAlerts(p);
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal modal-wide">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div class="modal-title">${emp?emp.name:'Employee'} — ${p.type.toUpperCase()}</div>
+    <div class="modal-sub">${emp?emp.community||'':''} · Issued ${p.createdAt} · Review ${p.reviewDate}</div>
+    ${alerts.length>0?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${alerts.map(a=>`<span class="badge badge-overdue">${a.msg}</span>`).join('')}</div>`:''}
+    <div class="grid3" style="margin-bottom:14px">
+      <div class="stat-card"><div class="stat-label">Overall score</div><div class="stat-val">${p.overallScore!=null?p.overallScore+'%':'—'}</div></div>
+      <div class="stat-card"><div class="stat-label">Days left</div><div class="stat-val" style="color:${dl<0?'#8B0000':dl<7?'#E65100':'inherit'}">${dl<0?'Overdue':dl}</div></div>
+      <div class="stat-card"><div class="stat-label">Progress</div><div class="stat-val">${pct}%</div></div>
+    </div>
+    <div class="progress-bar-wrap" style="margin-bottom:14px"><div class="progress-bar" style="width:${pct}%;background:${p.type==='pip'?'#8B0000':'#C9943C'}"></div></div>
+    <div class="section-title">Score breakdown</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;font-size:12px">
+      ${[['Telephone',p.telScore],['On-Site',p.onsiteScore],['Greeting',p.greetScore],['Identifying Needs',p.needsScore],['Demonstrating',p.demoScore],['Closing',p.closingScore],['Follow-Up',p.followupScore]].map(([k,v])=>v!=null?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid #f0f0ee"><span style="color:#888">${k}</span><span class="score-chip ${scoreClass(v)}" style="height:20px;width:44px">${v}%</span></div>`:'').join('')}
+    </div>
+    ${renderPlanDocumentSection(p)}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-warn" onclick="closeModal();openWeeklyUpdate('${p.id}')">Log weekly update</button>
+      <button class="btn btn-primary" onclick="exportPlanDoc('${p.id}')">Export document</button>
+    </div>
+  </div></div>`;
+}
+function closeModal(){document.getElementById('modal-container').innerHTML='';}
+
+function renderWeeklyUpdates(){
+  const plans=visiblePlans().filter(p=>p.status==='active');
+  const selId=window._weeklyPlanId;
+  const selPlan=selId?plans.find(p=>p.id===selId):plans[0];
+
+  return `<div class="page">
+    <div class="page-title">Weekly Updates</div>
+    <div class="page-sub">Log weekly review meetings and track action item progress for each active plan.</div>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title">Select plan</div>
+          <select onchange="window._weeklyPlanId=this.value;renderView()">
+            <option value="">— Select active plan —</option>
+            ${plans.map(p=>{const emp=STATE.employees.find(e=>e.id===p.employeeId);return `<option value="${p.id}" ${selPlan&&selPlan.id===p.id?'selected':''}>${emp?emp.name:'—'} · ${p.type.toUpperCase()} · ${p.reviewDate}</option>`;}).join('')}
+          </select>
+        </div>
+        ${selPlan?renderWeeklyMeetings(selPlan):'<div class="card"><div style="color:#888;font-size:13px">Select a plan above to log updates.</div></div>'}
+      </div>
+      <div>
+        ${selPlan?renderWeeklyActionItems(selPlan):''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderWeeklyMeetings(plan){
+  const emp=STATE.employees.find(e=>e.id===plan.employeeId);
+  const scheduledMeetings=getResolvedSchedule(plan);
+  const manualMeetings=getManualMeetings(plan);
+  const today=todayStr();
+
+  return `<div class="card">
+    <div class="section-title">Review meetings — ${emp?emp.name:''}</div>
+    ${!plan.presentedAt?'<div class="alert alert-info" style="margin-bottom:12px">Mark the plan as presented to automatically generate the required meeting cadence through the review date.</div>':
+    `<div style="margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 92px;gap:8px;font-size:11px;color:#888;font-weight:500;padding-bottom:4px;border-bottom:0.5px solid #eee"><span>Required meeting</span><span>Due</span><span>Held</span><span>Status</span><span></span></div>
+      ${scheduledMeetings.map(m=>`<div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 92px;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0f0ee">
+        <div>
+          <div style="font-size:13px">${m.label||m.type}</div>
+          <div style="font-size:11px;color:#888">${m.weekLabel||''}</div>
+        </div>
+        <span style="font-size:12px">${m.due}</span>
+        <span style="font-size:12px">${m.heldDate||'—'}</span>
+        <span><select onchange="updateMeetingStatus('${plan.id}',${m.schedIdx},this.value)" style="width:auto;font-size:11px;padding:3px 6px">
+          <option value="scheduled" ${m.status==='scheduled'?'selected':''}>Scheduled</option>
+          <option value="completed" ${m.status==='completed'?'selected':''}>Completed</option>
+          <option value="past_due" ${m.status==='past_due'?'selected':''}>Past due</option>
+        </select></span>
+        <button class="btn btn-sm ${m.status==='completed'?'':'btn-primary'}" onclick="openLogWeek('${plan.id}',${m.schedIdx})">${m.status==='completed'?'Edit':'Log'}</button>
+      </div>`).join('')}
+    </div>`}
+    ${manualMeetings.length===0?'':`<div style="margin-bottom:12px">
+      <div class="section-title" style="font-size:13px">One-off meetings</div>
+      <div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 80px;gap:8px;font-size:11px;color:#888;font-weight:500;padding-bottom:4px;border-bottom:0.5px solid #eee"><span>Meeting</span><span>Due</span><span>Held</span><span>Status</span><span></span></div>
+      ${manualMeetings.map(m=>`<div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0f0ee">
+        <div style="font-size:13px">${m.label||m.type||'One-off meeting'}</div>
+        <span style="font-size:12px">${m.dueDate||m.date||'—'}</span>
+        <span style="font-size:12px">${m.heldDate||m.date||'—'}</span>
+        <span><select onchange="updateMeetingStatus('${plan.id}','manual-${m.actualIdx}',this.value)" style="width:auto;font-size:11px;padding:3px 6px">
+          <option value="scheduled" ${m.status==='scheduled'?'selected':''}>Scheduled</option>
+          <option value="completed" ${m.status==='completed'?'selected':''}>Completed</option>
+          <option value="past_due" ${m.status==='past_due'?'selected':''}>Past due</option>
+        </select></span>
+        <button class="btn btn-sm btn-danger" onclick="removeMeeting('${plan.id}','manual-${m.actualIdx}')">×</button>
+      </div>`).join('')}
+    </div>`}
+    <div style="border-top:0.5px solid #eee;padding-top:12px">
+      <div class="section-title" style="font-size:13px">Add one-off meeting</div>
+      <div class="form-row cols2" style="margin-bottom:8px">
+        <div>
+          <label>Meeting label</label>
+          <select id="mt-type" onchange="toggleMeetingCustomInput('mt-type','mt-custom-wrap')">${renderMeetingTypeOptions('1:1')}</select>
+        </div>
+        <div><label>Due / held date</label><input type="date" id="mt-date" value="${today}"></div>
+      </div>
+      <div id="mt-custom-wrap" class="form-group hidden"><label>Custom meeting label</label><input id="mt-custom" placeholder="Enter one-off meeting type"></div>
+      <div class="form-row cols2" style="margin-bottom:8px">
+        <div><label>Status</label><select id="mt-status"><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="past_due">Past due</option></select></div>
+        <div><label>Notes</label><input id="mt-notes" placeholder="Optional notes"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addMeeting('${plan.id}')">Add meeting</button>
+    </div>
+  </div>`;
+}
+
+function renderWeeklyActionItems(plan){
+  const actionItems=plan.actionItems||[];
+  const weeklyUpdates=plan.weeklyUpdates||[];
+  const latestWeek=weeklyUpdates[weeklyUpdates.length-1];
+
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="section-title" style="margin-bottom:0">Action items (${actionItems.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="openLogWeek('${plan.id}')">Log this week's progress</button>
+        <button class="btn btn-sm ${plan.requiresUpdatedShop?'btn-primary':'btn-warn'}" onclick="markComplete('${plan.id}')">${plan.requiresUpdatedShop?'Complete + order shop':'Complete plan'}</button>
+      </div>
+    </div>
+    ${plan.requiresUpdatedShop?`<div class="alert alert-info" style="margin-bottom:10px">This plan requires an updated targeted shop at completion. Completing it will move the status to <strong>Shop Ordered</strong> and open an email to Tea.</div>`:''}
+    ${actionItems.length===0?`<div class="alert alert-info" style="margin-bottom:10px">No action items loaded. Upload a PIP/coaching document in the New Plan section to auto-extract action items, or add them manually below.</div>`:''}
+    <div style="margin-bottom:12px">
+      ${actionItems.map((item,i)=>{
+        const lastStatus=latestWeek&&latestWeek.items?latestWeek.items.find(x=>x.idx===i):null;
+        const st=lastStatus?lastStatus.status:'pending';
+        return `<div class="action-row">
+          <div style="font-size:12px;color:#888;padding-top:2px">#${i+1}</div>
+          <div>
+            <div style="font-size:13px;line-height:1.4">${item.text}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">${item.area||''}</div>
+          </div>
+          <div style="font-size:11px"><span class="badge ${st==='complete'?'badge-active':st==='partial'?'badge-partial':st==='incomplete'?'badge-incomplete':''}"> ${st==='pending'?'Not reviewed':st}</span></div>
+          <div style="font-size:11px;color:#888">${lastStatus&&lastStatus.note?lastStatus.note:''}</div>
+          <button class="btn btn-sm btn-danger" onclick="removeActionItem('${plan.id}',${i})" style="justify-self:end">×</button>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="border-top:0.5px solid #eee;padding-top:12px">
+      <div class="section-title" style="font-size:13px">Add action item manually</div>
+      <div class="form-row cols2" style="margin-bottom:8px">
+        <div><label>Area / category</label><input id="ai-area" placeholder="e.g. Telephone — Needs Assessment"></div>
+        <div></div>
+      </div>
+      <div style="margin-bottom:8px"><label>Action item text</label><textarea id="ai-text" rows="2" placeholder="Describe the required action..."></textarea></div>
+      <button class="btn btn-primary btn-sm" onclick="addActionItem('${plan.id}')">Add item</button>
+    </div>
+
+    ${weeklyUpdates.length>0?`<div style="margin-top:16px;border-top:0.5px solid #eee;padding-top:12px">
+      <div class="section-title" style="font-size:13px">Update history (${weeklyUpdates.length} weeks)</div>
+      ${weeklyUpdates.map((w,wi)=>`<div style="background:#f9f9f7;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-weight:500;font-size:13px">Week ${wi+1} — ${w.meetingType||'Update'} · ${w.date}</span>
+          <span style="font-size:12px;color:#888">${w.overallStatus||''}</span>
+        </div>
+        ${w.meetingDueDate?`<div style="font-size:11px;color:#888;margin-bottom:6px">Due ${w.meetingDueDate}${w.meetingStatus?` · ${w.meetingStatus}`:''}</div>`:''}
+        ${w.notes?`<div style="font-size:12px;color:#666;margin-bottom:6px">${w.notes}</div>`:''}
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${w.items?w.items.map(it=>`<span class="badge ${it.status==='complete'?'badge-active':it.status==='partial'?'badge-partial':'badge-incomplete'}" style="font-size:10px">#${it.idx+1} ${it.status}</span>`).join(''):''}
+        </div>
+      </div>`).join('')}
+    </div>`:''}
+  </div>`;
+}
+
+function openLogWeek(planId,schedIdx=null){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan)return;
+  const items=plan.actionItems||[];
+  const existing=schedIdx===null?null:(plan.meetings||[]).find(m=>m.schedIdx===schedIdx);
+  const sched=schedIdx===null?null:getSchedule(plan).find(s=>s.schedIdx===schedIdx);
+  const heldDate=existing?.heldDate||todayStr();
+  const dueDate=existing?.dueDate||sched?.due||heldDate;
+  const rawMeetingType=existing?.label||existing?.type||sched?.type||'Weekly Follow Up';
+  const meetingType=isStandardMeetingType(rawMeetingType)?rawMeetingType:CUSTOM_MEETING_OPTION;
+  const customMeetingType=isStandardMeetingType(rawMeetingType)?'':rawMeetingType;
+  const meetingStatus=existing?.status||'completed';
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal modal-wide">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div class="modal-title">Log weekly progress</div>
+    <div class="modal-sub">Select the meeting review type and document which plan tasks were covered in this update.</div>
+    <div class="form-row cols2" style="margin-bottom:12px">
+      <div><label>Scheduled due meeting</label><select id="lw-sched-ref" onchange="syncWeeklyLogSchedule('${planId}')">${renderScheduleOptions(plan,schedIdx)}</select></div>
+      <div><label>Meeting review type</label><select id="lw-meeting-type" onchange="toggleMeetingCustomInput('lw-meeting-type','lw-custom-wrap')">${renderMeetingTypeOptions(meetingType)}</select></div>
+    </div>
+    <div id="lw-custom-wrap" class="form-group ${meetingType===CUSTOM_MEETING_OPTION?'':'hidden'}"><label>Custom meeting label</label><input id="lw-custom-type" placeholder="Enter one-off meeting type" value="${escapeHTML(customMeetingType)}"></div>
+    <div class="form-row cols3" style="margin-bottom:12px">
+      <div><label>Due date</label><input type="date" id="lw-due-date" value="${dueDate}"></div>
+      <div><label>Held date</label><input type="date" id="lw-date" value="${heldDate}"></div>
+      <div><label>Meeting status</label><select id="lw-meeting-status"><option value="completed" ${meetingStatus==='completed'?'selected':''}>Completed</option><option value="scheduled" ${meetingStatus==='scheduled'?'selected':''}>Scheduled</option><option value="past_due" ${meetingStatus==='past_due'?'selected':''}>Past due</option></select></div>
+    </div>
+    <div class="form-row cols2" style="margin-bottom:12px">
+      <div><label>Overall week status</label>
+        <select id="lw-overall">
+          <option value="On track">On track</option>
+          <option value="Needs attention">Needs attention</option>
+          <option value="At risk">At risk</option>
+        </select>
+      </div>
+      <div></div>
+    </div>
+    <div style="margin-bottom:12px"><label>Manager notes</label><textarea id="lw-notes" rows="2" placeholder="Overall observations, coaching notes..."></textarea></div>
+    <div class="section-title">Action item review</div>
+    <div style="background:#f9f9f7;border-radius:8px;padding:4px 0;margin-bottom:12px;max-height:340px;overflow-y:auto">
+      ${items.length===0?'<div style="padding:12px;color:#888;font-size:13px">No action items to review.</div>':
+      items.map((item,i)=>`<div style="padding:10px 12px;border-bottom:0.5px solid #eee">
+        <div style="display:flex;gap:8px;align-items:start">
+          <span style="color:#888;font-size:12px;min-width:24px;padding-top:2px">#${i+1}</span>
+          <div style="flex:1">
+            <div style="font-size:13px;margin-bottom:6px">${item.text}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <select id="lw-s-${i}" style="width:auto;font-size:12px;padding:3px 6px">
+                <option value="complete">Complete</option>
+                <option value="partial">Partial</option>
+                <option value="incomplete" selected>Incomplete</option>
+              </select>
+              <input id="lw-n-${i}" placeholder="Notes (optional)" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px">
+            </div>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWeeklyLog('${planId}',${schedIdx===null?'null':schedIdx})">Save weekly update</button>
+    </div>
+  </div></div>`;
+}
+
+function saveWeeklyLog(planId,initialSchedIdx=null){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan)return;
+  const items=plan.actionItems||[];
+  if(!plan.weeklyUpdates)plan.weeklyUpdates=[];
+  if(!plan.meetings)plan.meetings=[];
+  const schedRef=document.getElementById('lw-sched-ref')?.value||ADHOC_SCHEDULE_OPTION;
+  const schedIdx=schedRef!==ADHOC_SCHEDULE_OPTION?parseInt(schedRef,10):initialSchedIdx;
+  const meetingType=getSelectedMeetingType('lw-meeting-type','lw-custom-type');
+  const heldDate=document.getElementById('lw-date').value;
+  const dueDate=document.getElementById('lw-due-date').value||heldDate;
+  const meetingStatus=document.getElementById('lw-meeting-status').value;
+  const meetingEntry={type:meetingType,label:meetingType,dueDate,heldDate,date:heldDate,status:meetingStatus,notes:document.getElementById('lw-notes').value};
+  if(schedRef!==ADHOC_SCHEDULE_OPTION&&Number.isFinite(schedIdx)){
+    meetingEntry.schedIdx=schedIdx;
+    const existingIdx=getMeetingArrayIndexBySchedIdx(plan,schedIdx);
+    if(existingIdx>=0)plan.meetings[existingIdx]={...plan.meetings[existingIdx],...meetingEntry};
+    else plan.meetings.push(meetingEntry);
+  }else{
+    plan.meetings.push(meetingEntry);
+  }
+  const logItems=items.map((_,i)=>({
+    idx:i,
+    status:document.getElementById(`lw-s-${i}`)?.value||'incomplete',
+    note:document.getElementById(`lw-n-${i}`)?.value||''
+  }));
+  plan.weeklyUpdates.push({
+    date:heldDate,
+    meetingType,
+    meetingStatus,
+    meetingDueDate:dueDate,
+    meetingSchedIdx:schedRef!==ADHOC_SCHEDULE_OPTION&&Number.isFinite(schedIdx)?schedIdx:null,
+    overallStatus:document.getElementById('lw-overall').value,
+    notes:document.getElementById('lw-notes').value,
+    items:logItems
+  });
+  save();closeModal();
+  window._weeklyPlanId=planId;
+  STATE.currentView='weekly';
+  render();
+}
+
+function openWeeklyUpdate(planId){
+  window._weeklyPlanId=planId;
+  STATE.currentView='weekly';
+  render();
+}
+
+function getSchedule(plan){
+  if(!plan.presentedAt)return [];
+  const start=new Date(`${plan.presentedAt}T12:00:00`);
+  const end=new Date(`${plan.reviewDate}T12:00:00`);
+  if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<start)return [];
+  const sched=[{schedIdx:0,weekLabel:'Day 1',type:'Initial presentation of PIP/Coaching plan',due:plan.presentedAt}];
+  let idx=1;
+  let week=1;
+  const cursor=new Date(start);
+  cursor.setDate(cursor.getDate()+7);
+  while(cursor<end){
+    sched.push({schedIdx:idx++,weekLabel:'Week '+week,type:'Weekly Follow Up',due:cursor.toISOString().slice(0,10)});
+    cursor.setDate(cursor.getDate()+7);
+    week++;
+  }
+  if(plan.reviewDate!==plan.presentedAt)sched.push({schedIdx:idx,weekLabel:'Final Review',type:'Task Completion Review',due:plan.reviewDate});
+  return sched;
+}
+
+function markPlanPresented(planId){
+  const mc=document.getElementById('modal-container');
+  const today=new Date().toISOString().slice(0,10);
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:460px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Mark plan as presented</div>
+    <div class="modal-sub">Record when the plan was formally presented to the employee. This starts the meeting schedule and due dates.</div>
+    <div class="form-group" style="margin-top:12px"><label>Presentation date</label><input type="date" id="pres-date" value="${today}"></div>
+    <div class="alert alert-info" style="font-size:12px">Once set, the required meeting schedule will generate automatically based on the plan's review period. You will also be prompted to upload a signed copy of the plan.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPlanPresented('${planId}')">Confirm presentation date</button>
+    </div>
+  </div></div>`;
+}
+
+function confirmPlanPresented(planId){
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  const presDate=document.getElementById('pres-date').value;
+  if(!presDate){alert('Please select a date.');return;}
+  plan.presentedAt=presDate;
+  if(!plan.meetings)plan.meetings=[];
+  const initialMeeting={schedIdx:0,type:'Initial presentation of PIP/Coaching plan',label:'Initial presentation of PIP/Coaching plan',dueDate:presDate,heldDate:presDate,date:presDate,status:'completed',notes:'Plan presented to employee.'};
+  const existingIdx=getMeetingArrayIndexBySchedIdx(plan,0);
+  if(existingIdx>=0)plan.meetings[existingIdx]={...plan.meetings[existingIdx],...initialMeeting};
+  else plan.meetings.push(initialMeeting);
+  save();
+  closeModal();
+  setTimeout(()=>promptSignedDocUpload(planId),200);
+  renderView();
+}
+
+function setSignedDoc(plan,file,data,schedIdx){
+  plan.signedDocData=data;
+  plan.signedDocName=file.name;
+  plan.signedDocDate=new Date().toISOString().slice(0,10);
+  if(!plan.meetings)plan.meetings=[];
+  const targetIdx=schedIdx===undefined||schedIdx===null?0:schedIdx;
+  const meeting=plan.meetings.find(x=>x.schedIdx===targetIdx);
+  if(meeting){
+    meeting.signedDoc=true;
+    meeting.signedDocName=file.name;
+  }
+  save();
+}
+
+function promptSignedDocUpload(planId){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:480px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Upload signed plan document</div>
+    <div class="modal-sub">Upload the employee-signed copy of the plan. Accepted: PDF, image (JPG/PNG), or Word doc.</div>
+    <div class="file-drop" style="margin:10px 0" onclick="document.getElementById('signed-upload-${planId}').click()">
+      <div style="font-size:13px;margin-bottom:4px">Click to select signed document</div>
+      <div style="font-size:12px;color:#888">PDF, JPG, PNG, DOC, DOCX — stored in browser</div>
+    </div>
+    <input type="file" id="signed-upload-${planId}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" onchange="handleSignedDocUpload('${planId}',event)">
+    <div id="signed-upload-status-${planId}" style="margin-top:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn" onclick="closeModal()">Skip for now</button>
+    </div>
+  </div></div>`;
+}
+
+function handleSignedDocUpload(planId,event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    setSignedDoc(plan,file,e.target.result,0);
+    const st=document.getElementById('signed-upload-status-'+planId);
+    if(st)st.innerHTML='<div class="alert alert-success">Signed document saved: <strong>'+file.name+'</strong></div>';
+    setTimeout(()=>{closeModal();renderView();},1200);
+  };
+  reader.readAsDataURL(file);
+}
+
+function uploadSignedDoc(planId,schedIdx){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:460px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Upload signed plan document</div>
+    <div class="file-drop" style="margin:10px 0" onclick="document.getElementById('su2-${planId}-${schedIdx}').click()">
+      <div style="font-size:13px">Click to select file</div>
+      <div style="font-size:12px;color:#888">PDF, JPG, PNG, DOC, DOCX</div>
+    </div>
+    <input type="file" id="su2-${planId}-${schedIdx}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" onchange="handleSignedDocUpload2('${planId}',${schedIdx},event)">
+    <div id="su2-status" style="margin-top:8px"></div>
+    <div style="text-align:right;margin-top:10px"><button class="btn" onclick="closeModal()">Cancel</button></div>
+  </div></div>`;
+}
+
+function handleSignedDocUpload2(planId,schedIdx,event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    setSignedDoc(plan,file,e.target.result,schedIdx);
+    document.getElementById('su2-status').innerHTML='<div class="alert alert-success">Saved: '+file.name+'</div>';
+    setTimeout(()=>{closeModal();renderView();},1000);
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleSignedDocUploadFromDetail(planId,event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  const status=document.getElementById('detail-signed-status-'+planId);
+  const reader=new FileReader();
+  reader.onload=function(e){
+    setSignedDoc(plan,file,e.target.result,0);
+    if(status)status.innerHTML='<div class="alert alert-success">Signed plan saved: <strong>'+file.name+'</strong></div>';
+    setTimeout(()=>openPlanDetail(planId),900);
+  };
+  reader.readAsDataURL(file);
+}
+
+function viewSignedDoc(planId){
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan||!plan.signedDocData)return;
+  const a=document.createElement('a');
+  a.href=plan.signedDocData;
+  a.download=plan.signedDocName||'signed_plan';
+  a.click();
+}
+function viewSignedDocAdhoc(planId){viewSignedDoc(planId);}
+
+function logScheduledMeeting(planId,schedIdx,type,dueDate){
+  const mc=document.getElementById('modal-container');
+  const today=new Date().toISOString().slice(0,10);
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:460px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Log meeting</div>
+    <div class="modal-sub">${type} — due ${dueDate}</div>
+    <div class="form-row cols2" style="margin-top:10px;margin-bottom:8px">
+      <div><label>Date held</label><input type="date" id="lm-date" value="${today}"></div>
+      <div><label>Status</label>
+        <select id="lm-status">
+          <option value="completed">Completed</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="past_due">Past due</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:8px"><label>Notes</label><textarea id="lm-notes" rows="3" placeholder="Meeting notes..."></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveScheduledMeeting('${planId}',${schedIdx},'${type}','${dueDate}')">Save meeting</button>
+    </div>
+  </div></div>`;
+}
+
+function saveScheduledMeeting(planId,schedIdx,type,dueDate){
+  const plan=STATE.plans.find(p=>p.id===planId);
+  if(!plan)return;
+  if(!plan.meetings)plan.meetings=[];
+  const existing=plan.meetings.findIndex(m=>m.schedIdx===schedIdx);
+  const entry={
+    schedIdx,type,dueDate,
+    heldDate:document.getElementById('lm-date').value,
+    status:document.getElementById('lm-status').value,
+    notes:document.getElementById('lm-notes').value,
+    label:type
+  };
+  if(existing>=0)plan.meetings[existing]=entry;
+  else plan.meetings.push(entry);
+  save();
+  closeModal();
+  renderView();
+}
+
+function addMeeting(planId){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan)return;
+  if(!plan.meetings)plan.meetings=[];
+  const type=getSelectedMeetingType('mt-type','mt-custom');
+  const date=document.getElementById('mt-date').value;
+  plan.meetings.push({
+    label:type,
+    type,
+    dueDate:date,
+    heldDate:date,
+    date,
+    status:document.getElementById('mt-status').value,
+    notes:document.getElementById('mt-notes').value||''
+  });
+  save();renderView();
+}
+
+function removeMeeting(planId,meetingRef){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan||!plan.meetings)return;
+  const ref=parseMeetingRef(meetingRef);
+  let idx=-1;
+  if(ref.kind==='manual')idx=ref.index;
+  else if(ref.kind==='scheduled')idx=getMeetingArrayIndexBySchedIdx(plan,ref.index);
+  if(idx>=0)plan.meetings.splice(idx,1);
+  save();renderView();
+}
+
+function updateMeetingStatus(planId,meetingRef,status){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan||!plan.meetings)return;
+  const ref=parseMeetingRef(meetingRef);
+  let m=ref.kind==='manual'?plan.meetings[ref.index]:plan.meetings.find(x=>x.schedIdx===ref.index);
+  if(!m&&ref.kind==='scheduled'){
+    const sched=getSchedule(plan).find(s=>s.schedIdx===ref.index);
+    if(!sched)return;
+    m={schedIdx:ref.index,type:sched.type,label:sched.type,dueDate:sched.due,heldDate:'',date:sched.due,status,notes:''};
+    plan.meetings.push(m);
+  }
+  if(m){m.status=status;save();renderView();}
+}
+
+function addActionItem(planId){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan)return;
+  const text=document.getElementById('ai-text').value.trim();if(!text)return;
+  if(!plan.actionItems)plan.actionItems=[];
+  plan.actionItems.push({text,area:document.getElementById('ai-area').value.trim()});
+  save();renderView();
+}
+function removeActionItem(planId,idx){
+  const plan=STATE.plans.find(p=>p.id===planId);if(!plan||!plan.actionItems)return;
+  plan.actionItems.splice(idx,1);save();renderView();
+}
+
+let _selectedType='coaching',_selectedCons=true;
+function selectType(t){_selectedType=t;document.getElementById('type-coaching').className='chip'+(t==='coaching'?' selected':'');document.getElementById('type-pip').className='chip'+(t==='pip'?' selected':'');}
+function selectCons(v){_selectedCons=v;document.getElementById('cons-yes').className='chip'+(v?' selected':'');document.getElementById('cons-no').className='chip'+(!v?' selected':'');}
+function autoDetectType(){
+  const s=parseFloat(document.getElementById('np-overall').value);
+  const sug=document.getElementById('type-suggestion');if(isNaN(s)){sug.textContent='';return;}
+  if(s<60){sug.innerHTML='<span style="color:#8B0000">Score below 60% — PIP recommended</span>';selectType('pip');}
+  else if(s<84){sug.innerHTML='<span style="color:#5D4037">Below benchmark (84%) — Coaching plan recommended</span>';selectType('coaching');}
+  else{sug.innerHTML='<span style="color:#27500A">Score meets benchmark</span>';}
+}
+
+function renderNewPlan(){
+  const emps=visibleEmployees();
+  return `<div class="page">
+    <div class="page-title">New Coaching / PIP Plan</div>
+    <div class="page-sub">Upload an Ellis shop report PDF for AI extraction, or fill in manually. Optionally upload an existing plan document to import action items.</div>
+    <div class="grid2">
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title">Step 1 — Employee</div>
+          <div class="form-group"><label>Select employee</label>
+            <select id="np-emp">
+              <option value="">— Select employee —</option>
+              ${emps.map(e=>`<option value="${e.id}">${e.name} · ${e.community||'No community'}</option>`).join('')}
+            </select>
+          </div>
+          <div style="font-size:12px;color:#888"><a href="#" onclick="switchView('employees');return false">Add employees</a> if not listed.</div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title">Step 2a — Shop report scores</div>
+          <div class="alert alert-info" style="margin-bottom:10px;font-size:12px"><strong>To auto-fill:</strong> Upload the Ellis shop PDF in the Claude chat window, then click the button below. Claude reads the file and fills all score fields. Or fill manually in Step 3.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <button class="btn btn-primary btn-sm" onclick="openChatExtractShop()">Extract scores from chat-uploaded PDF ↗</button>
+            <button class="btn btn-sm" onclick="clearShopScores()">Clear scores</button>
+          </div>
+          <div id="extract-status" style="margin-top:4px"></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title">Step 2b — Import action items from existing plan</div>
+          <div class="alert alert-info" style="margin-bottom:10px;font-size:12px"><strong>To auto-import:</strong> Upload the PIP/coaching plan .docx or .pdf in the Claude chat window, then click the button below. Or paste raw plan text, or add items manually in the Weekly Updates tab.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <button class="btn btn-primary btn-sm" onclick="openChatExtractPlan()">Extract action items from chat-uploaded plan ↗</button>
+            <button class="btn btn-sm" onclick="openPasteModal()">Paste plan text</button>
+          </div>
+          <div id="plan-extract-status" style="margin-top:4px"></div>
+          <div id="extracted-items-preview" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <div class="section-title">Step 3 — Scores (auto-filled or manual)</div>
+          <div class="form-row cols2">
+            <div><label>Shop date</label><input type="date" id="np-shopdate"></div>
+            <div><label>Overall score (%)</label><input type="number" id="np-overall" placeholder="e.g. 54.5" min="0" max="100" onchange="autoDetectType()"></div>
+          </div>
+          <div class="form-row cols2" style="margin-top:8px">
+            <div><label>Telephone total (%)</label><input type="number" id="np-tel" placeholder="0–100"></div>
+            <div><label>On-site total (%)</label><input type="number" id="np-onsite" placeholder="0–100"></div>
+          </div>
+          <div class="form-row cols3" style="margin-top:8px">
+            <div><label>Greeting (%)</label><input type="number" id="np-greet" placeholder="%"></div>
+            <div><label>Identifying Needs (%)</label><input type="number" id="np-needs" placeholder="%"></div>
+            <div><label>Demonstrating (%)</label><input type="number" id="np-demo" placeholder="%"></div>
+          </div>
+          <div class="form-row cols2" style="margin-top:8px">
+            <div><label>Closing (%)</label><input type="number" id="np-closing" placeholder="%"></div>
+            <div><label>Follow-Up (%)</label><input type="number" id="np-followup" placeholder="%"></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title">Step 4 — Plan type & timeline</div>
+          <div class="form-group">
+            <label>Plan type</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <div id="type-coaching" class="chip selected" onclick="selectType('coaching')">Coaching outline</div>
+              <div id="type-pip" class="chip" onclick="selectType('pip')">PIP</div>
+            </div>
+            <div id="type-suggestion" style="font-size:12px;color:#888;margin-top:4px"></div>
+          </div>
+          <div class="form-row cols2">
+            <div><label>Review timeline</label>
+              <select id="np-timeline">
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days</option>
+                <option value="next_shop">Next shop result</option>
+              </select>
+            </div>
+            <div><label>Review date</label><input type="date" id="np-reviewdate"></div>
+          </div>
+          <div style="margin-top:8px">
+            <label>Include consequence statement?</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <div id="cons-yes" class="chip selected" onclick="selectCons(true)">Yes — include consequences</div>
+              <div id="cons-no" class="chip" onclick="selectCons(false)">No — accountability only</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;padding:12px;border:0.5px solid #d8e2e8;border-radius:10px;background:#f8fbfc">
+            <div class="section-title" style="font-size:13px;margin-bottom:8px">Post-Plan Shop Trigger</div>
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:0">
+              <input type="checkbox" id="np-requires-shop" style="width:auto;min-width:auto;margin-top:2px;padding:0">
+              <span style="font-size:12px;color:#444;line-height:1.5">Require an updated targeted shop when this plan is completed. If checked, completion will change the plan status to <strong>Shop Ordered</strong> and open a prefilled email to <strong>tea.jihad@risere.com</strong> with the employee name and community.</span>
+            </label>
+          </div>
+          <div style="margin-top:8px"><label>Manager name</label><input id="np-mgr" value="${STATE.currentUser?.name||''}"></div>
+          <div style="margin-top:8px"><label>Notes / context</label><textarea id="np-notes" rows="3" placeholder="Context for this plan..."></textarea></div>
+        </div>
+        <div class="card">
+          <div class="section-title">Step 5 — Generate</div>
+          <div id="np-preview" style="margin-bottom:10px"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <button class="btn btn-primary" onclick="generatePlan()">Save plan + generate document</button>
+            <button class="btn" onclick="previewPlan()">Preview summary</button>
+          </div>
+          <div id="export-links" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+let _extractedActionItems=[];
+const BRIEANNA_ACTION_ITEMS=[
+  {number:1,area:'Telephone — Needs Assessment',text:'Develop a written telephone script approved by manager within 5 business days of PIP issuance'},
+  {number:2,area:'Telephone — Needs Assessment',text:'Script must cover: warm greeting, name usage, move-in date, budget, number of occupants, pets, reason for move, and referral source'},
+  {number:3,area:'Telephone — Needs Assessment',text:'Complete 3 manager-observed telephone role-plays per week during the review period'},
+  {number:4,area:'Telephone — Needs Assessment',text:'Demonstrate 100% needs identification compliance on next mystery shop evaluation'},
+  {number:5,area:'Telephone — Contact Capture',text:'Capture both phone number AND email address on every incoming prospect call, without exception'},
+  {number:6,area:'Telephone — Contact Capture',text:'All contact information must be logged into the system (Entrata) before ending the call'},
+  {number:7,area:'Telephone — Contact Capture',text:'Manager to audit guest card completeness on a weekly basis; 100% compliance required'},
+  {number:8,area:'Telephone — Appointment Setting',text:'Offer two specific appointment times on every call — not open-ended availability'},
+  {number:9,area:'Telephone — Appointment Setting',text:'Every prospect call must conclude with either a scheduled appointment or a documented reason for refusal'},
+  {number:10,area:'Telephone — Appointment Setting',text:'Manager to review call log weekly to confirm adherence'},
+  {number:11,area:'On-Site — Greeting & Introduction',text:'Formally introduce by name and use the prospect\'s name a minimum of three times per visit'},
+  {number:12,area:'On-Site — Greeting & Introduction',text:'Wear RISE nametag on every shift without exception — daily compliance is a condition of this PIP'},
+  {number:13,area:'On-Site — Greeting & Introduction',text:'If in a meeting upon prospect arrival, a team member must immediately offer seating and refreshments — this must be practiced in daily huddles'},
+  {number:14,area:'On-Site — Closing & Commitment',text:'Directly ask for deposit, application, or waitlist commitment on every tour before the prospect departs'},
+  {number:15,area:'On-Site — Closing & Commitment',text:'Provide a minimum of three closing techniques per tour (assumptive, urgency, and direct ask)'},
+  {number:16,area:'On-Site — Closing & Commitment',text:'Send every prospect home with a floor plan, pricing sheet, and business card — no exceptions'},
+  {number:17,area:'On-Site — Tour Content',text:'Include a neighborhood context segment (minimum 30 seconds) on every tour covering proximity to campus, dining, and transit'},
+  {number:18,area:'On-Site — Tour Content',text:'Always invite the prospect back to the desk following the tour to review next steps'},
+  {number:19,area:'On-Site — Tour Content',text:'Complete a minimum of five full tour role-plays with manager during the review period'}
+];
+const BRIEANNA_SHOP_SCORES={
+  shopDate:'2026-03-02',overallScore:54.5,telephoneScore:30,onsiteScore:79,
+  greetingScore:80,identifyingNeedsScore:80,demonstratingScore:85,closingScore:67,followUpScore:100,
+  employeeName:'Brieanna Steed',community:'The Preserve at Tech'
+};
+
+function openChatExtractShop(){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:560px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Extract shop scores</div>
+    <div class="modal-sub">Two options to fill scores:</div>
+    <div style="background:#EAF3DE;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:500;font-size:13px;color:#27500A;margin-bottom:6px">Option A — Quick fill from Brieanna Steed's shop (already uploaded)</div>
+      <div style="font-size:12px;color:#444;margin-bottom:8px">The Preserve at Tech shop report (03/02/2026) is already loaded in this session. Click below to fill all score fields instantly.</div>
+      <button class="btn btn-primary btn-sm" onclick="fillBrieannaShoScores()">Fill Brieanna Steed scores now</button>
+    </div>
+    <div style="background:#f5f5f3;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:500;font-size:13px;margin-bottom:6px">Option B — Paste extracted JSON for any employee</div>
+      <div style="font-size:12px;color:#666;margin-bottom:6px">Upload the shop PDF in the Claude chat, then ask Claude: <em>"Extract the shop scores as JSON"</em> and paste the result here.</div>
+      <textarea id="shop-json-paste" rows="5" placeholder='{"shopDate":"2026-03-02","overallScore":54.5,"telephoneScore":30,"onsiteScore":79,"greetingScore":80,"identifyingNeedsScore":80,"demonstratingScore":85,"closingScore":67,"followUpScore":100}'></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="fillShopFromPaste()">Fill from pasted JSON</button>
+    </div>
+    <div style="text-align:right"><button class="btn btn-sm" onclick="closeModal()">Close</button></div>
+  </div></div>`;
+}
+function fillBrieannaShoScores(){
+  const s=BRIEANNA_SHOP_SCORES;
+  const d=document.getElementById('np-shopdate');if(d)d.value=s.shopDate;
+  const ov=document.getElementById('np-overall');if(ov){ov.value=s.overallScore;autoDetectType();}
+  const tf=document.getElementById('np-tel');if(tf)tf.value=s.telephoneScore;
+  const os=document.getElementById('np-onsite');if(os)os.value=s.onsiteScore;
+  const gr=document.getElementById('np-greet');if(gr)gr.value=s.greetingScore;
+  const nd=document.getElementById('np-needs');if(nd)nd.value=s.identifyingNeedsScore;
+  const dm=document.getElementById('np-demo');if(dm)dm.value=s.demonstratingScore;
+  const cl=document.getElementById('np-closing');if(cl)cl.value=s.closingScore;
+  const fu=document.getElementById('np-followup');if(fu)fu.value=s.followUpScore;
+  const st=document.getElementById('extract-status');
+  if(st)st.innerHTML='<div class="alert alert-success">Scores filled from Brieanna Steed shop (03/02/2026, The Preserve at Tech). Overall: 54.5% — PIP recommended.</div>';
+  closeModal();
+}
+function fillShopFromPaste(){
+  try{
+    const raw=document.getElementById('shop-json-paste').value.trim();
+    const s=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const d=document.getElementById('np-shopdate');if(d&&s.shopDate)d.value=s.shopDate;
+    const ov=document.getElementById('np-overall');if(ov&&s.overallScore!=null){ov.value=s.overallScore;autoDetectType();}
+    const tf=document.getElementById('np-tel');if(tf&&s.telephoneScore!=null)tf.value=s.telephoneScore;
+    const os=document.getElementById('np-onsite');if(os&&s.onsiteScore!=null)os.value=s.onsiteScore;
+    const gr=document.getElementById('np-greet');if(gr&&s.greetingScore!=null)gr.value=s.greetingScore;
+    const nd=document.getElementById('np-needs');if(nd&&s.identifyingNeedsScore!=null)nd.value=s.identifyingNeedsScore;
+    const dm=document.getElementById('np-demo');if(dm&&s.demonstratingScore!=null)dm.value=s.demonstratingScore;
+    const cl=document.getElementById('np-closing');if(cl&&s.closingScore!=null)cl.value=s.closingScore;
+    const fu=document.getElementById('np-followup');if(fu&&s.followUpScore!=null)fu.value=s.followUpScore;
+    const st=document.getElementById('extract-status');
+    if(st)st.innerHTML='<div class="alert alert-success">Scores filled from pasted JSON.</div>';
+    closeModal();
+  }catch(e){alert('Invalid JSON: '+e.message);}
+}
+function clearShopScores(){['np-shopdate','np-overall','np-tel','np-onsite','np-greet','np-needs','np-demo','np-closing','np-followup'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const st=document.getElementById('extract-status');if(st)st.innerHTML='';}
+
+function openChatExtractPlan(){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:580px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Import action items</div>
+    <div class="modal-sub">Two options to load action items:</div>
+    <div style="background:#EAF3DE;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:500;font-size:13px;color:#27500A;margin-bottom:6px">Option A — Load Brieanna Steed PIP items (already extracted)</div>
+      <div style="font-size:12px;color:#444;margin-bottom:8px">All 19 action items from the uploaded Brieanna Steed PIP are ready to load across 5 focus areas.</div>
+      <button class="btn btn-primary btn-sm" onclick="loadBrieannaPIPItems()">Load 19 action items from Brieanna Steed PIP</button>
+    </div>
+    <div style="background:#f5f5f3;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:500;font-size:13px;margin-bottom:6px">Option B — Paste extracted JSON for any plan</div>
+      <div style="font-size:12px;color:#666;margin-bottom:6px">Upload the plan document in the Claude chat, then ask: <em>"Extract all numbered action items as JSON array: [{number, area, text}]"</em> and paste here.</div>
+      <textarea id="plan-json-paste" rows="5" placeholder='[{"number":1,"area":"Telephone","text":"Develop a written telephone script..."}]'></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="loadPlanFromPaste()">Load from pasted JSON</button>
+    </div>
+    <div style="text-align:right"><button class="btn btn-sm" onclick="closeModal()">Close</button></div>
+  </div></div>`;
+}
+function loadBrieannaPIPItems(){_extractedActionItems=BRIEANNA_ACTION_ITEMS.map(it=>({text:it.text,area:it.area}));showExtractedPreview();closeModal();}
+function loadPlanFromPaste(){
+  try{
+    const raw=document.getElementById('plan-json-paste').value.trim();
+    const arr=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if(!Array.isArray(arr))throw new Error('Expected a JSON array');
+    _extractedActionItems=arr.map(it=>({text:it.text||it.description||'',area:it.area||it.category||''}));
+    showExtractedPreview();
+    closeModal();
+  }catch(e){alert('Invalid JSON: '+e.message);}
+}
+
+function openPasteModal(){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" style="width:560px">
+    <button class="close-btn" onclick="closeModal()">x</button>
+    <div class="modal-title">Paste plan text</div>
+    <div class="modal-sub">Paste the raw text of your PIP or coaching plan. Claude will parse it for action items.</div>
+    <textarea id="paste-plan-text" rows="12" placeholder="Paste your plan text here..."></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="parsePastedPlanText()">Parse action items</button>
+    </div>
+  </div></div>`;
+}
+
+function parsePastedPlanText(){
+  const text=document.getElementById('paste-plan-text').value.trim();
+  if(!text){alert('Please paste some plan text first.');return;}
+  const items=[];
+  const lines=text.split('\n');
+  let currentArea='General';
+  const areaPatterns=[/telephone.*needs/i,/telephone.*contact/i,/telephone.*appoint/i,/on.site.*greet/i,/on.site.*clos/i,/on.site.*tour/i,/closing/i,/greeting/i,/demonstrat/i,/follow.up/i];
+  const areaNames=['Telephone — Needs Assessment','Telephone — Contact Capture','Telephone — Appointment Setting','On-Site — Greeting & Introduction','On-Site — Closing & Commitment','On-Site — Tour Content','Closing','Greeting','Demonstrating','Follow-Up'];
+  lines.forEach(line=>{
+    for(let i=0;i<areaPatterns.length;i++){if(areaPatterns[i].test(line)&&line.length<80){currentArea=areaNames[i];return;}}
+    const m=line.match(/^\s*(\d+)[.)]\s+(.{10,})/);
+    if(m)items.push({text:m[2].trim(),area:currentArea});
+  });
+  if(items.length===0){
+    document.getElementById('plan-extract-status').innerHTML='<div class="alert alert-warn">No numbered items detected. Try the JSON paste option or add items manually.</div>';
+    closeModal();return;
+  }
+  _extractedActionItems=items;
+  showExtractedPreview();
+  closeModal();
+}
+
+function showExtractedPreview(){
+  const status=document.getElementById('plan-extract-status');
+  const preview=document.getElementById('extracted-items-preview');
+  if(status)status.innerHTML=`<div class="alert alert-success"><strong>${_extractedActionItems.length} action items</strong> loaded and ready. These will be added to Weekly Updates when you save the plan.</div>`;
+  if(preview)preview.innerHTML=`<div style="max-height:200px;overflow-y:auto;background:#f9f9f7;border-radius:8px;padding:8px 10px">
+    ${_extractedActionItems.map((it,i)=>`<div style="padding:5px 0;border-bottom:0.5px solid #eee;font-size:12px;display:flex;gap:8px">
+      <span style="color:#888;min-width:24px;flex-shrink:0">#${i+1}</span>
+      <span><strong style="color:#1B3A4B">${it.area}:</strong> ${it.text.slice(0,110)}${it.text.length>110?'...':''}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function previewPlan(){
+  const empId=document.getElementById('np-emp').value;
+  const emp=STATE.employees.find(e=>e.id===empId);
+  const el=document.getElementById('np-preview');
+  if(!empId){el.innerHTML='<div class="alert alert-danger">Select an employee first.</div>';return;}
+  el.innerHTML=`<div class="alert alert-info"><strong>${emp.name}</strong> · ${_selectedType.toUpperCase()} · ${document.getElementById('np-timeline').value}-day review<br>Overall: ${document.getElementById('np-overall').value||'—'}% · Telephone: ${document.getElementById('np-tel').value||'—'}% · On-site: ${document.getElementById('np-onsite').value||'—'}%<br>Action items extracted: ${_extractedActionItems.length} · Updated shop required at completion: ${document.getElementById('np-requires-shop')?.checked?'Yes':'No'}</div>`;
+}
+
+function generatePlan(){
+  const empId=document.getElementById('np-emp').value;
+  if(!empId){alert('Please select an employee.');return;}
+  const emp=STATE.employees.find(e=>e.id===empId);
+  const timeline=document.getElementById('np-timeline').value;
+  const reviewDate=new Date();
+  if(!isNaN(parseInt(timeline)))reviewDate.setDate(reviewDate.getDate()+parseInt(timeline));
+  else reviewDate.setDate(reviewDate.getDate()+30);
+  const plan={
+    id:genId(),employeeId:empId,type:_selectedType,status:'active',
+    shopDate:document.getElementById('np-shopdate').value,
+    overallScore:parseFloat(document.getElementById('np-overall').value)||null,
+    telScore:parseFloat(document.getElementById('np-tel').value)||null,
+    onsiteScore:parseFloat(document.getElementById('np-onsite').value)||null,
+    greetScore:parseFloat(document.getElementById('np-greet').value)||null,
+    needsScore:parseFloat(document.getElementById('np-needs').value)||null,
+    demoScore:parseFloat(document.getElementById('np-demo').value)||null,
+    closingScore:parseFloat(document.getElementById('np-closing').value)||null,
+    followupScore:parseFloat(document.getElementById('np-followup').value)||null,
+    timeline,consequences:_selectedCons,
+    requiresUpdatedShop:document.getElementById('np-requires-shop')?.checked||false,
+    manager:document.getElementById('np-mgr').value,
+    notes:document.getElementById('np-notes').value,
+    reviewDate:reviewDate.toISOString().slice(0,10),
+    createdAt:new Date().toISOString().slice(0,10),
+    actionItems:_extractedActionItems.map(it=>({text:it.text,area:it.area||''})),
+    weeklyUpdates:[],meetings:[],
+  };
+  STATE.plans.push(plan);
+  _extractedActionItems=[];
+  save();
+  const links=document.getElementById('export-links');
+  links.innerHTML=`<div class="alert alert-success">Plan saved! <strong>${emp.name}</strong> — ${_selectedType.toUpperCase()} · ${plan.actionItems.length} action items loaded</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+    <button class="btn btn-warn" onclick="openWeeklyUpdate('${plan.id}')">Go to Weekly Updates</button>
+    <button class="btn btn-primary" onclick="exportPlanDoc('${plan.id}')">Export document</button>
+    <button class="btn" onclick="switchView('plans')">View all plans</button>
+  </div>`;
+}
+
+function renderEmployees(){
+  const emps=visibleEmployees();
+  const isAdmin=STATE.currentUser.role==='admin';
+  return `<div class="page">
+    <div class="page-title">Employees</div>
+    <div class="page-sub">Manage roster, assign regions, roles, and communities.</div>
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="card">
+        <div class="section-title">Upload roster (CSV or Excel)</div>
+        <div class="file-drop" onclick="document.getElementById('roster-upload').click()">
+          <div style="font-size:13px;margin-bottom:4px">Click to upload CSV or Excel roster</div>
+          <div style="font-size:12px">Columns: Name, Community, Region (optional), Role (optional)</div>
+        </div>
+        <input type="file" id="roster-upload" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleRosterUpload(event)">
+        <div id="roster-status" style="margin-top:8px"></div>
+        <button class="btn btn-sm" style="margin-top:8px" onclick="downloadRosterTemplate()">Download template CSV</button>
+      </div>
+      <div class="card">
+        <div class="section-title">Add employee manually</div>
+        <div class="form-row cols2">
+          <div><label>Full name</label><input id="emp-name" placeholder="First Last"></div>
+          <div>
+            <label>Role / title</label>
+            <div class="combo-input">
+              <input id="emp-role" placeholder="Select or type role" onfocus="openCombo('emp-role','role-dd')" oninput="filterCombo('emp-role','role-dd',ROLE_OPTIONS)" autocomplete="off">
+              <div class="combo-dropdown" id="role-dd">
+                ${ROLE_OPTIONS.map(r=>`<div class="combo-option" onclick="setCombo('emp-role','role-dd','${r}')">${r}</div>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-row cols2" style="margin-top:8px">
+          <div>
+            <label>Community</label>
+            <div class="combo-input">
+              <input id="emp-community" placeholder="Select or type community" onfocus="openCombo('emp-community','comm-dd')" oninput="filterCombo('emp-community','comm-dd',COMMUNITY_OPTIONS)" autocomplete="off">
+              <div class="combo-dropdown" id="comm-dd">
+                ${COMMUNITY_OPTIONS.map(c=>`<div class="combo-option" onclick="setCombo('emp-community','comm-dd','${c}')">${c}</div>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div><label>Region</label>
+            <select id="emp-region">
+              <option value="">— Assign later —</option>
+              ${Object.entries(REGIONS).map(([k,r])=>`<option value="${k}">${r.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="addEmployee()">Add employee</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-title" style="margin-bottom:0">Roster (${emps.length})</div>
+        ${isAdmin?`<div style="display:flex;gap:6px">
+          <select id="bulk-region" style="width:auto">
+            <option value="">Bulk assign region</option>
+            ${Object.entries(REGIONS).map(([k,r])=>`<option value="${k}">${r.short}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm" onclick="bulkAssign()">Assign selected</button>
+        </div>`:''}
+      </div>
+      ${emps.length===0?'<div style="color:#888;font-size:13px">No employees. Upload a roster or add manually.</div>':
+      `<div style="overflow-x:auto"><table>
+        <thead><tr>${isAdmin?'<th style="width:32px"><input type="checkbox" id="sel-all" onchange="toggleSelectAll()"></th>':''}<th>Name</th><th>Role</th><th>Community</th><th>Region</th><th>Active plans</th><th></th></tr></thead>
+        <tbody>
+        ${emps.map(e=>{
+          const ap=STATE.plans.filter(p=>p.employeeId===e.id&&p.status==='active');
+          return `<tr>
+            ${isAdmin?`<td><input type="checkbox" class="emp-check" value="${e.id}"></td>`:''}
+            <td><div style="display:flex;align-items:center;gap:7px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:#0C447C;flex-shrink:0">${e.name.split(' ').map(n=>n[0]).join('').slice(0,2)}</div>
+              <span style="font-weight:500">${e.name}</span>
+            </div></td>
+            <td>
+              <div class="combo-input" style="min-width:160px">
+                <input value="${e.role||''}" placeholder="Select or type role" onfocus="openCombo('er-${e.id}','rdd-${e.id}')" oninput="filterCombo('er-${e.id}','rdd-${e.id}',ROLE_OPTIONS);updateEmpField('${e.id}','role',this.value)" id="er-${e.id}" style="font-size:12px;padding:4px 7px" autocomplete="off">
+                <div class="combo-dropdown" id="rdd-${e.id}">${ROLE_OPTIONS.map(r=>`<div class="combo-option" onclick="setComboField('er-${e.id}','rdd-${e.id}','${r}','${e.id}','role')">${r}</div>`).join('')}</div>
+              </div>
+            </td>
+            <td>
+              <div class="combo-input" style="min-width:180px">
+                <input value="${e.community||''}" placeholder="Select or type community" onfocus="openCombo('ec-${e.id}','cdd-${e.id}')" oninput="filterCombo('ec-${e.id}','cdd-${e.id}',COMMUNITY_OPTIONS);updateEmpField('${e.id}','community',this.value)" id="ec-${e.id}" style="font-size:12px;padding:4px 7px" autocomplete="off">
+                <div class="combo-dropdown" id="cdd-${e.id}">${COMMUNITY_OPTIONS.map(c=>`<div class="combo-option" onclick="setComboField('ec-${e.id}','cdd-${e.id}','${c}','${e.id}','community')">${c}</div>`).join('')}</div>
+              </div>
+            </td>
+            <td>
+              <select onchange="updateEmpRegion('${e.id}',this.value)" style="width:auto;font-size:12px;padding:4px 6px">
+                <option value="">Unassigned</option>
+                ${Object.entries(REGIONS).map(([k,r])=>`<option value="${k}" ${e.region===k?'selected':''}>${r.short}</option>`).join('')}
+              </select>
+            </td>
+            <td>${ap.map(p=>`<span class="badge ${p.type==='pip'?'badge-pip':'badge-coaching'}">${p.type.toUpperCase()}</span>`).join(' ')||'<span style="color:#888;font-size:12px">None</span>'}</td>
+            <td style="display:flex;gap:4px">
+              <button class="btn btn-sm" onclick="switchView('newplan')">New plan</button>
+              <button class="btn btn-sm btn-danger" onclick="removeEmployee('${e.id}')">×</button>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`}
+    </div>
+  </div>`;
+}
+
+function openCombo(inputId,ddId){
+  document.querySelectorAll('.combo-dropdown.open').forEach(d=>{if(d.id!==ddId)d.classList.remove('open');});
+  document.getElementById(ddId).classList.add('open');
+}
+function filterCombo(inputId,ddId,opts){
+  const val=document.getElementById(inputId).value.toLowerCase();
+  const dd=document.getElementById(ddId);
+  dd.innerHTML=opts.filter(o=>o.toLowerCase().includes(val)).map(o=>`<div class="combo-option" onclick="setCombo('${inputId}','${ddId}','${o}')">${o}</div>`).join('');
+  if(!dd.innerHTML)dd.innerHTML='<div class="combo-option" style="color:#888;cursor:default">Type to add custom</div>';
+  dd.classList.add('open');
+}
+function setCombo(inputId,ddId,val){document.getElementById(inputId).value=val;document.getElementById(ddId).classList.remove('open');}
+function setComboField(inputId,ddId,val,empId,field){
+  document.getElementById(inputId).value=val;
+  document.getElementById(ddId).classList.remove('open');
+  updateEmpField(empId,field,val);
+}
+function updateEmpField(id,field,val){const emp=STATE.employees.find(e=>e.id===id);if(emp){emp[field]=val;save();}}
+document.addEventListener('click',function(e){if(!e.target.closest('.combo-input'))document.querySelectorAll('.combo-dropdown.open').forEach(d=>d.classList.remove('open'));});
+
+function toggleSelectAll(){const ch=document.getElementById('sel-all').checked;document.querySelectorAll('.emp-check').forEach(c=>c.checked=ch);}
+function bulkAssign(){const r=document.getElementById('bulk-region').value;if(!r)return;document.querySelectorAll('.emp-check:checked').forEach(c=>{const emp=STATE.employees.find(e=>e.id===c.value);if(emp)emp.region=r;});save();renderView();}
+function updateEmpRegion(id,r){const emp=STATE.employees.find(e=>e.id===id);if(emp){emp.region=r;save();}}
+function addEmployee(){
+  const name=document.getElementById('emp-name').value.trim();if(!name)return;
+  STATE.employees.push({id:genId(),name,role:document.getElementById('emp-role').value.trim()||'Leasing Professional',community:document.getElementById('emp-community').value.trim(),region:document.getElementById('emp-region').value});
+  save();renderView();
+}
+function removeEmployee(id){if(!confirm('Remove this employee?'))return;STATE.employees=STATE.employees.filter(e=>e.id!==id);save();renderView();}
+function handleRosterUpload(event){
+  const file=event.target.files[0];if(!file)return;
+  const status=document.getElementById('roster-status');
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      const headers=rows[0].map(h=>String(h).toLowerCase().trim());
+      const nI=headers.findIndex(h=>h.includes('name'));
+      const cI=headers.findIndex(h=>h.includes('community'));
+      const rI=headers.findIndex(h=>h.includes('role')||h.includes('title'));
+      const rgI=headers.findIndex(h=>h.includes('region'));
+      let added=0;
+      for(let i=1;i<rows.length;i++){
+        const row=rows[i];if(!row[nI])continue;
+        const rRaw=(rgI>=0?String(row[rgI]||''):'').toLowerCase();
+        let region='';
+        if(rRaw.includes('west')||rRaw.includes('central'))region='west';
+        else if(rRaw.includes('east'))region='east';
+        else if(rRaw.includes('student'))region='student';
+        else if(rRaw.includes('valdosta'))region='valdosta';
+        else if(rRaw.includes('jax'))region='jax';
+        STATE.employees.push({id:genId(),name:String(row[nI]),role:rI>=0?String(row[rI]||''):'Leasing Professional',community:cI>=0?String(row[cI]||''):'',region});
+        added++;
+      }
+      save();status.innerHTML=`<div class="alert alert-success">${added} employees imported.</div>`;renderView();
+    }catch(err){status.innerHTML=`<div class="alert alert-danger">Upload error: ${err.message}</div>`;}
+  };
+  reader.readAsBinaryString(file);
+}
+function downloadRosterTemplate(){
+  const csv='"Name","Community","Region","Role"\n"Jane Smith","RISE at Nocatee","west","Leasing Professional"\n"John Doe","Pilots Pointe","student","Leasing Manager"';
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='RISE_Roster_Template.csv';a.click();
+}
+
+function renderExport(){
+  const plans=visiblePlans();
+  const active=plans.filter(p=>p.status==='active');
+  const byRegion={};
+  Object.keys(REGIONS).forEach(r=>{byRegion[r]={coaching:0,pip:0,overdue:0,missedMeetings:0,incompleteItems:0};});
+  active.forEach(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    if(!emp||!emp.region)return;
+    byRegion[emp.region][p.type]++;
+    if(daysLeft(p)<0)byRegion[emp.region].overdue++;
+    byRegion[emp.region].missedMeetings+=getMissedMeetings(p);
+    byRegion[emp.region].incompleteItems+=getOverdueActionItems(p);
+  });
+
+  return `<div class="page">
+    <div class="page-title">Weekly Export</div>
+    <div class="page-sub">Portfolio-wide status with action item tracking and meeting compliance.</div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="section-title">Regional snapshot</div>
+      <table>
+        <thead><tr><th>Region</th><th>Coaching</th><th>PIPs</th><th>Overdue reviews</th><th>Missed meetings</th><th>Incomplete items</th><th>Total employees</th></tr></thead>
+        <tbody>
+        ${Object.entries(REGIONS).map(([k,r])=>`<tr>
+          <td>${regionLabel(k)} ${r.name}</td>
+          <td><span class="badge badge-coaching">${byRegion[k].coaching}</span></td>
+          <td><span class="badge badge-pip">${byRegion[k].pip}</span></td>
+          <td style="color:${byRegion[k].overdue>0?'#8B0000':'inherit'}">${byRegion[k].overdue}</td>
+          <td style="color:${byRegion[k].missedMeetings>0?'#8B0000':'inherit'}">${byRegion[k].missedMeetings}</td>
+          <td style="color:${byRegion[k].incompleteItems>0?'#8B0000':'inherit'}">${byRegion[k].incompleteItems}</td>
+          <td>${STATE.employees.filter(e=>e.region===k).length}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-title" style="margin-bottom:0">Active plans — detailed status</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="exportWeeklyExcel()">Export Excel</button>
+          <button class="btn btn-sm" onclick="exportWeeklyPDF()">RISE Branded PDF</button>
+        </div>
+      </div>
+      ${active.length===0?'<div style="color:#888">No active plans.</div>':
+      `<div style="overflow-x:auto"><table>
+        <thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Overall</th><th>Plan start</th><th>Review date</th><th>Days left</th><th>Presented?</th><th>Signed doc</th><th>Meetings<br><span style="font-weight:400;color:#888">Done/Sched/Missed</span></th><th>Action items<br><span style="font-weight:400;color:#888">Done/Partial/Incomplete</span></th><th>Last update</th><th>Week status</th></tr></thead>
+        <tbody>
+        ${active.map(p=>{
+          const emp=STATE.employees.find(e=>e.id===p.employeeId);
+          const dl=daysLeft(p);
+          const schedule=getSchedule(p);
+          const meetings=p.meetings||[];
+          const done=meetings.filter(m=>m.status==='completed').length;
+          const missed=getMissedMeetings(p);
+          const updates=p.weeklyUpdates||[];
+          const lastW=updates[updates.length-1];
+          const allItems=(lastW&&lastW.items)||[];
+          const ci=allItems.filter(x=>x.status==='complete').length;
+          const pi=allItems.filter(x=>x.status==='partial').length;
+          const ii=allItems.filter(x=>x.status==='incomplete').length;
+          const nextDue=getNextRequiredMeeting(p);
+          return `<tr>
+            <td><div style="font-weight:500">${emp?emp.name:'—'}</div><div style="font-size:11px;color:#888">${emp?emp.community||'':''}</div></td>
+            <td>${emp?regionLabel(emp.region):'—'}</td>
+            <td><span class="badge ${p.type==='pip'?'badge-pip':'badge-coaching'}">${p.type.toUpperCase()}</span></td>
+            <td><span class="score-chip ${scoreClass(p.overallScore)}">${p.overallScore!=null?p.overallScore+'%':'—'}</span></td>
+            <td style="font-size:12px">${p.presentedAt||'<span style="color:#8B0000">Not set</span>'}</td>
+            <td style="font-size:12px;color:${dl<0?'#8B0000':'inherit'}">${p.reviewDate}</td>
+            <td style="color:${dl<0?'#8B0000':dl<7?'#E65100':'inherit'};font-size:13px">${dl<0?'Overdue':dl+'d'}</td>
+            <td>${p.presentedAt?'<span class="badge badge-active" style="font-size:10px">Yes</span>':'<span class="badge badge-pip" style="font-size:10px">No</span>'}</td>
+            <td>${p.signedDocData?`<span class="badge badge-active" style="font-size:10px;cursor:pointer" onclick="viewSignedDoc('${p.id}',0)">${p.signedDocName||'Signed'}</span>`:'<span class="badge badge-pip" style="font-size:10px">Missing</span>'}</td>
+            <td>
+              <span style="color:#27500A">${done} done</span> ·
+              <span style="color:${missed>0?'#8B0000':'#888'}">${missed} missed</span>
+              ${nextDue?`<div style="font-size:10px;color:#888;margin-top:2px">Next: ${(nextDue.label||nextDue.type).replace('Weekly Follow Up','Follow Up').slice(0,20)} ${nextDue.due}</div>`:''}
+            </td>
+            <td>
+              ${lastW?`<span class="badge badge-active" style="font-size:10px">${ci} done</span> <span class="badge badge-partial" style="font-size:10px">${pi} partial</span> <span class="badge ${ii>0?'badge-incomplete':''}" style="font-size:10px">${ii} incomplete</span>`:'<span style="color:#888;font-size:12px">No updates yet</span>'}
+            </td>
+            <td style="font-size:12px">${lastW?lastW.date:'—'}</td>
+            <td>${lastW?`<span class="badge ${lastW.overallStatus==='On track'?'badge-active':lastW.overallStatus==='At risk'?'badge-pip':'badge-partial'}">${lastW.overallStatus}</span>`:'<span style="color:#888;font-size:12px">—</span>'}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`}
+    </div>
+  </div>`;
+}
+
+function exportWeeklyExcel(){
+  const plans=visiblePlans().filter(p=>p.status==='active');
+  const wb=XLSX.utils.book_new();
+  const header=['Employee','Community','Region','Type','Shop Date','Overall%','Tel%','On-Site%','Progress%','Days Left','Plan Start (Presented)','Review Date','Manager','Presented to Employee','Signed Doc Uploaded','Signed Doc Name','Scheduled Meetings Total','Meetings Completed','Meetings Missed','Next Meeting Due','Next Meeting Type','Last Logged Meeting Type','Action Items Complete','Action Items Partial','Action Items Incomplete','Last Update Date','Last Week Status','Consequences','Notes'];
+  const rows=plans.map(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    const meetings=p.meetings||[];
+    const updates=p.weeklyUpdates||[];
+    const lastW=updates[updates.length-1];
+    const allItems=(lastW&&lastW.items)||[];
+    const sched=getSchedule(p);
+    const nextDueItem=getNextRequiredMeeting(p);
+    return[
+      emp?emp.name:'',emp?emp.community||'':'',emp?REGIONS[emp.region]?.name||'':'',
+      p.type.toUpperCase(),p.shopDate||'',p.overallScore||'',p.telScore||'',p.onsiteScore||'',
+      pctComplete(p),daysLeft(p),p.presentedAt||'Not set',p.reviewDate,p.manager||'',
+      p.presentedAt?'Yes':'No',
+      p.signedDocData?'Yes':'No',
+      p.signedDocName||'',
+      sched.length,
+      meetings.filter(m=>m.status==='completed').length,
+      getMissedMeetings(p),
+      nextDueItem?nextDueItem.due:'',
+      nextDueItem?(nextDueItem.label||nextDueItem.type):'',
+      lastW?lastW.meetingType||'':'',
+      allItems.filter(x=>x.status==='complete').length,
+      allItems.filter(x=>x.status==='partial').length,
+      allItems.filter(x=>x.status==='incomplete').length,
+      lastW?lastW.date||'':'',lastW?lastW.overallStatus||'':'',
+      p.consequences?'Yes':'No',p.notes||''
+    ];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+  XLSX.utils.book_append_sheet(wb,ws,'Weekly Status');
+  const aiHeader=['Employee','Plan Type','Item #','Area','Action Item','Last Status','Last Note'];
+  const aiRows=[];
+  plans.forEach(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    const updates=p.weeklyUpdates||[];
+    const lastW=updates[updates.length-1];
+    (p.actionItems||[]).forEach((item,i)=>{
+      const lastStatus=lastW&&lastW.items?lastW.items.find(x=>x.idx===i):null;
+      aiRows.push([emp?emp.name:'',p.type.toUpperCase(),i+1,item.area||'',item.text,lastStatus?lastStatus.status:'not reviewed',lastStatus?lastStatus.note||'':'']);
+    });
+  });
+  if(aiRows.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([aiHeader,...aiRows]),'Action Items');
+  const meetingHeader=['Employee','Plan Type','Required?','Meeting Type','Due Date','Held Date','Status','Notes'];
+  const meetingRows=[];
+  plans.forEach(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    getResolvedSchedule(p).forEach(m=>{
+      meetingRows.push([emp?emp.name:'',p.type.toUpperCase(),'Yes',m.label||m.type,m.due,m.heldDate||'',m.status||'',m.notes||'']);
+    });
+    getManualMeetings(p).forEach(m=>{
+      meetingRows.push([emp?emp.name:'',p.type.toUpperCase(),'No',m.label||m.type||'One-off meeting',m.dueDate||m.date||'',m.heldDate||m.date||'',m.status||'',m.notes||'']);
+    });
+  });
+  if(meetingRows.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([meetingHeader,...meetingRows]),'Meeting Schedule');
+  const summary=[['RISE Residential — Weekly Performance Report'],['Generated',new Date().toLocaleDateString()],[],['Region','Coaching','PIPs','Overdue','Missed Meetings','Incomplete Items']];
+  Object.entries(REGIONS).forEach(([k,r])=>{
+    const rPlans=plans.filter(p=>{const e=STATE.employees.find(x=>x.id===p.employeeId);return e&&e.region===k;});
+    summary.push([r.name,rPlans.filter(p=>p.type==='coaching').length,rPlans.filter(p=>p.type==='pip').length,rPlans.filter(p=>daysLeft(p)<0).length,rPlans.reduce((a,p)=>a+getMissedMeetings(p),0),rPlans.reduce((a,p)=>a+getOverdueActionItems(p),0)]);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),'Regional Summary');
+  XLSX.writeFile(wb,`RISE_Weekly_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function exportWeeklyPDF(){
+  const plans=visiblePlans().filter(p=>p.status==='active');
+  const u=STATE.currentUser;
+  const scopeLabel=u.role==='admin'?'All Regions':(REGIONS[u.region]?.name||'');
+  const byRegion={};
+  Object.keys(REGIONS).forEach(r=>{byRegion[r]={coaching:0,pip:0,overdue:0,missedMeetings:0,incompleteItems:0};});
+  plans.forEach(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    if(!emp||!emp.region)return;
+    byRegion[emp.region][p.type]++;
+    if(daysLeft(p)<0)byRegion[emp.region].overdue++;
+    byRegion[emp.region].missedMeetings+=getMissedMeetings(p);
+    byRegion[emp.region].incompleteItems+=getOverdueActionItems(p);
+  });
+  const w=window.open('','_blank');
+  if(!w)return;
+  w.document.write(`<!DOCTYPE html><html><head><title>RISE Weekly Export</title>
+  <style>
+    :root{--brand:#023046;--accent:#549db8;--paper:#ffffff;--ink:#173042;--muted:#5e7383;--line:#d6dde3;--soft:#edf5f8}
+    *{box-sizing:border-box}
+    body{margin:0;background:#e9eef1;color:var(--ink);font-family:"Aptos","Segoe UI",Arial,sans-serif}
+    .page{width:11in;min-height:8.5in;margin:22px auto;background:var(--paper);padding:.55in .6in;box-shadow:0 20px 44px rgba(2,48,70,.16)}
+    .top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
+    .logo{width:260px}
+    .title{flex:1;text-align:right}
+    .title h1{margin:0;color:var(--brand);font-size:27px;letter-spacing:.03em}
+    .title p{margin:6px 0 0;color:var(--muted);font-size:12px}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+    .summary-card{background:linear-gradient(180deg,#f6fbfd 0%,#edf5f8 100%);border:1px solid #d7e5eb;border-radius:10px;padding:12px 14px}
+    .summary-card .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+    .summary-card .value{font-size:24px;font-weight:800;color:var(--brand);margin-top:8px}
+    h2{margin:18px 0 10px;color:var(--brand);font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid var(--line);padding:8px 9px;font-size:11px;vertical-align:top}
+    th{background:var(--soft);color:var(--brand);font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+    .type-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;color:#fff;background:var(--brand)}
+    .type-pill.coaching{background:#549db8}
+    .status-ok{color:#1b5e20;font-weight:700}
+    .status-warn{color:#b26a00;font-weight:700}
+    .status-bad{color:#8B0000;font-weight:700}
+    .foot{margin-top:14px;font-size:10px;color:var(--muted)}
+    .print-btn{margin-top:16px;padding:10px 18px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+    @page{size:landscape;margin:.45in}
+    @media print{body{background:#fff}.page{box-shadow:none;margin:0;width:auto;min-height:auto;padding:0}.print-btn{display:none}}
+  </style></head><body>
+  <div class="page">
+    <div class="top">
+      <div class="logo">${getRiseWordmarkSVG()}</div>
+      <div class="title">
+        <h1>Weekly Performance Export</h1>
+        <p>${escapeHTML(scopeLabel)} · Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</p>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card"><div class="label">Active Plans</div><div class="value">${plans.length}</div></div>
+      <div class="summary-card"><div class="label">Coaching Plans</div><div class="value">${plans.filter(p=>p.type==='coaching').length}</div></div>
+      <div class="summary-card"><div class="label">PIPs</div><div class="value">${plans.filter(p=>p.type==='pip').length}</div></div>
+      <div class="summary-card"><div class="label">Needs Attention</div><div class="value">${plans.filter(p=>getPlanAlerts(p).length>0).length}</div></div>
+    </div>
+
+    <h2>Regional Snapshot</h2>
+    <table>
+      <thead><tr><th>Region</th><th>Coaching</th><th>PIPs</th><th>Overdue Reviews</th><th>Missed Meetings</th><th>Incomplete Items</th></tr></thead>
+      <tbody>
+        ${Object.entries(REGIONS).map(([k,r])=>`<tr><td>${escapeHTML(r.name)}</td><td>${byRegion[k].coaching}</td><td>${byRegion[k].pip}</td><td>${byRegion[k].overdue}</td><td>${byRegion[k].missedMeetings}</td><td>${byRegion[k].incompleteItems}</td></tr>`).join('')}
+      </tbody>
+    </table>
+
+    <h2>Active Plan Detail</h2>
+    <table>
+      <thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Plan Start</th><th>Review Date</th><th>Next Required Meeting</th><th>Signed Plan</th><th>Meetings</th><th>Last Update</th><th>Week Status</th></tr></thead>
+      <tbody>
+        ${plans.map(p=>{
+          const emp=STATE.employees.find(e=>e.id===p.employeeId);
+          const lastW=(p.weeklyUpdates||[])[(p.weeklyUpdates||[]).length-1];
+          const nextDue=getNextRequiredMeeting(p);
+          const completedCount=(p.meetings||[]).filter(m=>m.status==='completed').length;
+          const missed=getMissedMeetings(p);
+          return `<tr>
+            <td><strong>${escapeHTML(emp?emp.name:'—')}</strong><br><span style="color:var(--muted)">${escapeHTML(emp?emp.community||'':'')}</span></td>
+            <td>${escapeHTML(emp?REGIONS[emp.region]?.short||'':'')}</td>
+            <td><span class="type-pill ${p.type==='coaching'?'coaching':''}">${escapeHTML(p.type.toUpperCase())}</span></td>
+            <td>${escapeHTML(p.presentedAt||'Not set')}</td>
+            <td class="${daysLeft(p)<0?'status-bad':daysLeft(p)<7?'status-warn':''}">${escapeHTML(p.reviewDate||'—')}</td>
+            <td>${nextDue?`${escapeHTML(nextDue.label||nextDue.type)}<br><span style="color:var(--muted)">Due ${escapeHTML(nextDue.due)}</span>`:'Completed'}</td>
+            <td>${p.signedDocData?`On file<br><span style="color:var(--muted)">${escapeHTML(p.signedDocName||'Signed plan')}</span>`:'Missing'}</td>
+            <td><span class="status-ok">${completedCount} completed</span><br><span class="${missed>0?'status-bad':'status-warn'}">${missed} missed</span></td>
+            <td>${lastW?`${escapeHTML(lastW.meetingType||'Update')}<br><span style="color:var(--muted)">${escapeHTML(lastW.date||'')}</span>`:'—'}</td>
+            <td>${lastW?escapeHTML(lastW.overallStatus||'—'):'—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+
+    <div class="foot">Designed for email-ready export. Use Print / Save as PDF to generate the branded attachment.</div>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  </body></html>`);
+  w.document.close();
+}
+
+function exportWeeklyCSV(){
+  const plans=visiblePlans().filter(p=>p.status==='active');
+  const rows=[['Employee','Community','Region','Type','Overall%','Tel%','On-Site%','Days Left','Plan Start','Review Date','Presented?','Signed Doc?','Meetings Done','Meetings Missed','Items Complete','Items Partial','Items Incomplete','Last Update','Week Status']];
+  plans.forEach(p=>{
+    const emp=STATE.employees.find(e=>e.id===p.employeeId);
+    const meetings=p.meetings||[];
+    const updates=p.weeklyUpdates||[];
+    const lastW=updates[updates.length-1];
+    const allItems=(lastW&&lastW.items)||[];
+    rows.push([emp?emp.name:'',emp?emp.community||'':'',emp?REGIONS[emp.region]?.name||'':'',p.type.toUpperCase(),p.overallScore||'',p.telScore||'',p.onsiteScore||'',daysLeft(p),p.presentedAt||'Not set',p.reviewDate,p.presentedAt?'Yes':'No',p.signedDocData?'Yes':'No',meetings.filter(m=>m.status==='completed').length,getMissedMeetings(p),allItems.filter(x=>x.status==='complete').length,allItems.filter(x=>x.status==='partial').length,allItems.filter(x=>x.status==='incomplete').length,lastW?lastW.date||'':'',lastW?lastW.overallStatus||'':'']);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=`RISE_Weekly_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+function exportPlanDoc(planId){
+  const p=STATE.plans.find(x=>x.id===planId);if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:480px">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div class="modal-title">Export document</div>
+    <div class="modal-sub">${emp?emp.name:'Employee'} — ${p.type.toUpperCase()}</div>
+    <div style="display:grid;gap:8px;margin-top:8px">
+      <button class="btn btn-primary" onclick="exportHTML('${planId}')">View / Print (on-screen → PDF)</button>
+      <button class="btn btn-primary" onclick="exportExcel('${planId}')">Export to Excel (.xlsx)</button>
+      <button class="btn btn-primary" onclick="exportCSVSingle('${planId}')">Export to CSV</button>
+    </div>
+    <div style="margin-top:10px;text-align:right"><button class="btn" onclick="closeModal()">Close</button></div>
+  </div></div>`;
+}
+
+function escapeHTML(value){
+  return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function formatDocDate(value){
+  if(!value)return '________________________________';
+  const d=new Date(`${value}T12:00:00`);
+  if(Number.isNaN(d.getTime()))return value;
+  return d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+}
+function formatPercentDisplay(value){
+  if(value===null||value===undefined||value==='')return '—';
+  const num=Math.round(Number(value)*10)/10;
+  if(Number.isNaN(num))return `${value}%`;
+  return `${String(num).replace(/\.0$/,'')}%`;
+}
+function formatVarianceDisplay(value,benchmark=84){
+  if(value===null||value===undefined||value==='')return '—';
+  const num=Math.round(Number(value)*10)/10;
+  if(Number.isNaN(num))return '—';
+  const diff=Math.round((num-benchmark)*10)/10;
+  return `${diff>0?'+':''}${String(diff).replace(/\.0$/,'')} pts | ${num>=benchmark?'MET':'NOT MET'}`;
+}
+function getReviewPeriodText(plan){
+  const days=parseInt(plan.timeline,10);
+  return Number.isFinite(days)?`${days} days from date of issuance`:'Until next shop result';
+}
+function getPlanStatusLabel(plan){
+  if(plan.status==='shop_ordered')return 'Shop Ordered';
+  if(plan.status==='completed')return 'Completed';
+  if(plan.status==='archived')return 'Archived';
+  return plan.type==='pip'?'Active — Mandatory Participation Required':'Active — Coaching Participation Required';
+}
+function groupActionItemsByArea(items=[]){
+  const grouped=new Map();
+  items.forEach(item=>{
+    const area=(item.area||'General').trim()||'General';
+    if(!grouped.has(area))grouped.set(area,[]);
+    grouped.get(area).push(item.text);
+  });
+  return Array.from(grouped.entries()).map(([area,texts])=>({area,texts}));
+}
+function getAreaCurrentScore(plan,area){
+  const label=(area||'').toLowerCase();
+  if(label.includes('telephone'))return plan.telScore;
+  if(label.includes('on-site')||label.includes('on site'))return plan.onsiteScore;
+  if(label.includes('follow-up'))return plan.followupScore;
+  if(label.includes('closing'))return plan.closingScore;
+  if(label.includes('demonstrating'))return plan.demoScore;
+  if(label.includes('greeting'))return plan.greetScore;
+  if(label.includes('identifying needs')||label.includes('needs'))return plan.needsScore;
+  return plan.overallScore;
+}
+function getPerformanceStandardRows(plan){
+  return [
+    {label:'Telephone Score',value:plan.telScore},
+    {label:'On-Site Score',value:plan.onsiteScore},
+    {label:'Overall Combined Score',value:plan.overallScore}
+  ].filter(row=>row.value!==null&&row.value!==undefined);
+}
+function getDeficiencyBullets(plan){
+  const bullets=[];
+  if(plan.telScore!=null&&plan.telScore<84)bullets.push(`Telephone performance is below the 84% benchmark at ${formatPercentDisplay(plan.telScore)} and requires immediate improvement in needs assessment, contact capture, and appointment setting.`);
+  if(plan.onsiteScore!=null&&plan.onsiteScore<84)bullets.push(`On-site performance is below the 84% benchmark at ${formatPercentDisplay(plan.onsiteScore)} and requires improvement in greeting, tour control, closing, and next-step commitment.`);
+  if(plan.greetScore!=null&&plan.greetScore<84)bullets.push(`Greeting behaviors scored ${formatPercentDisplay(plan.greetScore)}, indicating inconsistent introduction, rapport-setting, or prospect welcome standards.`);
+  if(plan.needsScore!=null&&plan.needsScore<84)bullets.push(`Needs discovery scored ${formatPercentDisplay(plan.needsScore)}, indicating additional coaching is needed around qualifying questions and tailoring the presentation.`);
+  if(plan.closingScore!=null&&plan.closingScore<84)bullets.push(`Closing behaviors scored ${formatPercentDisplay(plan.closingScore)}, reflecting missed opportunities to secure commitment and confirm next steps.`);
+  if(plan.notes)bullets.push(escapeHTML(plan.notes).replace(/\n/g,'<br>'));
+  if(!bullets.length)bullets.push('Current performance results and manager observations should continue to be monitored throughout the review period.');
+  return bullets;
+}
+function getSupportCommitments(plan,employeeName){
+  const name=employeeName||'the employee';
+  const commitments=[
+    `Weekly one-on-one check-in meetings between ${name} and the direct manager to review progress against plan objectives.`,
+    'Written progress updates documenting completed actions, coaching feedback, and any remaining performance gaps.',
+    'Access to applicable RISE training materials, scripts, performance guides, and coaching resources related to the documented deficiencies.'
+  ];
+  if((plan.actionItems||[]).some(item=>/role-plays?|tour|script/i.test(item.text)))commitments.push('Observed practice sessions and manager feedback to reinforce required behaviors, scripting, and closing standards.');
+  if((plan.actionItems||[]).length)commitments.push(`Review of ${plan.actionItems.length} required action item${plan.actionItems.length===1?'':'s'} during the plan period, with coaching adjustments as needed.`);
+  if(parseInt(plan.timeline,10)>=30)commitments.push('A mid-point review may be scheduled before the final review date to assess progress and adjust support as needed.');
+  return commitments;
+}
+function getConsequenceCopy(plan){
+  const reviewDate=formatDocDate(plan.reviewDate);
+  if(plan.type==='pip'&&plan.consequences){
+    return 'Failure to meet the measurable objectives outlined in this plan, or failure to participate fully in required coaching and oversight activities, may result in further disciplinary action up to and including termination of employment.';
+  }
+  if(plan.type==='pip'){
+    return `Sustained improvement is required by ${reviewDate}. Failure to demonstrate timely progress may result in additional corrective action.`;
+  }
+  return `This coaching plan requires timely follow-through and sustained improvement by ${reviewDate}. If performance does not improve, management may escalate to formal corrective action.`;
+}
+
+function exportHTML(planId){
+  const p=STATE.plans.find(x=>x.id===planId);
+  if(!p)return;
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const employeeName=emp?escapeHTML(emp.name):'the employee';
+  const employeeRole=emp&&emp.role?escapeHTML(emp.role):'team member';
+  const employeeCommunity=emp&&emp.community?escapeHTML(emp.community):'';
+  const updates=p.weeklyUpdates||[];
+  const meetings=p.meetings||[];
+  const scoreRows=getPerformanceStandardRows(p);
+  const groupedItems=groupActionItemsByArea(p.actionItems||[]);
+  const deficiencyBullets=getDeficiencyBullets(p);
+  const supportBullets=getSupportCommitments(p,emp?emp.name:'the employee');
+  const planTitle=p.type==='pip'?'PERFORMANCE IMPROVEMENT PLAN':'COACHING ACTION PLAN';
+  const planIntro=p.type==='pip'
+    ? `This Performance Improvement Plan ("PIP") has been issued to ${employeeName}, ${employeeRole}${employeeCommunity?` at ${employeeCommunity}`:''}, in response to documented performance results that fall below RISE Residential Management expectations.`
+    : `This coaching action plan has been issued to ${employeeName}, ${employeeRole}${employeeCommunity?` at ${employeeCommunity}`:''}, to address documented performance gaps and support measurable improvement over the review period.`;
+  const planObjective=p.type==='pip'
+    ? 'This document establishes specific, measurable performance requirements, outlines the support that will be provided, and documents the accountability expectations for the review period.'
+    : 'This document outlines targeted coaching priorities, measurable expectations, support commitments, and the accountability standards for the review period.';
+  const w=window.open('','_blank');
+  if(!w)return;
+
+  w.document.write(`<!DOCTYPE html><html><head><title>${planTitle} — ${emp?escapeHTML(emp.name):'Employee'}</title>
+  <style>
+  :root{--ink:#1e2430;--muted:#667085;--brand:#1B3A4B;--accent:#8B0000;--line:#d9dde3;--soft:#f6f5f3;--warn:#fbede8}
+  *{box-sizing:border-box}
+  body{margin:0;background:#ece8e2;color:var(--ink);font-family:"Aptos","Segoe UI",Arial,sans-serif}
+  .page{width:8.5in;min-height:11in;margin:24px auto;background:#fff;padding:.78in .72in;box-shadow:0 20px 40px rgba(0,0,0,.12)}
+  .letterhead{border-bottom:2px solid var(--brand);padding-bottom:14px;margin-bottom:18px}
+  .org{font-size:23px;font-weight:800;letter-spacing:.04em;color:#121926}
+  .dept{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+  .addr{margin-top:6px;font-size:12px;color:var(--muted)}
+  .doc-title{text-align:center;margin:22px 0 20px}
+  .doc-title h1{margin:0;font-size:21px;font-weight:800;letter-spacing:.08em;color:#111827}
+  .doc-title p{margin:5px 0 0;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${p.type==='pip'?'#8B0000':'#7a5a00'}}
+  .meta{width:100%;border-collapse:collapse;margin-bottom:22px}
+  .meta td{border:1px solid var(--line);padding:8px 10px;font-size:12px;vertical-align:top}
+  .meta .label{width:21%;background:var(--soft);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#465467}
+  .section{margin-top:20px;page-break-inside:avoid}
+  .section-title{margin:0 0 10px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+  p{margin:0 0 10px;font-size:12.5px;line-height:1.65}
+  .standards,.action-table,.appendix-table{width:100%;border-collapse:collapse;margin-top:8px}
+  .standards th,.standards td,.action-table th,.action-table td,.appendix-table th,.appendix-table td{border:1px solid var(--line);padding:8px 10px;font-size:12px;vertical-align:top}
+  .standards th,.action-table th,.appendix-table th{background:var(--soft);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#465467}
+  .score-bad{background:#FDECEA;color:#8B0000;font-weight:700}
+  .score-warn{background:#FFF8E1;color:#5D4037;font-weight:700}
+  .score-ok{background:#EAF3DE;color:#1B5E20;font-weight:700}
+  .callout{background:#faf8f6;border:1px solid #ece3da;border-left:4px solid ${p.type==='pip'?'#8B0000':'#C9943C'};padding:12px 14px;margin-top:10px}
+  ul{margin:0;padding-left:18px}
+  li{margin:0 0 6px;font-size:12.5px;line-height:1.55}
+  .muted{color:var(--muted)}
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+  .sig-block{border:1px solid var(--line);padding:16px 12px 12px;min-height:92px}
+  .sig-name{font-size:12px;font-weight:700;color:#111827;margin-bottom:42px}
+  .sig-line{display:flex;justify-content:space-between;gap:20px;padding-top:8px;border-top:1px solid #b7bfca;font-size:11px;color:var(--muted)}
+  .footer-note{margin-top:18px;font-size:11px;line-height:1.5;color:var(--muted)}
+  .print-btn{margin-top:18px;padding:10px 18px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+  @page{size:letter;margin:.5in}
+  @media print{body{background:#fff}.page{box-shadow:none;margin:0;width:auto;min-height:auto;padding:0}.print-btn{display:none}}
+  </style></head><body>
+  <div class="page">
+    <div class="letterhead">
+      <div class="org">RISE RESIDENTIAL MANAGEMENT</div>
+      <div class="dept">Human Resources & People Operations</div>
+      <div class="addr">10161 Centurion Parkway | Jacksonville, FL 32256</div>
+    </div>
+
+    <div class="doc-title">
+      <h1>${planTitle}</h1>
+      <p>${p.type==='pip'?'Confidential — For Internal Use Only':'Confidential Coaching Document — For Internal Use Only'}</p>
+    </div>
+
+    <table class="meta">
+      <tr><td class="label">Employee Name</td><td>${emp?escapeHTML(emp.name):'________________________________'}</td><td class="label">Position / Title</td><td>${emp&&emp.role?escapeHTML(emp.role):'________________________________'}</td></tr>
+      <tr><td class="label">Community</td><td>${emp&&emp.community?escapeHTML(emp.community):'________________________________'}</td><td class="label">Direct Manager</td><td>${p.manager?escapeHTML(p.manager):'________________________________'}</td></tr>
+      <tr><td class="label">HR Representative</td><td>________________________________</td><td class="label">${p.type==='pip'?'PIP':'Plan'} Issued Date</td><td>${formatDocDate(p.createdAt)}</td></tr>
+      <tr><td class="label">Review Period</td><td>${escapeHTML(getReviewPeriodText(p))}</td><td class="label">Review Date</td><td>${formatDocDate(p.reviewDate)}</td></tr>
+      <tr><td class="label">${p.type==='pip'?'PIP':'Plan'} Status</td><td>${escapeHTML(getPlanStatusLabel(p))}</td><td class="label">Signed Copy</td><td>${p.signedDocData?`On file${p.signedDocDate?` (${formatDocDate(p.signedDocDate)})`:''}`:'Pending employee acknowledgment'}</td></tr>
+    </table>
+
+    <div class="section">
+      <div class="section-title">Section I — Purpose of This Plan</div>
+      <p>${planIntro}</p>
+      <p>${planObjective}</p>
+      ${p.shopDate||p.overallScore!=null?`<div class="callout"><p style="margin:0"><strong>Current trigger point:</strong> ${p.shopDate?`Based on the ${formatDocDate(p.shopDate)} mystery shop evaluation, `:'Current evaluation results indicate that '}${scoreRows.map(row=>`${row.label.toLowerCase()} is ${formatPercentDisplay(row.value)}`).join(', ')}.</p></div>`:''}
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section II — Applicable Performance Standards</div>
+      <p>RISE Residential expects performance to meet or exceed the Ellis benchmark standard of 84% unless otherwise noted. The following measured categories were used to evaluate current performance.</p>
+      <table class="standards">
+        <thead><tr><th>Category</th><th>Minimum Required</th><th>Actual ${p.shopDate?`(${escapeHTML(p.shopDate)})`:''}</th><th>Variance / Status</th></tr></thead>
+        <tbody>
+          ${scoreRows.map(row=>`<tr><td>${escapeHTML(row.label)}</td><td>84%</td><td class="${row.value>=84?'score-ok':row.value>=65?'score-warn':'score-bad'}">${formatPercentDisplay(row.value)}</td><td>${formatVarianceDisplay(row.value)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section III — Documented Performance Deficiencies</div>
+      <p>The following performance gaps were identified based on current score results, manager observations, and the action items documented for this plan.</p>
+      <ul>${deficiencyBullets.map(item=>`<li>${item}</li>`).join('')}</ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section IV — Required Corrective Actions & Measurable Objectives</div>
+      <p>The following objectives are required during the review period. Progress against each objective should be reviewed regularly and documented by the direct manager.</p>
+      ${groupedItems.length?`<table class="action-table">
+        <thead><tr><th>Area</th><th>Benchmark</th><th>Current</th><th>Required Actions (All Must Be Completed)</th></tr></thead>
+        <tbody>
+          ${groupedItems.map(group=>`<tr><td>${escapeHTML(group.area)}</td><td>84%</td><td>${formatPercentDisplay(getAreaCurrentScore(p,group.area))}</td><td><ul>${group.texts.map(text=>`<li>${escapeHTML(text)}</li>`).join('')}</ul></td></tr>`).join('')}
+        </tbody>
+      </table>`:'<p class="muted">No action items have been loaded for this plan yet.</p>'}
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section V — Management Support & Oversight Commitments</div>
+      <p>RISE Residential will provide the following support during the review period to reinforce expectations and document progress.</p>
+      <ul>${supportBullets.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section VI — ${p.type==='pip'?'Consequences of Non-Compliance':'Accountability & Next Steps'}</div>
+      <p>${getConsequenceCopy(p)}</p>
+      ${p.type==='pip'&&p.consequences?`<ul>
+        <li>Extension of the performance improvement period with escalated expectations.</li>
+        <li>Additional formal disciplinary action.</li>
+        <li>Change in duties, reassignment, or termination of employment if improvement is not achieved.</li>
+      </ul>`:''}
+    </div>
+
+    <div class="section">
+      <div class="section-title">Section VII — Acknowledgment & Signatures</div>
+      <p>By signing below, the parties acknowledge receipt of this document, review of the expectations outlined above, and understanding of the accountability standards for the review period. Employee signature confirms receipt and awareness of the plan's terms.</p>
+      <div class="sig-grid">
+        <div class="sig-block"><div class="sig-name">Employee — ${emp?escapeHTML(emp.name):''}</div><div class="sig-line"><span>Signature</span><span>Date</span></div></div>
+        <div class="sig-block"><div class="sig-name">Direct Manager</div><div class="sig-line"><span>Signature</span><span>Date</span></div></div>
+        <div class="sig-block"><div class="sig-name">HR Representative / People Operations</div><div class="sig-line"><span>Signature</span><span>Date</span></div></div>
+        <div class="sig-block"><div class="sig-name">VP of Property Management (if applicable)</div><div class="sig-line"><span>Signature</span><span>Date</span></div></div>
+      </div>
+    </div>
+
+    ${meetings.length||updates.length?`<div class="section">
+      <div class="section-title">Appendix — Progress Tracking</div>
+      ${meetings.length?`<table class="appendix-table" style="margin-bottom:12px">
+        <thead><tr><th>Meeting</th><th>Date</th><th>Status</th></tr></thead>
+        <tbody>${meetings.map((m,i)=>`<tr><td>${escapeHTML(m.label||'Week '+(i+1))}</td><td>${escapeHTML(m.date||m.heldDate||'—')}</td><td>${escapeHTML(m.status==='completed'?'Completed':m.status==='past_due'?'Past due':'Scheduled')}</td></tr>`).join('')}</tbody>
+      </table>`:''}
+      ${updates.length?`<table class="appendix-table">
+        <thead><tr><th>Week</th><th>Date</th><th>Overall Status</th><th>Manager Notes</th></tr></thead>
+        <tbody>${updates.map((u,i)=>`<tr><td>Week ${i+1}</td><td>${escapeHTML(u.date||'—')}</td><td>${escapeHTML(u.overallStatus||'—')}</td><td>${u.notes?escapeHTML(u.notes).replace(/\n/g,'<br>'):'—'}</td></tr>`).join('')}</tbody>
+      </table>`:''}
+    </div>`:''}
+
+    <div class="footer-note">This ${p.type==='pip'?'Performance Improvement Plan':'coaching action plan'} was prepared in accordance with RISE Residential Management employment policies and procedures. Questions regarding this document should be directed to Human Resources.</div>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  </body></html>`);
+  w.document.close();
+  closeModal();
+}
+
+function exportExcel(planId){
+  const p=STATE.plans.find(x=>x.id===planId);
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const wb=XLSX.utils.book_new();
+  const summary=[['RISE Residential — '+p.type.toUpperCase()],[],['Employee',emp?emp.name:'—'],['Community',emp?emp.community||'—':'—'],['Region',emp?REGIONS[emp.region]?.name||'—':'—'],['Shop Date',p.shopDate||'—'],['Issued',p.createdAt],['Review Date',p.reviewDate],['Manager',p.manager||'—'],[],['SCORES','Actual','Benchmark','Status'],['Telephone Total',p.telScore!=null?p.telScore+'%':'—','84%',p.telScore!=null&&p.telScore>=84?'MET':'NOT MET'],['On-Site Total',p.onsiteScore!=null?p.onsiteScore+'%':'—','84%',p.onsiteScore!=null&&p.onsiteScore>=84?'MET':'NOT MET'],['Overall',p.overallScore!=null?p.overallScore+'%':'—','84%',p.overallScore!=null&&p.overallScore>=84?'MET':'NOT MET'],[],[' Notes',p.notes||'—']];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),'Plan Summary');
+  if(p.actionItems&&p.actionItems.length){
+    const aiData=[['#','Area','Action Item'],...p.actionItems.map((it,i)=>[i+1,it.area||'—',it.text])];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aiData),'Action Items');
+  }
+  if(p.weeklyUpdates&&p.weeklyUpdates.length){
+    const wData=[['Week','Date','Overall Status','Notes','Items Complete','Items Partial','Items Incomplete'],...p.weeklyUpdates.map((w,i)=>[i+1,w.date||'—',w.overallStatus||'—',w.notes||'—',(w.items||[]).filter(x=>x.status==='complete').length,(w.items||[]).filter(x=>x.status==='partial').length,(w.items||[]).filter(x=>x.status==='incomplete').length])];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(wData),'Weekly Updates');
+  }
+  if(p.meetings&&p.meetings.length){
+    const mData=[['Meeting','Date','Status'],...p.meetings.map((m,i)=>[m.label||'Week '+(i+1),m.date||m.heldDate||'—',m.status])];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(mData),'Meetings');
+  }
+  XLSX.writeFile(wb,`RISE_${p.type.toUpperCase()}_${emp?emp.name.replace(/\s+/g,'_'):'emp'}_${p.createdAt}.xlsx`);closeModal();
+}
+
+function exportCSVSingle(planId){
+  const p=STATE.plans.find(x=>x.id===planId);
+  const emp=STATE.employees.find(e=>e.id===p.employeeId);
+  const meetings=p.meetings||[];
+  const updates=p.weeklyUpdates||[];
+  const lastW=updates[updates.length-1];
+  const allItems=(lastW&&lastW.items)||[];
+  const rows=[['Employee','Community','Region','Type','Shop Date','Overall','Telephone','On-Site','Review Date','Status','Manager','Meetings Done','Meetings Missed','Items Complete','Items Partial','Items Incomplete'],
+    [emp?emp.name:'',emp?emp.community||'':'',emp?REGIONS[emp.region]?.name||'':'',p.type,p.shopDate||'',p.overallScore||'',p.telScore||'',p.onsiteScore||'',p.reviewDate,formatPlanStatus(p.status),p.manager||'',meetings.filter(m=>m.status==='completed').length,meetings.filter(m=>m.status==='past_due').length,allItems.filter(x=>x.status==='complete').length,allItems.filter(x=>x.status==='partial').length,allItems.filter(x=>x.status==='incomplete').length]];
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=`RISE_plan_${emp?emp.name.replace(/\s+/g,'_'):'emp'}.csv`;a.click();closeModal();
+}
+
+function renderSettings(){
+  return `<div class="page">
+    <div class="page-title">Settings</div>
+    <div class="page-sub">Manage manager logins and access levels. Admin only.</div>
+    <div class="card" style="max-width:680px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-title" style="margin-bottom:0">Manager accounts</div>
+        <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add user</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>ID</th><th>Role</th><th>Region</th><th>PIN</th><th></th></tr></thead>
+        <tbody>
+        ${STATE.users.map(u=>`<tr>
+          <td style="font-weight:500">${u.name}</td>
+          <td style="font-size:12px;color:#888">${u.id}</td>
+          <td><span class="badge ${u.role==='admin'?'badge-admin':'badge-active'}">${u.role}</span></td>
+          <td>${u.region?regionLabel(u.region):'<span style="color:#888;font-size:12px">All</span>'}</td>
+          <td style="font-family:monospace">••••</td>
+          <td style="display:flex;gap:4px">
+            <button class="btn btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
+            ${u.id!=='admin'?`<button class="btn btn-sm btn-danger" onclick="removeUser('${u.id}')">Remove</button>`:''}
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function openAddUser(){
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:420px">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div class="modal-title">Add user</div>
+    <div class="form-group" style="margin-top:12px"><label>Full name</label><input id="nu-name"></div>
+    <div class="form-group"><label>Username / ID</label><input id="nu-id" placeholder="e.g. mgr_west2"></div>
+    <div class="form-group"><label>PIN</label><input id="nu-pin" type="password" maxlength="8"></div>
+    <div class="form-group"><label>Role</label><select id="nu-role"><option value="manager">Manager</option><option value="admin">Admin</option></select></div>
+    <div class="form-group"><label>Region</label><select id="nu-region">
+      <option value="">All (admin)</option>
+      ${Object.entries(REGIONS).map(([k,r])=>`<option value="${k}">${r.name}</option>`).join('')}
+    </select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewUser()">Add user</button>
+    </div>
+  </div></div>`;
+}
+function saveNewUser(){
+  const id=document.getElementById('nu-id').value.trim().replace(/\s+/g,'_').toLowerCase();
+  const name=document.getElementById('nu-name').value.trim();
+  const pin=document.getElementById('nu-pin').value.trim();
+  if(!id||!name||!pin){alert('All fields required.');return;}
+  if(STATE.users.find(u=>u.id===id)){alert('ID already exists.');return;}
+  STATE.users.push({id,name,pin,role:document.getElementById('nu-role').value,region:document.getElementById('nu-region').value||null});
+  save();closeModal();renderView();
+}
+function openEditUser(uid){
+  const u=STATE.users.find(x=>x.id===uid);if(!u)return;
+  const mc=document.getElementById('modal-container');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:420px">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div class="modal-title">Edit — ${u.name}</div>
+    <div class="form-group" style="margin-top:12px"><label>Full name</label><input id="eu-name" value="${u.name}"></div>
+    <div class="form-group"><label>New PIN (blank = keep current)</label><input id="eu-pin" type="password" maxlength="8"></div>
+    <div class="form-group"><label>Role</label><select id="eu-role"><option value="manager" ${u.role==='manager'?'selected':''}>Manager</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div>
+    <div class="form-group"><label>Region</label><select id="eu-region">
+      <option value="" ${!u.region?'selected':''}>All (admin)</option>
+      ${Object.entries(REGIONS).map(([k,r])=>`<option value="${k}" ${u.region===k?'selected':''}>${r.name}</option>`).join('')}
+    </select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditUser('${uid}')">Save</button>
+    </div>
+  </div></div>`;
+}
+function saveEditUser(uid){
+  const u=STATE.users.find(x=>x.id===uid);if(!u)return;
+  u.name=document.getElementById('eu-name').value.trim()||u.name;
+  const np=document.getElementById('eu-pin').value.trim();if(np)u.pin=np;
+  u.role=document.getElementById('eu-role').value;
+  u.region=document.getElementById('eu-region').value||null;
+  save();closeModal();renderView();
+}
+function removeUser(uid){if(!confirm('Remove this user?'))return;STATE.users=STATE.users.filter(u=>u.id!==uid);save();renderView();}
+
+render();
+</script>
+</body>
+</html>
