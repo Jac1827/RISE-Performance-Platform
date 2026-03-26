@@ -7,7 +7,9 @@ This repo now includes a GitHub Pages-ready static version of the employee coach
 - Employee roster management
 - Passcode-only privacy gate with admin-managed user scopes and employee visibility filters
 - Coaching and PIP plan creation
+- Admin-managed benchmark criteria that recommend coaching or PIP on the New Plan screen
 - Client-side shop report and plan-document uploads for PDF/DOCX/TXT score and action-item extraction
+- Shop management page for targeted shop requests plus updated Ellis report uploads/history
 - Employee roster CSV/Excel upload plus manual entry with manager, region, and community assignment
 - Signed plan upload stored in browser local storage
 - Automatic weekly meeting cadence after plan presentation

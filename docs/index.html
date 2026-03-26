@@ -99,6 +99,17 @@
   .stat-card .label{font-size:12px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
   .stat-card .value{font-size:30px;font-weight:800;color:var(--ink)}
   .stat-card .sub{font-size:12px;color:var(--muted);margin-top:4px}
+  .stat-link{
+    border:none;
+    background:transparent;
+    padding:0;
+    font:inherit;
+    color:var(--ink);
+    font-size:30px;
+    font-weight:800;
+    line-height:1;
+  }
+  .stat-link:hover{text-decoration:underline}
 
   .grid-2{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
   .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -304,6 +315,14 @@ const DEFAULT_USERS = [
   {id:'mgr_valdosta',name:'Valdosta Manager',pin:'5555',role:'manager',scopeType:'region',scopeValue:'valdosta'},
   {id:'mgr_jax',name:'JAX Manager',pin:'6666',role:'manager',scopeType:'region',scopeValue:'jax'}
 ];
+const DEFAULT_SETTINGS = {
+  benchmarks: {
+    benchmarkTarget: 84,
+    pipOverallThreshold: 60,
+    criticalMetricThreshold: 60,
+    severeMetricCount: 3
+  }
+};
 const PDF_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const ACTION_ITEM_AREA_RULES = [
   {area:'Telephone — Needs Assessment', labels:['telephone needs assessment','needs assessment','identifying needs','telephone assessment']},
@@ -398,12 +417,41 @@ function normalizePlan(plan){
     weeklyUpdates: Array.isArray(plan && plan.weeklyUpdates) ? plan.weeklyUpdates : [],
     meetings: Array.isArray(plan && plan.meetings) ? plan.meetings : [],
     consequences: plan && plan.consequences != null ? Boolean(plan.consequences) : plan && plan.type === 'pip',
-    requiresUpdatedShop: Boolean(plan && plan.requiresUpdatedShop)
+    requiresUpdatedShop: Boolean(plan && plan.requiresUpdatedShop),
+    shopRequestNotes: String(plan && plan.shopRequestNotes || ''),
+    shopRequestedBy: String(plan && plan.shopRequestedBy || ''),
+    updatedShopScores: plan && typeof plan.updatedShopScores === 'object' && plan.updatedShopScores ? plan.updatedShopScores : null
   };
 }
 
 function makeDefaultUsers(){
   return DEFAULT_USERS.map(normalizeUser);
+}
+
+function clampNumber(value, fallback, min, max){
+  const next = Number(value);
+  if(Number.isNaN(next)) return fallback;
+  return Math.max(min, Math.min(max, next));
+}
+
+function normalizeSettings(settings){
+  const raw = settings && settings.benchmarks ? settings.benchmarks : {};
+  const benchmarkTarget = clampNumber(raw.benchmarkTarget, DEFAULT_SETTINGS.benchmarks.benchmarkTarget, 0, 100);
+  const pipOverallThreshold = clampNumber(raw.pipOverallThreshold, DEFAULT_SETTINGS.benchmarks.pipOverallThreshold, 0, benchmarkTarget);
+  const criticalMetricThreshold = clampNumber(raw.criticalMetricThreshold, DEFAULT_SETTINGS.benchmarks.criticalMetricThreshold, 0, benchmarkTarget);
+  const severeMetricCount = Math.round(clampNumber(raw.severeMetricCount, DEFAULT_SETTINGS.benchmarks.severeMetricCount, 1, 6));
+  return {
+    benchmarks: {
+      benchmarkTarget,
+      pipOverallThreshold,
+      criticalMetricThreshold,
+      severeMetricCount
+    }
+  };
+}
+
+function makeDefaultSettings(){
+  return normalizeSettings(DEFAULT_SETTINGS);
 }
 
 let STATE = loadState();
@@ -424,13 +472,14 @@ function loadState(){
     }
     return {
       users,
+      settings: normalizeSettings(stored.settings),
       employees: Array.isArray(stored.employees) ? stored.employees.map(normalizeEmployee).filter(employee => employee.name) : [],
       plans: Array.isArray(stored.plans) ? stored.plans.map(normalizePlan) : [],
       currentView: stored.currentView || 'dashboard',
       currentUser: null
     };
   }catch(err){
-    return {users:makeDefaultUsers(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
+    return {users:makeDefaultUsers(),settings:makeDefaultSettings(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
   }
 }
 
@@ -438,6 +487,7 @@ function saveState(){
   STATE.currentView = UI.currentView;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     users: STATE.users,
+    settings: STATE.settings,
     employees: STATE.employees,
     plans: STATE.plans,
     currentView: STATE.currentView
@@ -566,6 +616,110 @@ function isPasscodeTaken(passcode, excludeId){
   return STATE.users.some(user => user.pin === passcode && user.id !== excludeId);
 }
 
+function benchmarkSettings(){
+  return STATE.settings && STATE.settings.benchmarks ? STATE.settings.benchmarks : makeDefaultSettings().benchmarks;
+}
+
+function benchmarkRuleSummary(){
+  const settings = benchmarkSettings();
+  return `Benchmark target ${settings.benchmarkTarget}%. Coaching starts below target. PIP starts at ${settings.pipOverallThreshold}% overall, any metric at or below ${settings.criticalMetricThreshold}%, or ${settings.severeMetricCount}+ metrics below benchmark.`;
+}
+
+function newPlanScores(){
+  return {
+    overallScore: numberOrNull('np-overall'),
+    telScore: numberOrNull('np-telephone'),
+    onsiteScore: numberOrNull('np-onsite'),
+    followupScore: numberOrNull('np-followup'),
+    greetScore: numberOrNull('np-greeting'),
+    needsScore: numberOrNull('np-needs'),
+    demoScore: numberOrNull('np-demo-closing')
+  };
+}
+
+function metricFieldDefinitions(){
+  return SHOP_SCORE_FIELDS.filter(field => field.key !== 'overallScore');
+}
+
+function formatMetricLabels(keys){
+  const labels = metricFieldDefinitions()
+    .filter(field => keys.includes(field.key))
+    .map(field => field.label.replace(/\b\w/g, char => char.toUpperCase()));
+  return labels.join(', ');
+}
+
+function evaluatePlanRecommendation(scores){
+  const settings = benchmarkSettings();
+  const metrics = metricFieldDefinitions()
+    .map(field => ({key: field.key, label: field.label, value: scores[field.key]}))
+    .filter(metric => metric.value != null && !Number.isNaN(Number(metric.value)));
+  const overall = scores.overallScore;
+  const belowBenchmark = metrics.filter(metric => Number(metric.value) < settings.benchmarkTarget);
+  const criticalMetrics = metrics.filter(metric => Number(metric.value) <= settings.criticalMetricThreshold);
+  const anyScoreEntered = overall != null || metrics.length > 0;
+
+  if(!anyScoreEntered){
+    return {
+      recommendation: 'pending',
+      tone: 'muted',
+      autoType: null,
+      message: benchmarkRuleSummary()
+    };
+  }
+
+  if(overall != null && Number(overall) <= settings.pipOverallThreshold){
+    return {
+      recommendation: 'pip',
+      tone: 'danger',
+      autoType: 'pip',
+      message: `PIP recommended. Overall score is at or below ${settings.pipOverallThreshold}%.`
+    };
+  }
+
+  if(criticalMetrics.length){
+    return {
+      recommendation: 'pip',
+      tone: 'danger',
+      autoType: 'pip',
+      message: `PIP recommended. ${formatMetricLabels(criticalMetrics.map(metric => metric.key))} ${criticalMetrics.length === 1 ? 'is' : 'are'} at or below the critical ${settings.criticalMetricThreshold}% threshold.`
+    };
+  }
+
+  if(belowBenchmark.length >= settings.severeMetricCount){
+    return {
+      recommendation: 'pip',
+      tone: 'danger',
+      autoType: 'pip',
+      message: `PIP recommended. ${belowBenchmark.length} metrics are below the ${settings.benchmarkTarget}% benchmark, which meets your severe-trigger setting.`
+    };
+  }
+
+  if(overall != null && Number(overall) < settings.benchmarkTarget){
+    return {
+      recommendation: 'coaching',
+      tone: 'warn',
+      autoType: 'coaching',
+      message: `Coaching recommended. Overall score is below the ${settings.benchmarkTarget}% benchmark.`
+    };
+  }
+
+  if(belowBenchmark.length){
+    return {
+      recommendation: 'coaching',
+      tone: 'warn',
+      autoType: 'coaching',
+      message: `Coaching recommended. ${formatMetricLabels(belowBenchmark.map(metric => metric.key))} ${belowBenchmark.length === 1 ? 'is' : 'are'} below the ${settings.benchmarkTarget}% benchmark.`
+    };
+  }
+
+  return {
+    recommendation: 'none',
+    tone: 'success',
+    autoType: null,
+    message: `Scores meet the current benchmark criteria. You can still choose coaching or PIP manually if needed.`
+  };
+}
+
 function userScopeLabel(user){
   if(!user) return 'No access';
   if(user.role === 'admin' || user.scopeType === 'all') return 'All employees';
@@ -616,6 +770,10 @@ function activePlans(){
 
 function trackedPlans(){
   return visiblePlans().filter(plan => plan.status !== 'archived');
+}
+
+function shopManagedPlans(){
+  return visiblePlans().filter(plan => plan.status === 'shop_ordered' || plan.shopOrderedAt || plan.shopRequestedAt || plan.updatedShopReportData || plan.shopResolvedAt);
 }
 
 function planLabel(plan){
@@ -836,6 +994,7 @@ function renderShell(){
   const navItems = [
     ['dashboard','Dashboard'],
     ['plans','Active Plans'],
+    ['shop','Shop'],
     ['newplan','+ New Plan'],
     ['weekly','Weekly Updates'],
     ['employees','Employees'],
@@ -886,6 +1045,7 @@ function logout(){
 
 function renderView(){
   if(UI.currentView === 'plans') return renderPlans();
+  if(UI.currentView === 'shop') return renderShop();
   if(UI.currentView === 'newplan') return renderNewPlan();
   if(UI.currentView === 'weekly') return renderWeekly();
   if(UI.currentView === 'employees') return renderEmployees();
@@ -926,7 +1086,7 @@ function renderDashboard(){
         </div>
         <div class="card stat-card">
           <div class="label">Shop Ordered</div>
-          <div class="value">${shopOrdered.length}</div>
+          <div><button class="stat-link" onclick="openShopPage()">${shopOrdered.length}</button></div>
           <div class="sub">Plans waiting on a targeted shop</div>
         </div>
       </div>
@@ -981,6 +1141,12 @@ function renderDashboard(){
       </div>
     </div>
   `;
+}
+
+function openShopPage(){
+  UI.currentView = 'shop';
+  saveState();
+  render();
 }
 
 function renderPlans(){
@@ -1148,7 +1314,7 @@ function renderNewPlan(){
           <div class="form-grid cols-2">
             <div>
               <label>Employee</label>
-              <select id="np-employee" onchange="syncNewPlanManager()">
+              <select id="np-employee" onchange="syncNewPlanManager();updatePlanTypeSuggestion(false)">
                 <option value="">Select employee</option>
                 ${employees.map(emp => `<option value="${emp.id}">${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
               </select>
@@ -1182,7 +1348,7 @@ function renderNewPlan(){
               <button id="np-type-coaching" class="pill ${UI.newPlanType === 'coaching' ? 'active' : ''}" onclick="setNewPlanType('coaching')">Coaching</button>
               <button id="np-type-pip" class="pill ${UI.newPlanType === 'pip' ? 'active' : ''}" onclick="setNewPlanType('pip')">PIP</button>
             </div>
-            <div id="np-type-guidance" class="small muted" style="margin-top:8px">Scores under 60% suggest a PIP. Scores under 84% suggest a coaching plan.</div>
+            <div id="np-type-guidance" class="alert alert-info" style="margin-top:10px">${escapeHtml(benchmarkRuleSummary())}</div>
           </div>
 
           <div class="form-grid cols-3" style="margin-top:14px">
@@ -1206,14 +1372,14 @@ function renderNewPlan(){
 
           <div class="form-grid cols-4" style="margin-top:14px">
             <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1"></div>
-            <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1"></div>
-            <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1"></div>
+            <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
           </div>
           <div class="form-grid cols-3" style="margin-top:12px">
-            <div><label>Greeting</label><input type="number" id="np-greeting" min="0" max="100" step="0.1"></div>
-            <div><label>Identifying Needs</label><input type="number" id="np-needs" min="0" max="100" step="0.1"></div>
-            <div><label>Demonstrating / Closing</label><input type="number" id="np-demo-closing" min="0" max="100" step="0.1"></div>
+            <div><label>Greeting</label><input type="number" id="np-greeting" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            <div><label>Identifying Needs</label><input type="number" id="np-needs" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            <div><label>Demonstrating / Closing</label><input type="number" id="np-demo-closing" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
           </div>
         </div>
 
@@ -1303,22 +1469,11 @@ function syncNewPlanManager(){
 
 function updatePlanTypeSuggestion(autoSelect){
   const guidance = document.getElementById('np-type-guidance');
-  const overall = numberOrNull('np-overall');
-  if(overall == null){
-    if(guidance) guidance.textContent = 'Scores under 60% suggest a PIP. Scores under 84% suggest a coaching plan.';
-    return;
-  }
-  if(overall < 60){
-    if(autoSelect) setNewPlanType('pip');
-    if(guidance) guidance.innerHTML = '<strong>PIP recommended.</strong> Overall score is below 60%.';
-    return;
-  }
-  if(overall < 84){
-    if(autoSelect) setNewPlanType('coaching');
-    if(guidance) guidance.innerHTML = '<strong>Coaching recommended.</strong> Overall score is below the 84% benchmark.';
-    return;
-  }
-  if(guidance) guidance.innerHTML = '<strong>Score meets benchmark.</strong> You can still keep coaching or PIP selected manually if needed.';
+  const recommendation = evaluatePlanRecommendation(newPlanScores());
+  if(autoSelect && recommendation.autoType) setNewPlanType(recommendation.autoType);
+  if(!guidance) return;
+  guidance.className = `alert ${recommendation.tone === 'danger' ? 'alert-danger' : recommendation.tone === 'warn' ? 'alert-warn' : recommendation.tone === 'success' ? 'alert-success' : 'alert-info'}`;
+  guidance.textContent = recommendation.message;
 }
 
 function previewNewPlan(){
@@ -1988,6 +2143,284 @@ function downloadRosterTemplate(){
   link.click();
 }
 
+function renderShopScoreSummary(scores){
+  if(!scores) return '<span class="small muted">No parsed score summary yet.</span>';
+  const items = [];
+  if(scores.overallScore != null) items.push(`Overall ${scores.overallScore}%`);
+  if(scores.telScore != null) items.push(`Telephone ${scores.telScore}%`);
+  if(scores.onsiteScore != null) items.push(`On-site ${scores.onsiteScore}%`);
+  if(scores.followupScore != null) items.push(`Follow-Up ${scores.followupScore}%`);
+  if(!items.length) return '<span class="small muted">Report uploaded.</span>';
+  return items.map(item => `<span class="badge badge-soft">${escapeHtml(item)}</span>`).join('');
+}
+
+function renderShop(){
+  const plans = shopManagedPlans();
+  const openQueue = plans.filter(plan => plan.status === 'shop_ordered');
+  const history = plans.filter(plan => plan.status !== 'shop_ordered');
+  const canManage = STATE.currentUser && STATE.currentUser.role === 'admin';
+  const requestedCount = openQueue.filter(plan => plan.shopRequestedAt).length;
+  const uploadedCount = plans.filter(plan => plan.updatedShopReportData).length;
+
+  return `
+    <div class="page">
+      <div class="section-title" style="margin-bottom:18px">
+        <div>
+          <h2>Shop management</h2>
+          <p>Track requested targeted shops, record when Tea places the order, and store the updated Ellis shop report with the plan history.</p>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="card stat-card">
+          <div class="label">Open Queue</div>
+          <div class="value">${openQueue.length}</div>
+          <div class="sub">Plans still waiting on the updated shop</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Requested</div>
+          <div class="value">${requestedCount}</div>
+          <div class="sub">Queue items Tea has marked as requested</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Reports Uploaded</div>
+          <div class="value">${uploadedCount}</div>
+          <div class="sub">Updated Ellis reports stored in this browser</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Access</div>
+          <div class="value" style="font-size:18px">${canManage ? 'Admin' : 'View Only'}</div>
+          <div class="sub">${canManage ? 'You can manage request dates and report uploads.' : 'Tea should use an admin passcode to manage shop records.'}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <div>
+            <h2>Open shop queue</h2>
+            <p>These plans have been completed and are still waiting on a targeted shop follow-up.</p>
+          </div>
+        </div>
+        ${openQueue.length ? `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Plan</th>
+                  <th>Queue status</th>
+                  <th>Tea request</th>
+                  <th>Updated Ellis report</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${openQueue.map(plan => {
+                  const employee = getEmployee(plan.employeeId);
+                  return `
+                    <tr>
+                      <td>
+                        <strong>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</strong>
+                        <div class="small muted">${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</div>
+                      </td>
+                      <td>
+                        <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                        <div class="small muted" style="margin-top:6px">Ordered into queue ${formatDate(plan.shopOrderedAt || plan.completedAt || plan.reviewDate)}</div>
+                      </td>
+                      <td>
+                        <span class="badge badge-shop">${escapeHtml(planLabel(plan))}</span>
+                        <div class="small muted" style="margin-top:6px">Manager trigger sent ${formatDate(plan.shopOrderedAt || plan.completedAt || today())}</div>
+                      </td>
+                      <td>
+                        ${plan.shopRequestedAt ? `<span class="badge badge-active">Requested ${escapeHtml(formatDate(plan.shopRequestedAt))}</span>` : '<span class="badge badge-alert">Pending</span>'}
+                        <div class="small muted" style="margin-top:6px">${plan.shopRequestedBy ? `Updated by ${escapeHtml(plan.shopRequestedBy)}` : 'No request date entered yet'}</div>
+                        ${plan.shopRequestNotes ? `<div class="tiny muted" style="margin-top:6px">${escapeHtml(plan.shopRequestNotes)}</div>` : ''}
+                      </td>
+                      <td>
+                        ${plan.updatedShopReportName ? `<span class="badge badge-active">${escapeHtml(plan.updatedShopReportName)}</span><div class="small muted" style="margin-top:6px">Uploaded ${formatDate(plan.updatedShopReportDate || plan.shopResolvedAt || today())}</div><div class="inline" style="margin-top:8px">${renderShopScoreSummary(plan.updatedShopScores)}</div>` : '<span class="small muted">No updated report uploaded yet.</span>'}
+                      </td>
+                      <td>
+                        <div class="inline">
+                          <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">Open plan</button>
+                          ${canManage ? `<button class="btn btn-sm btn-primary" onclick="openShopRequestModal('${plan.id}')">${plan.shopRequestedAt ? 'Update request' : 'Mark requested'}</button><button class="btn btn-sm btn-accent" onclick="openUpdatedShopUpload('${plan.id}')">Upload Ellis report</button>` : ''}
+                          ${plan.updatedShopReportData ? `<button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Download</button>` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : '<div class="alert alert-info">No plans are currently waiting on a targeted shop.</div>'}
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>Shop history</h2>
+            <p>Completed queue items stay here after the updated Ellis report has been stored.</p>
+          </div>
+        </div>
+        ${history.length ? `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Plan</th>
+                  <th>Request dates</th>
+                  <th>Updated Ellis report</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${history.map(plan => {
+                  const employee = getEmployee(plan.employeeId);
+                  return `
+                    <tr>
+                      <td>
+                        <strong>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</strong>
+                        <div class="small muted">${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</div>
+                      </td>
+                      <td>
+                        <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                        <div class="small muted" style="margin-top:6px">${escapeHtml(planLabel(plan))}</div>
+                      </td>
+                      <td>
+                        <div class="small muted">Queue date: ${formatDate(plan.shopOrderedAt || plan.completedAt || '')}</div>
+                        <div class="small muted">Requested: ${formatDate(plan.shopRequestedAt || '')}</div>
+                        <div class="small muted">Resolved: ${formatDate(plan.shopResolvedAt || '')}</div>
+                      </td>
+                      <td>
+                        ${plan.updatedShopReportName ? `<span class="badge badge-active">${escapeHtml(plan.updatedShopReportName)}</span><div class="small muted" style="margin-top:6px">Uploaded ${formatDate(plan.updatedShopReportDate || plan.shopResolvedAt || '')}</div><div class="inline" style="margin-top:8px">${renderShopScoreSummary(plan.updatedShopScores)}</div>` : '<span class="small muted">No updated report stored.</span>'}
+                      </td>
+                      <td>
+                        <div class="inline">
+                          <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">Open plan</button>
+                          ${canManage ? `<button class="btn btn-sm btn-soft" onclick="openShopRequestModal('${plan.id}')">Edit request</button><button class="btn btn-sm btn-accent" onclick="openUpdatedShopUpload('${plan.id}')">${plan.updatedShopReportName ? 'Replace report' : 'Upload report'}</button>` : ''}
+                          ${plan.updatedShopReportData ? `<button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Download</button>` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : '<div class="alert alert-info">No completed shop follow-ups have been stored yet.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function openShopRequestModal(planId){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  const plan = getPlan(planId);
+  if(!plan) return;
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Update shop request</h3>
+      <div class="sub">Record when Tea actually requested the targeted shop so the queue stays accurate.</div>
+      <label>Requested date</label>
+      <input type="date" id="shop-requested-date" value="${plan.shopRequestedAt || today()}">
+      <div style="margin-top:12px">
+        <label>Notes</label>
+        <textarea id="shop-requested-notes" placeholder="Optional vendor, timing, or request details">${escapeHtml(plan.shopRequestNotes || '')}</textarea>
+      </div>
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveShopRequest('${planId}')">Save request</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveShopRequest(planId){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const requestedDate = document.getElementById('shop-requested-date').value;
+  if(!requestedDate){
+    alert('Choose the date the shop was requested.');
+    return;
+  }
+  plan.shopRequestedAt = requestedDate;
+  plan.shopRequestedBy = STATE.currentUser.name;
+  plan.shopRequestNotes = String(document.getElementById('shop-requested-notes').value || '').trim();
+  saveState();
+  closeModal();
+  render();
+}
+
+function openUpdatedShopUpload(planId){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Upload updated Ellis report</h3>
+      <div class="sub">Store the follow-up Ellis shop report. Uploading it closes the queue item and keeps the report in shop history.</div>
+      <div class="file-box">
+        <strong>Choose updated Ellis report</strong>
+        <div class="small muted">PDF, DOCX, or TXT</div>
+        <div style="margin-top:12px">
+          <input id="updated-shop-file" type="file" accept=".pdf,.docx,.txt,.text" onchange="handleUpdatedShopUpload('${planId}', event)">
+        </div>
+      </div>
+      <div id="updated-shop-status" style="margin-top:12px"></div>
+    </div>
+  `);
+}
+
+function readFileAsDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(loadEvent){ resolve(loadEvent.target.result); };
+    reader.onerror = function(){ reject(new Error('Could not read the file data.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleUpdatedShopUpload(planId, event){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  const plan = getPlan(planId);
+  if(!plan) return;
+  const status = document.getElementById('updated-shop-status');
+  if(status) status.innerHTML = '<div class="alert alert-info">Uploading and parsing the updated Ellis report...</div>';
+
+  try{
+    const [dataUrl, text] = await Promise.all([readFileAsDataUrl(file), extractTextFromFile(file)]);
+    plan.updatedShopReportData = dataUrl;
+    plan.updatedShopReportName = file.name;
+    plan.updatedShopReportDate = today();
+    plan.updatedShopScores = parseShopScoresFromText(text);
+    plan.shopResolvedAt = today();
+    if(!plan.shopRequestedAt) plan.shopRequestedAt = today();
+    if(!plan.shopRequestedBy) plan.shopRequestedBy = STATE.currentUser.name;
+    if(plan.status === 'shop_ordered') plan.status = 'completed';
+    saveState();
+    if(status) status.innerHTML = `<div class="alert alert-success">${escapeHtml(file.name)} uploaded. The shop queue item has been moved into history.</div>`;
+    setTimeout(() => {
+      closeModal();
+      render();
+    }, 700);
+  }catch(error){
+    if(status) status.innerHTML = `<div class="alert alert-danger">Upload error: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function downloadUpdatedShopReport(planId){
+  const plan = getPlan(planId);
+  if(!plan || !plan.updatedShopReportData) return;
+  const link = document.createElement('a');
+  link.href = plan.updatedShopReportData;
+  link.download = plan.updatedShopReportName || 'updated-ellis-report';
+  link.click();
+}
+
 function renderWeekly(){
   const plans = activePlans();
   if((UI.selectedWeeklyPlanId && !plans.some(item => item.id === UI.selectedWeeklyPlanId)) || !UI.selectedWeeklyPlanId){
@@ -2435,6 +2868,17 @@ function openPlanDetail(planId){
                   ${plan.shopSourceName ? `Shop source: ${escapeHtml(plan.shopSourceName)}` : 'Shop source not saved'}<br>
                   ${plan.planSourceName ? `Plan source: ${escapeHtml(plan.planSourceName)}` : 'Plan source not saved'}
                 </div>
+              </div>
+            ` : ''}
+            ${(plan.shopOrderedAt || plan.shopRequestedAt || plan.updatedShopReportName) ? `
+              <div class="history-card">
+                <strong>Updated shop workflow</strong>
+                <div class="small muted" style="margin-top:6px">
+                  Queue date: ${formatDate(plan.shopOrderedAt || '')}<br>
+                  Requested by Tea: ${formatDate(plan.shopRequestedAt || '')}${plan.shopRequestedBy ? ` · ${escapeHtml(plan.shopRequestedBy)}` : ''}<br>
+                  Updated Ellis report: ${plan.updatedShopReportName ? `${escapeHtml(plan.updatedShopReportName)} · ${formatDate(plan.updatedShopReportDate || plan.shopResolvedAt || '')}` : 'Not uploaded yet'}
+                </div>
+                ${plan.updatedShopReportData ? `<div class="inline" style="margin-top:10px">${renderShopScoreSummary(plan.updatedShopScores)}</div><div style="margin-top:10px"><button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Download updated report</button></div>` : ''}
               </div>
             ` : ''}
             <div class="history-card">
@@ -2929,8 +3373,47 @@ function renderSettings(){
     `;
   }
 
+  const benchmarks = benchmarkSettings();
+
   return `
     <div class="page">
+      <div class="grid-2-equal" style="margin-bottom:16px">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Benchmark criteria</h2>
+              <p>Set the severity rules that recommend coaching or PIP on the New Plan page.</p>
+            </div>
+          </div>
+          <div class="form-grid cols-2">
+            <div><label>Benchmark target %</label><input id="st-benchmark-target" type="number" min="0" max="100" step="0.1" value="${benchmarks.benchmarkTarget}"></div>
+            <div><label>PIP overall floor %</label><input id="st-pip-overall" type="number" min="0" max="100" step="0.1" value="${benchmarks.pipOverallThreshold}"></div>
+          </div>
+          <div class="form-grid cols-2" style="margin-top:12px">
+            <div><label>Critical metric floor %</label><input id="st-critical-metric" type="number" min="0" max="100" step="0.1" value="${benchmarks.criticalMetricThreshold}"></div>
+            <div><label>PIP trigger count</label><input id="st-severe-count" type="number" min="1" max="6" step="1" value="${benchmarks.severeMetricCount}"></div>
+          </div>
+          <div class="alert alert-info" style="margin-top:12px">${escapeHtml(benchmarkRuleSummary())}</div>
+          <div class="inline" style="justify-content:flex-end;margin-top:14px">
+            <button class="btn btn-primary" onclick="saveBenchmarkSettings()">Save benchmark criteria</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Shop access note</h2>
+              <p>Use an admin passcode for Tea so she can manage shop request dates and updated Ellis uploads on the Shop page.</p>
+            </div>
+          </div>
+          <div class="stack small">
+            <div>The dashboard's Shop Ordered number now opens the Shop queue directly.</div>
+            <div>Admins can mark when the targeted shop was actually requested.</div>
+            <div>Admins can upload the updated Ellis report, which moves the queue item into shop history.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-title" style="margin-bottom:18px">
         <div>
           <h2>Passcode access settings</h2>
@@ -2971,6 +3454,34 @@ function renderSettings(){
       </div>
     </div>
   `;
+}
+
+function saveBenchmarkSettings(){
+  const benchmarkTarget = clampNumber(document.getElementById('st-benchmark-target').value, DEFAULT_SETTINGS.benchmarks.benchmarkTarget, 0, 100);
+  const pipOverallThreshold = clampNumber(document.getElementById('st-pip-overall').value, DEFAULT_SETTINGS.benchmarks.pipOverallThreshold, 0, 100);
+  const criticalMetricThreshold = clampNumber(document.getElementById('st-critical-metric').value, DEFAULT_SETTINGS.benchmarks.criticalMetricThreshold, 0, 100);
+  const severeMetricCount = Math.round(clampNumber(document.getElementById('st-severe-count').value, DEFAULT_SETTINGS.benchmarks.severeMetricCount, 1, 6));
+
+  if(pipOverallThreshold > benchmarkTarget){
+    alert('The PIP overall floor cannot be higher than the benchmark target.');
+    return;
+  }
+  if(criticalMetricThreshold > benchmarkTarget){
+    alert('The critical metric floor cannot be higher than the benchmark target.');
+    return;
+  }
+
+  STATE.settings = normalizeSettings({
+    benchmarks: {
+      benchmarkTarget,
+      pipOverallThreshold,
+      criticalMetricThreshold,
+      severeMetricCount
+    }
+  });
+  saveState();
+  render();
+  alert('Benchmark criteria saved.');
 }
 
 function renderScopeTypeOptions(selected, role){
@@ -3268,8 +3779,8 @@ function seedDemoData(){
 }
 
 function resetAllData(){
-  if(!confirm('Clear all saved users, employees, and plans from this browser?')) return;
-  STATE = {users:makeDefaultUsers(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
+  if(!confirm('Clear all saved users, benchmark settings, employees, and plans from this browser?')) return;
+  STATE = {users:makeDefaultUsers(),settings:makeDefaultSettings(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
   UI = {currentView:'dashboard',planFilter:'active',selectedWeeklyPlanId:null,newPlanType:'coaching',newPlanDraft:makeNewPlanDraft()};
   localStorage.removeItem(STORAGE_KEY);
   render();
