@@ -5,7 +5,10 @@ This repo now includes a GitHub Pages-ready static version of the employee coach
 ## What is included
 
 - Employee roster management
+- Passcode-only privacy gate with admin-managed user scopes and employee visibility filters
 - Coaching and PIP plan creation
+- Client-side shop report and plan-document uploads for PDF/DOCX/TXT score and action-item extraction
+- Employee roster CSV/Excel upload plus manual entry with manager, region, and community assignment
 - Signed plan upload stored in browser local storage
 - Automatic weekly meeting cadence after plan presentation
 - Standard meeting labels plus one-off custom meeting types
@@ -26,5 +29,6 @@ This repo now includes a GitHub Pages-ready static version of the employee coach
 ## Notes
 
 - All dashboard data is stored in the browser with `localStorage`.
+- The passcode screen is a client-side privacy layer for trusted devices, not server-enforced security.
 - The Tea notification uses `mailto:` because this is a static site with no mail backend.
 - Signed documents are also stored in browser storage, so extremely large files are not recommended.

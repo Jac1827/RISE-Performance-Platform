@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RISE Performance Platform</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
 <style>
   :root{
     --ink:#023046;
@@ -126,6 +128,7 @@
   .badge-completed{background:#e8f0f8;color:#25537a}
   .badge-shop{background:#eef5f8;color:#023046}
   .badge-archived{background:#f0eef8;color:#4d4487}
+  .badge-admin{background:#f0eef8;color:#4d4487}
   .badge-alert{background:#fff0f0;color:#8e1d1d}
   .badge-soft{background:#f2f7fa;color:#4f6470}
 
@@ -212,6 +215,45 @@
   .history-card h4{font-size:14px;color:var(--ink);margin-bottom:6px}
 
   .footer-note{margin-top:16px;font-size:12px;color:var(--muted)}
+  .user-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .login-shell{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:26px 18px;
+    background:
+      radial-gradient(circle at top left, rgba(84,157,184,0.18), transparent 30%),
+      linear-gradient(180deg, #f8fbfc 0%, #eaf2f6 100%);
+  }
+  .login-card{
+    width:min(520px, 100%);
+    background:rgba(255,255,255,0.96);
+    border:1px solid rgba(2,48,70,0.08);
+    border-radius:26px;
+    padding:28px;
+    box-shadow:var(--shadow);
+  }
+  .login-brand{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    margin-bottom:18px;
+  }
+  .login-brand svg{height:52px;width:auto;display:block}
+  .login-title{font-size:28px;font-weight:800;color:var(--ink);letter-spacing:-.03em}
+  .login-sub{font-size:13px;color:var(--muted);margin-top:4px}
+  .login-note{
+    background:#f7fbfd;
+    border:1px solid #dce8ee;
+    border-radius:16px;
+    padding:14px 15px;
+    font-size:13px;
+    color:var(--text);
+    margin-top:14px;
+  }
+  .brand-mark svg{height:44px;width:auto;display:block}
+  .brand-mark{display:flex;align-items:center}
 
   @media (max-width:1080px){
     .stats,.grid-3,.cols-4{grid-template-columns:repeat(2,1fr)}
@@ -247,31 +289,159 @@ const MEETING_LABEL_OPTIONS = [
   {value:'Task Completion Review',label:'Task Completion Review'},
   {value:'__custom__',label:'Blank / custom meeting type'}
 ];
+const ACCESS_SCOPE_OPTIONS = [
+  {value:'manager_only', label:'Assigned employees only'},
+  {value:'region', label:'Area / region'},
+  {value:'community', label:'Community'},
+  {value:'all', label:'All employees'}
+];
+const DEFAULT_USERS = [
+  {id:'admin',name:'Admin',pin:'0000',role:'admin',scopeType:'all',scopeValue:''},
+  {id:'mgr_west',name:'West Manager',pin:'1111',role:'manager',scopeType:'region',scopeValue:'west'},
+  {id:'mgr_east',name:'East Manager',pin:'2222',role:'manager',scopeType:'region',scopeValue:'east'},
+  {id:'mgr_student1',name:'Student Manager 1',pin:'3333',role:'manager',scopeType:'region',scopeValue:'student'},
+  {id:'mgr_student2',name:'Student Manager 2',pin:'4444',role:'manager',scopeType:'region',scopeValue:'student'},
+  {id:'mgr_valdosta',name:'Valdosta Manager',pin:'5555',role:'manager',scopeType:'region',scopeValue:'valdosta'},
+  {id:'mgr_jax',name:'JAX Manager',pin:'6666',role:'manager',scopeType:'region',scopeValue:'jax'}
+];
+const PDF_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const ACTION_ITEM_AREA_RULES = [
+  {area:'Telephone — Needs Assessment', labels:['telephone needs assessment','needs assessment','identifying needs','telephone assessment']},
+  {area:'Telephone — Contact Capture', labels:['contact capture','contact information','guest card completeness']},
+  {area:'Telephone — Appointment Setting', labels:['appointment setting','appointment times','scheduled appointment']},
+  {area:'On-Site — Greeting & Introduction', labels:['greeting introduction','greeting and introduction','on-site greeting','greeting']},
+  {area:'On-Site — Closing & Commitment', labels:['closing commitment','closing and commitment','direct ask','deposit application']},
+  {area:'On-Site — Tour Content', labels:['tour content','tour flow','tour structure','neighborhood context']},
+  {area:'Closing', labels:['closing']},
+  {area:'Greeting', labels:['greeting']},
+  {area:'Demonstrating', labels:['demonstrating','demonstration']},
+  {area:'Follow-Up', labels:['follow-up','follow up','followup']}
+];
+const SHOP_SCORE_FIELDS = [
+  {key:'overallScore', inputId:'np-overall', label:'overall score', aliases:['overall score','overall total','overall']},
+  {key:'telScore', inputId:'np-telephone', label:'telephone', aliases:['telephone total','telephone score','telephone']},
+  {key:'onsiteScore', inputId:'np-onsite', label:'on-site', aliases:['on-site total','onsite total','on site total','on-site score','onsite score','on-site']},
+  {key:'followupScore', inputId:'np-followup', label:'follow-up', aliases:['follow-up','follow up','followup']},
+  {key:'greetScore', inputId:'np-greeting', label:'greeting', aliases:['greeting']},
+  {key:'needsScore', inputId:'np-needs', label:'identifying needs', aliases:['identifying needs','needs assessment','needs']},
+  {key:'demoScore', inputId:'np-demo-closing', label:'demonstrating / closing', aliases:['demonstrating / closing','demonstrating and closing','demonstrating','closing']}
+];
+
+if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions){
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
+}
+
+function makeNewPlanDraft(){
+  return {
+    extractedActionItems: [],
+    shopSourceFileName: '',
+    shopSummary: '',
+    shopError: '',
+    shopTone: 'info',
+    planSourceFileName: '',
+    planSummary: '',
+    planError: '',
+    planTone: 'info'
+  };
+}
+
+function normalizeComparable(value){
+  return String(value || '').trim().toLowerCase();
+}
+
+function fallbackId(prefix){
+  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`;
+}
+
+function normalizeUser(user){
+  const role = user && user.role === 'admin' ? 'admin' : 'manager';
+  let scopeType = user && user.scopeType ? user.scopeType : (role === 'admin' ? 'all' : (user && user.region ? 'region' : 'manager_only'));
+  let scopeValue = user && user.scopeValue != null ? String(user.scopeValue) : String(user && user.region || '');
+
+  if(role === 'admin'){
+    scopeType = 'all';
+    scopeValue = '';
+  }else if(scopeType === 'all'){
+    scopeType = 'manager_only';
+    scopeValue = '';
+  }
+
+  if(scopeType === 'region' && !REGIONS[scopeValue]){
+    scopeValue = '';
+  }
+
+  return {
+    id: String(user && user.id || fallbackId('user')),
+    name: String(user && user.name || 'Manager'),
+    pin: String(user && user.pin || ''),
+    role,
+    scopeType,
+    scopeValue
+  };
+}
+
+function normalizeEmployee(employee){
+  return {
+    id: String(employee && employee.id || fallbackId('emp')),
+    name: String(employee && employee.name || '').trim(),
+    role: String(employee && employee.role || 'Leasing Professional').trim(),
+    community: String(employee && employee.community || '').trim(),
+    region: String(employee && employee.region || '').trim(),
+    managerId: String(employee && employee.managerId || '').trim()
+  };
+}
+
+function normalizePlan(plan){
+  return {
+    ...plan,
+    actionItems: Array.isArray(plan && plan.actionItems) ? plan.actionItems : [],
+    weeklyUpdates: Array.isArray(plan && plan.weeklyUpdates) ? plan.weeklyUpdates : [],
+    meetings: Array.isArray(plan && plan.meetings) ? plan.meetings : [],
+    consequences: plan && plan.consequences != null ? Boolean(plan.consequences) : plan && plan.type === 'pip',
+    requiresUpdatedShop: Boolean(plan && plan.requiresUpdatedShop)
+  };
+}
+
+function makeDefaultUsers(){
+  return DEFAULT_USERS.map(normalizeUser);
+}
 
 let STATE = loadState();
 let UI = {
   currentView: STATE.currentView || 'dashboard',
   planFilter: 'active',
   selectedWeeklyPlanId: null,
-  newPlanType: 'coaching'
+  newPlanType: 'coaching',
+  newPlanDraft: makeNewPlanDraft()
 };
 
 function loadState(){
   try{
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const users = Array.isArray(stored.users) && stored.users.length ? stored.users.map(normalizeUser) : makeDefaultUsers();
+    if(!users.some(user => user.role === 'admin')){
+      users.unshift(normalizeUser(DEFAULT_USERS[0]));
+    }
     return {
-      employees: Array.isArray(stored.employees) ? stored.employees : [],
-      plans: Array.isArray(stored.plans) ? stored.plans : [],
-      currentView: stored.currentView || 'dashboard'
+      users,
+      employees: Array.isArray(stored.employees) ? stored.employees.map(normalizeEmployee).filter(employee => employee.name) : [],
+      plans: Array.isArray(stored.plans) ? stored.plans.map(normalizePlan) : [],
+      currentView: stored.currentView || 'dashboard',
+      currentUser: null
     };
   }catch(err){
-    return {employees:[],plans:[],currentView:'dashboard'};
+    return {users:makeDefaultUsers(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
   }
 }
 
 function saveState(){
   STATE.currentView = UI.currentView;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    users: STATE.users,
+    employees: STATE.employees,
+    plans: STATE.plans,
+    currentView: STATE.currentView
+  }));
 }
 
 function genId(){
@@ -297,40 +467,155 @@ function addDays(base, days){
 
 function riseWordmark(){
   return `
-    <svg viewBox="0 0 354 74" aria-label="RISE logo" role="img">
-      <rect width="354" height="74" fill="none"></rect>
+    <svg viewBox="0 0 520 122" aria-label="RISE logo" role="img">
+      <rect width="520" height="122" fill="none"></rect>
       <g fill="#023046">
-        <path d="M0 9h28c11 0 19 2.3 24.1 6.8 4.6 4.1 7 9.7 7 16.8v.2c0 11.5-6.4 18.8-15.7 22.2L61 65H43.3L28 57.6V65H0V9zm28 35.5h13.9c6.7 0 10.6-3.2 10.6-8.3V36c0-5.6-4-8.4-10.9-8.4H28v16.9z"></path>
-        <path d="M179.6 49.8l16.3-19.4c10.5 8.3 22.1 12.6 34.4 12.6 7.9 0 12.1-2.7 12.1-7.1v-.2c0-4.3-3.3-6.6-17.1-9.8-21.6-4.9-38.3-11.1-38.3-32v-.2C187 6.6 201.7 0 221.2 0c13.9 0 26.8 3.7 36.4 11.8l-14.6 20.5c-9.6-6.8-20-10.3-29.5-10.3-7.1 0-10.6 2.9-10.6 6.6v.2c0 4.7 3.5 6.8 17.5 10 23.3 5 37.8 12.4 37.8 31.7v.2c0 20.1-15.8 32-40.8 32-14.7 0-31.4-4.9-44.8-15.1z" transform="translate(-8 0) scale(.72) translate(46 9)"></path>
-        <path d="M287 9h59v18.5h-31v9h28v17.1h-28v11H347V65h-60V9z"></path>
+        <path d="M8 84V20h56c23 0 37 12 37 31 0 14-8 24-21 28l25 39H72L52 84H39v34H8zm31-26h22c11 0 18-6 18-16 0-11-7-16-18-16H39v32z"></path>
+        <path d="M262 106c-18 0-33-5-45-15l13-19c9 8 21 12 33 12 13 0 21-5 21-13 0-7-5-11-17-15l-19-6c-20-6-31-18-31-35 0-23 20-39 49-39 18 0 33 5 45 16l-13 19c-9-7-18-11-30-11-11 0-18 5-18 13 0 7 6 11 18 15l18 6c21 7 31 18 31 35 0 24-19 38-55 38z"></path>
+        <path d="M352 20h97v25h-66v18h59v24h-59v31h-31V20z"></path>
       </g>
-      <g>
-        <rect x="107" y="4" width="23" height="66" fill="#023046"></rect>
-        <rect x="107" y="8" width="12" height="5" fill="#549db8"></rect>
-        <rect x="107" y="19" width="12" height="5" fill="#549db8"></rect>
-        <rect x="107" y="30" width="12" height="5" fill="#549db8"></rect>
-        <rect x="107" y="41" width="12" height="5" fill="#549db8"></rect>
-        <rect x="107" y="52" width="12" height="5" fill="#549db8"></rect>
-        <rect x="107" y="63" width="12" height="5" fill="#549db8"></rect>
+      <g transform="translate(135 12)">
+        <rect x="28" y="0" width="33" height="96" fill="#023046"></rect>
+        <rect x="0" y="0" width="28" height="96" fill="#549db8"></rect>
+        <rect x="1" y="8" width="26" height="6" fill="#ffffff"></rect>
+        <rect x="1" y="24" width="26" height="6" fill="#ffffff"></rect>
+        <rect x="1" y="40" width="26" height="6" fill="#ffffff"></rect>
+        <rect x="1" y="56" width="26" height="6" fill="#ffffff"></rect>
+        <rect x="1" y="72" width="26" height="6" fill="#ffffff"></rect>
       </g>
+      <line x1="8" y1="116" x2="512" y2="116" stroke="#549db8" stroke-width="4"></line>
     </svg>
   `;
 }
 
+function sortedUsers(users){
+  return [...users].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function managerUsers(){
+  return sortedUsers(STATE.users.filter(user => user.role === 'manager' || user.role === 'admin'));
+}
+
+function communityChoices(){
+  return [...new Set([
+    ...COMMUNITY_OPTIONS,
+    ...STATE.employees.map(employee => employee.community).filter(Boolean),
+    ...STATE.users.filter(user => user.scopeType === 'community').map(user => user.scopeValue).filter(Boolean)
+  ])].sort((left, right) => left.localeCompare(right));
+}
+
+function managerName(managerId){
+  const user = STATE.users.find(item => item.id === managerId);
+  return user ? user.name : '';
+}
+
+function assignableManagers(){
+  if(!STATE.currentUser) return [];
+  return STATE.currentUser.role === 'admin'
+    ? managerUsers()
+    : managerUsers().filter(user => user.id === STATE.currentUser.id);
+}
+
+function renderManagerOptions(selectedId, blankLabel, list){
+  const users = list || assignableManagers();
+  return [
+    `<option value="">${blankLabel || 'Select manager'}</option>`,
+    ...users.map(user => `<option value="${user.id}" ${user.id === selectedId ? 'selected' : ''}>${escapeHtml(user.name)}</option>`)
+  ].join('');
+}
+
+function resolveManagerId(rawId, rawName){
+  const byId = normalizeComparable(rawId);
+  if(byId){
+    const idMatch = STATE.users.find(user => normalizeComparable(user.id) === byId);
+    if(idMatch) return idMatch.id;
+  }
+
+  const byName = normalizeComparable(rawName);
+  if(byName){
+    const nameMatch = STATE.users.find(user => {
+      const name = normalizeComparable(user.name);
+      return name === byName || name.replace(/\s+/g, '_') === byName;
+    });
+    if(nameMatch) return nameMatch.id;
+  }
+
+  return '';
+}
+
+function currentDefaultRegion(){
+  return STATE.currentUser && STATE.currentUser.scopeType === 'region' ? STATE.currentUser.scopeValue : '';
+}
+
+function currentDefaultCommunity(){
+  return STATE.currentUser && STATE.currentUser.scopeType === 'community' ? STATE.currentUser.scopeValue : '';
+}
+
+function generateUserIdFromName(name, excludeId){
+  const base = normalizeComparable(name).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'manager';
+  let candidate = base;
+  let counter = 2;
+  while(STATE.users.some(user => user.id === candidate && user.id !== excludeId)){
+    candidate = `${base}_${counter}`;
+    counter += 1;
+  }
+  return candidate;
+}
+
+function isPasscodeTaken(passcode, excludeId){
+  return STATE.users.some(user => user.pin === passcode && user.id !== excludeId);
+}
+
+function userScopeLabel(user){
+  if(!user) return 'No access';
+  if(user.role === 'admin' || user.scopeType === 'all') return 'All employees';
+  if(user.scopeType === 'manager_only') return 'Assigned employees only';
+  if(user.scopeType === 'region') return REGIONS[user.scopeValue] ? `Area: ${REGIONS[user.scopeValue].name}` : 'Area access';
+  if(user.scopeType === 'community') return user.scopeValue ? `Community: ${user.scopeValue}` : 'Community access';
+  return 'Restricted access';
+}
+
+function canUserAccessEmployee(user, employee){
+  if(!user || !employee) return false;
+  if(user.role === 'admin' || user.scopeType === 'all') return true;
+  if(employee.managerId && employee.managerId === user.id) return true;
+  if(user.scopeType === 'manager_only') return false;
+  if(user.scopeType === 'region') return Boolean(user.scopeValue) && employee.region === user.scopeValue;
+  if(user.scopeType === 'community') return Boolean(user.scopeValue) && normalizeComparable(employee.community) === normalizeComparable(user.scopeValue);
+  return false;
+}
+
+function canUserAccessPlan(user, plan){
+  const employee = STATE.employees.find(item => item.id === (plan ? plan.employeeId : ''));
+  return canUserAccessEmployee(user, employee);
+}
+
+function visibleEmployees(){
+  return STATE.currentUser ? STATE.employees.filter(employee => canUserAccessEmployee(STATE.currentUser, employee)) : [];
+}
+
+function visiblePlans(){
+  return STATE.currentUser ? STATE.plans.filter(plan => canUserAccessPlan(STATE.currentUser, plan)) : [];
+}
+
 function getEmployee(id){
-  return STATE.employees.find(emp => emp.id === id);
+  const employee = STATE.employees.find(emp => emp.id === id);
+  if(employee && STATE.currentUser && !canUserAccessEmployee(STATE.currentUser, employee)) return null;
+  return employee;
 }
 
 function getPlan(id){
-  return STATE.plans.find(plan => plan.id === id);
+  const plan = STATE.plans.find(item => item.id === id);
+  if(plan && STATE.currentUser && !canUserAccessPlan(STATE.currentUser, plan)) return null;
+  return plan;
 }
 
 function activePlans(){
-  return STATE.plans.filter(plan => plan.status === 'active');
+  return visiblePlans().filter(plan => plan.status === 'active');
 }
 
 function trackedPlans(){
-  return STATE.plans.filter(plan => plan.status !== 'archived');
+  return visiblePlans().filter(plan => plan.status !== 'archived');
 }
 
 function planLabel(plan){
@@ -485,29 +770,99 @@ function getUpcomingMeetings(){
 
 function render(){
   const app = document.getElementById('app');
-  app.innerHTML = `
+  if(!STATE.currentUser){
+    app.innerHTML = renderLogin();
+    return;
+  }
+  if(UI.currentView === 'settings' && STATE.currentUser.role !== 'admin'){
+    UI.currentView = 'dashboard';
+  }
+  app.innerHTML = renderShell();
+}
+
+function renderLogin(){
+  return `
+    <div class="login-shell">
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="brand-mark">${riseWordmark()}</div>
+          <div>
+            <div class="login-title">Performance Platform</div>
+            <div class="login-sub">Secure coaching, PIP, and roster management</div>
+          </div>
+        </div>
+        <div class="alert alert-info">Enter your assigned passcode to unlock only the employees and plans mapped to your scope.</div>
+        <div class="form-grid cols-2" style="margin-top:14px">
+          <div style="grid-column:1/-1">
+            <label>Passcode</label>
+            <input id="li-passcode" type="password" inputmode="numeric" placeholder="Enter passcode" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+          </div>
+        </div>
+        <div id="li-err" class="alert alert-danger hidden" style="margin-top:14px">Invalid passcode.</div>
+        <div class="inline" style="margin-top:18px;justify-content:space-between">
+          <div class="small muted">Passcodes and scope assignments are managed by an admin inside Settings.</div>
+          <button class="btn btn-primary" onclick="doLogin()">Unlock</button>
+        </div>
+        <div class="login-note">
+          This static-site unlock screen is a privacy gate, not true server-backed security. Use the admin account to create manager passcodes, assign access by employee assignment, area, or community, and keep visibility limited to the right teams on trusted devices.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function doLogin(){
+  const passcode = String(document.getElementById('li-passcode').value || '').trim();
+  const matches = passcode ? STATE.users.filter(user => user.pin === passcode) : [];
+  if(matches.length === 1){
+    STATE.currentUser = matches[0];
+    if(UI.currentView === 'settings' && STATE.currentUser.role !== 'admin'){
+      UI.currentView = 'dashboard';
+    }
+    render();
+    return;
+  }
+  const errorBox = document.getElementById('li-err');
+  if(errorBox){
+    errorBox.textContent = matches.length > 1
+      ? 'This passcode is assigned to multiple users. Update it in Settings before using it.'
+      : 'Invalid passcode.';
+    errorBox.classList.remove('hidden');
+  }
+}
+
+function renderShell(){
+  const user = STATE.currentUser;
+  const navItems = [
+    ['dashboard','Dashboard'],
+    ['plans','Active Plans'],
+    ['newplan','+ New Plan'],
+    ['weekly','Weekly Updates'],
+    ['employees','Employees'],
+    ['export','Weekly Export'],
+    ...(user.role === 'admin' ? [['settings','Settings']] : [])
+  ];
+  return `
     <div class="topbar">
       <div class="topbar-inner">
         <div class="brand">
-          ${riseWordmark()}
+          <div class="brand-mark">${riseWordmark()}</div>
           <div class="brand-copy">
             <strong>Performance Platform</strong>
-            <span>GitHub Pages-ready coaching and PIP dashboard</span>
+            <span>Secure coaching, PIP, and roster management</span>
           </div>
         </div>
         <div class="nav">
-          ${[
-            ['dashboard','Dashboard'],
-            ['plans','Active Plans'],
-            ['newplan','+ New Plan'],
-            ['weekly','Weekly Updates'],
-            ['employees','Employees'],
-            ['export','Weekly Export']
-          ].map(([id,label]) => `<button class="nav-btn ${UI.currentView === id ? 'active' : ''}" onclick="switchView('${id}')">${label}</button>`).join('')}
+          ${navItems.map(([id,label]) => `<button class="nav-btn ${UI.currentView === id ? 'active' : ''}" onclick="switchView('${id}')">${label}</button>`).join('')}
         </div>
         <div class="toolbar">
-          <button class="btn btn-soft btn-sm" onclick="seedDemoData()">Load Demo Data</button>
-          <button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset Data</button>
+          ${user.role === 'admin' ? `<button class="btn btn-soft btn-sm" onclick="seedDemoData()">Load Demo Data</button><button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset Data</button>` : ''}
+          <div class="user-meta">
+            <span class="badge ${user.role === 'admin' ? 'badge-admin' : 'badge-soft'}">${user.role === 'admin' ? 'Admin' : 'Manager'}</span>
+            <span class="badge badge-soft">${escapeHtml(userScopeLabel(user))}</span>
+            <span class="small muted">${escapeHtml(user.name)}</span>
+            <button class="btn btn-soft btn-sm" onclick="logout()">Lock</button>
+          </div>
         </div>
       </div>
     </div>
@@ -523,12 +878,19 @@ function switchView(view){
   render();
 }
 
+function logout(){
+  STATE.currentUser = null;
+  UI.currentView = 'dashboard';
+  render();
+}
+
 function renderView(){
   if(UI.currentView === 'plans') return renderPlans();
   if(UI.currentView === 'newplan') return renderNewPlan();
   if(UI.currentView === 'weekly') return renderWeekly();
   if(UI.currentView === 'employees') return renderEmployees();
   if(UI.currentView === 'export') return renderExport();
+  if(UI.currentView === 'settings') return renderSettings();
   return renderDashboard();
 }
 
@@ -538,6 +900,7 @@ function renderDashboard(){
   const shopOrdered = plans.filter(plan => plan.status === 'shop_ordered');
   const upcoming = getUpcomingMeetings().slice(0,8);
   const attention = active.filter(plan => getPlanAlerts(plan).length);
+  const employees = visibleEmployees();
 
   return `
     <div class="page">
@@ -553,8 +916,8 @@ function renderDashboard(){
         </div>
         <div class="card stat-card">
           <div class="label">Employees</div>
-          <div class="value">${STATE.employees.length}</div>
-          <div class="sub">Roster loaded into the page</div>
+          <div class="value">${employees.length}</div>
+          <div class="sub">Employees in your access scope</div>
         </div>
         <div class="card stat-card">
           <div class="label">Needs Attention</div>
@@ -622,7 +985,7 @@ function renderDashboard(){
 
 function renderPlans(){
   const tabs = ['active','shop_ordered','completed','archived','all'];
-  const filtered = STATE.plans.filter(plan => {
+  const filtered = visiblePlans().filter(plan => {
     if(UI.planFilter === 'all') return true;
     return plan.status === UI.planFilter;
   });
@@ -704,8 +1067,73 @@ function setPlanFilter(filter){
   render();
 }
 
+function formatActionItemsForTextarea(items){
+  return (items || [])
+    .map(item => `${item.area || 'General'} | ${item.text || ''}`.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function renderSourceStatus(kind){
+  const tone = kind === 'shop' ? UI.newPlanDraft.shopTone : UI.newPlanDraft.planTone;
+  const summary = kind === 'shop' ? UI.newPlanDraft.shopSummary : UI.newPlanDraft.planSummary;
+  const error = kind === 'shop' ? UI.newPlanDraft.shopError : UI.newPlanDraft.planError;
+  const defaultMessage = kind === 'shop'
+    ? 'Upload a shop report in PDF, DOCX, or TXT format to auto-fill the score fields below.'
+    : 'Upload an existing coaching or PIP plan in PDF, DOCX, or TXT format to load action items into this plan.';
+  const alertClass = tone === 'danger'
+    ? 'alert-danger'
+    : tone === 'warn'
+      ? 'alert-warn'
+      : tone === 'success'
+        ? 'alert-success'
+        : 'alert-info';
+
+  if(error){
+    return `<div class="alert alert-danger">${escapeHtml(error)}</div>`;
+  }
+  return `<div class="alert ${alertClass}">${escapeHtml(summary || defaultMessage)}</div>`;
+}
+
+function renderImportedActionPreview(){
+  if(!UI.newPlanDraft.extractedActionItems.length){
+    return `
+      <div class="history-card">
+        <h4>Imported action items</h4>
+        <div class="small muted">No uploaded coaching or PIP plan has been parsed yet. You can still type or paste items manually.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="history-card">
+      <h4>${UI.newPlanDraft.extractedActionItems.length} imported action item${UI.newPlanDraft.extractedActionItems.length === 1 ? '' : 's'}</h4>
+      <div class="stack" style="margin-top:10px">
+        ${UI.newPlanDraft.extractedActionItems.slice(0,6).map((item, index) => `
+          <div class="small">
+            <strong>${index + 1}. ${escapeHtml(item.area || 'General')}</strong><br>
+            <span class="muted">${escapeHtml(item.text)}</span>
+          </div>
+        `).join('')}
+        ${UI.newPlanDraft.extractedActionItems.length > 6 ? `<div class="tiny muted">+ ${UI.newPlanDraft.extractedActionItems.length - 6} more items loaded into the action-items box.</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function syncNewPlanDraftToDom(){
+  const shopStatus = document.getElementById('np-shop-source-status');
+  const planStatus = document.getElementById('np-plan-source-status');
+  const preview = document.getElementById('np-imported-items-preview');
+  if(shopStatus) shopStatus.innerHTML = renderSourceStatus('shop');
+  if(planStatus) planStatus.innerHTML = renderSourceStatus('plan');
+  if(preview) preview.innerHTML = renderImportedActionPreview();
+}
+
 function renderNewPlan(){
-  const managerDefault = 'Manager Name';
+  const employees = visibleEmployees();
+  const managerDefault = STATE.currentUser ? STATE.currentUser.name : 'Manager Name';
+  const importedItemsText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
   return `
     <div class="page">
       <div class="grid-2-equal">
@@ -713,16 +1141,16 @@ function renderNewPlan(){
           <div class="section-title">
             <div>
               <h2>New coaching or PIP plan</h2>
-              <p>Create a plan, define review timing, and load action items for weekly tracking.</p>
+              <p>Upload source documents, fill scores, and generate the final coaching or PIP output from one page.</p>
             </div>
           </div>
 
           <div class="form-grid cols-2">
             <div>
               <label>Employee</label>
-              <select id="np-employee">
+              <select id="np-employee" onchange="syncNewPlanManager()">
                 <option value="">Select employee</option>
-                ${STATE.employees.map(emp => `<option value="${emp.id}">${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
+                ${employees.map(emp => `<option value="${emp.id}">${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
               </select>
             </div>
             <div>
@@ -731,12 +1159,30 @@ function renderNewPlan(){
             </div>
           </div>
 
+          <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
+            <div class="section-title" style="margin-bottom:10px">
+              <div>
+                <h2 style="font-size:16px">Shop document upload</h2>
+                <p>Bring in a shop report to auto-fill the scorecard used for plan setup.</p>
+              </div>
+            </div>
+            <div class="file-box">
+              <strong>${UI.newPlanDraft.shopSourceFileName ? escapeHtml(UI.newPlanDraft.shopSourceFileName) : 'Choose shop report'}</strong>
+              <div class="small muted">PDF, DOCX, or TXT</div>
+              <div style="margin-top:12px">
+                <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handleShopSourceUpload(event)">
+              </div>
+            </div>
+            <div id="np-shop-source-status" style="margin-top:12px">${renderSourceStatus('shop')}</div>
+          </div>
+
           <div style="margin-top:14px">
             <label>Plan type</label>
             <div class="pill-row" style="margin-top:6px">
-              <button class="pill ${UI.newPlanType === 'coaching' ? 'active' : ''}" onclick="setNewPlanType('coaching')">Coaching</button>
-              <button class="pill ${UI.newPlanType === 'pip' ? 'active' : ''}" onclick="setNewPlanType('pip')">PIP</button>
+              <button id="np-type-coaching" class="pill ${UI.newPlanType === 'coaching' ? 'active' : ''}" onclick="setNewPlanType('coaching')">Coaching</button>
+              <button id="np-type-pip" class="pill ${UI.newPlanType === 'pip' ? 'active' : ''}" onclick="setNewPlanType('pip')">PIP</button>
             </div>
+            <div id="np-type-guidance" class="small muted" style="margin-top:8px">Scores under 60% suggest a PIP. Scores under 84% suggest a coaching plan.</div>
           </div>
 
           <div class="form-grid cols-3" style="margin-top:14px">
@@ -759,7 +1205,7 @@ function renderNewPlan(){
           </div>
 
           <div class="form-grid cols-4" style="margin-top:14px">
-            <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1"></div>
+            <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
             <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1"></div>
             <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1"></div>
             <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1"></div>
@@ -774,8 +1220,25 @@ function renderNewPlan(){
         <div class="card">
           <div class="section-title">
             <div>
-              <h2>Action items and completion trigger</h2>
-              <p>Enter one action item per line. Use <span class="mono">Area | Action item</span> to group items in exports.</p>
+              <h2>PIP / coaching plan upload</h2>
+              <p>Restore the missing generator workflow by uploading an existing plan to pull action items directly into this form.</p>
+            </div>
+          </div>
+
+          <div class="file-box">
+            <strong>${UI.newPlanDraft.planSourceFileName ? escapeHtml(UI.newPlanDraft.planSourceFileName) : 'Choose plan document'}</strong>
+            <div class="small muted">PDF, DOCX, or TXT</div>
+            <div style="margin-top:12px">
+              <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handlePlanSourceUpload(event)">
+            </div>
+          </div>
+          <div id="np-plan-source-status" style="margin-top:12px">${renderSourceStatus('plan')}</div>
+          <div id="np-imported-items-preview" style="margin-top:12px">${renderImportedActionPreview()}</div>
+
+          <div class="section-title" style="margin-top:18px">
+            <div>
+              <h2 style="font-size:16px">Action items and completion trigger</h2>
+              <p>Enter one item per line. Use <span class="mono">Area | Action item</span> to group items in exports.</p>
             </div>
           </div>
 
@@ -794,11 +1257,12 @@ function renderNewPlan(){
 
           <div style="margin-bottom:14px">
             <label>Action items</label>
-            <textarea id="np-items" placeholder="Telephone | Develop a written call opening script&#10;On-Site | Close every tour with a direct application ask&#10;Follow-Up | Send same-day follow-up after each tour"></textarea>
+            <textarea id="np-items" placeholder="Telephone | Develop a written call opening script&#10;On-Site | Close every tour with a direct application ask&#10;Follow-Up | Send same-day follow-up after each tour">${escapeHtml(importedItemsText)}</textarea>
           </div>
 
           <div class="inline">
             <button class="btn btn-primary" onclick="createPlan()">Save plan</button>
+            <button class="btn btn-accent" onclick="createPlanAndOpenDocument()">Save plan + open document</button>
             <button class="btn btn-soft" onclick="previewNewPlan()">Preview summary</button>
           </div>
           <div id="new-plan-preview" style="margin-top:14px"></div>
@@ -810,7 +1274,12 @@ function renderNewPlan(){
 
 function setNewPlanType(type){
   UI.newPlanType = type;
-  render();
+  const coaching = document.getElementById('np-type-coaching');
+  const pip = document.getElementById('np-type-pip');
+  if(coaching && pip){
+    coaching.classList.toggle('active', type === 'coaching');
+    pip.classList.toggle('active', type === 'pip');
+  }
 }
 
 function applyTimeline(){
@@ -818,9 +1287,44 @@ function applyTimeline(){
   document.getElementById('np-review-date').value = addDays(today(), days);
 }
 
+function syncNewPlanManager(){
+  const employee = getEmployee(document.getElementById('np-employee').value);
+  const managerField = document.getElementById('np-manager');
+  if(!managerField) return;
+  const assignedManager = employee && employee.managerId ? STATE.users.find(user => user.id === employee.managerId) : null;
+  if(assignedManager){
+    managerField.value = assignedManager.name;
+    return;
+  }
+  if(!managerField.value.trim() && STATE.currentUser){
+    managerField.value = STATE.currentUser.name;
+  }
+}
+
+function updatePlanTypeSuggestion(autoSelect){
+  const guidance = document.getElementById('np-type-guidance');
+  const overall = numberOrNull('np-overall');
+  if(overall == null){
+    if(guidance) guidance.textContent = 'Scores under 60% suggest a PIP. Scores under 84% suggest a coaching plan.';
+    return;
+  }
+  if(overall < 60){
+    if(autoSelect) setNewPlanType('pip');
+    if(guidance) guidance.innerHTML = '<strong>PIP recommended.</strong> Overall score is below 60%.';
+    return;
+  }
+  if(overall < 84){
+    if(autoSelect) setNewPlanType('coaching');
+    if(guidance) guidance.innerHTML = '<strong>Coaching recommended.</strong> Overall score is below the 84% benchmark.';
+    return;
+  }
+  if(guidance) guidance.innerHTML = '<strong>Score meets benchmark.</strong> You can still keep coaching or PIP selected manually if needed.';
+}
+
 function previewNewPlan(){
   const employee = getEmployee(document.getElementById('np-employee').value);
   const items = parseActionItems(document.getElementById('np-items').value);
+  const effectiveItems = items.length ? items : UI.newPlanDraft.extractedActionItems;
   const box = document.getElementById('new-plan-preview');
   if(!employee){
     box.innerHTML = '<div class="alert alert-danger">Select an employee first.</div>';
@@ -829,24 +1333,30 @@ function previewNewPlan(){
   box.innerHTML = `
     <div class="alert alert-info">
       <strong>${employee.name}</strong> · ${UI.newPlanType.toUpperCase()} · Review ${formatDate(document.getElementById('np-review-date').value)}<br>
-      ${items.length} action items loaded · Updated shop required: ${document.getElementById('np-requires-shop').checked ? 'Yes' : 'No'}
+      ${effectiveItems.length} action items loaded · Updated shop required: ${document.getElementById('np-requires-shop').checked ? 'Yes' : 'No'}
     </div>
   `;
 }
 
-function createPlan(){
+function buildPlanFromForm(){
   const employeeId = document.getElementById('np-employee').value;
+  const employee = getEmployee(employeeId);
   if(!employeeId){
     alert('Select an employee before saving the plan.');
-    return;
+    return null;
   }
   const reviewDate = document.getElementById('np-review-date').value;
   if(!reviewDate){
     alert('Enter a review date.');
-    return;
+    return null;
   }
 
-  const plan = {
+  const manualItems = parseActionItems(document.getElementById('np-items').value);
+  const actionItems = manualItems.length
+    ? manualItems
+    : UI.newPlanDraft.extractedActionItems.map(item => ({area:item.area || 'General', text:item.text || ''}));
+
+  return {
     id: genId(),
     employeeId,
     type: UI.newPlanType,
@@ -854,7 +1364,7 @@ function createPlan(){
     shopDate: document.getElementById('np-shop-date').value,
     reviewDate,
     createdAt: today(),
-    manager: document.getElementById('np-manager').value.trim() || 'Manager Name',
+    manager: document.getElementById('np-manager').value.trim() || (employee && employee.managerId ? (STATE.users.find(user => user.id === employee.managerId) || {}).name : '') || 'Manager Name',
     notes: document.getElementById('np-notes').value.trim(),
     overallScore: numberOrNull('np-overall'),
     telScore: numberOrNull('np-telephone'),
@@ -863,80 +1373,457 @@ function createPlan(){
     greetScore: numberOrNull('np-greeting'),
     needsScore: numberOrNull('np-needs'),
     demoScore: numberOrNull('np-demo-closing'),
-    actionItems: parseActionItems(document.getElementById('np-items').value),
+    actionItems,
     weeklyUpdates: [],
     meetings: [],
     consequences: UI.newPlanType === 'pip',
-    requiresUpdatedShop: document.getElementById('np-requires-shop').checked
+    requiresUpdatedShop: document.getElementById('np-requires-shop').checked,
+    shopSourceName: UI.newPlanDraft.shopSourceFileName || '',
+    planSourceName: UI.newPlanDraft.planSourceFileName || ''
   };
+}
 
+function createPlan(openDocument){
+  const plan = buildPlanFromForm();
+  if(!plan) return;
   STATE.plans.push(plan);
-  saveState();
   UI.currentView = 'plans';
+  saveState();
+  if(openDocument) exportPlanDocument(plan.id);
+  UI.newPlanType = 'coaching';
+  UI.newPlanDraft = makeNewPlanDraft();
   render();
 }
 
+function createPlanAndOpenDocument(){
+  createPlan(true);
+}
+
 function numberOrNull(id){
-  const value = document.getElementById(id).value;
+  const field = document.getElementById(id);
+  if(!field) return null;
+  const value = field.value;
   return value === '' ? null : Number(value);
 }
 
+function collapseWhitespace(value){
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeDocumentText(text){
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+async function extractTextFromFile(file){
+  const extension = (file.name.split('.').pop() || '').toLowerCase();
+  if(extension === 'pdf') return extractPdfText(file);
+  if(extension === 'docx') return extractDocxText(file);
+  if(extension === 'txt' || extension === 'text') return normalizeDocumentText(await file.text());
+  throw new Error('Use a PDF, DOCX, or TXT file for source uploads.');
+}
+
+async function extractPdfText(file){
+  if(!window.pdfjsLib) throw new Error('PDF parsing support did not load.');
+  const buffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({data:buffer}).promise;
+  const pages = [];
+  for(let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1){
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const lines = [];
+    let currentLine = [];
+    let lastY = null;
+    content.items.forEach(item => {
+      const y = item.transform[5];
+      if(lastY !== null && Math.abs(y - lastY) > 3 && currentLine.length){
+        lines.push(currentLine.join(' '));
+        currentLine = [];
+      }
+      currentLine.push(item.str);
+      lastY = y;
+    });
+    if(currentLine.length) lines.push(currentLine.join(' '));
+    pages.push(lines.map(collapseWhitespace).filter(Boolean).join('\n'));
+  }
+  return normalizeDocumentText(pages.join('\n\n'));
+}
+
+async function extractDocxText(file){
+  if(!window.mammoth || !window.mammoth.extractRawText) throw new Error('DOCX parsing support did not load.');
+  const buffer = await file.arrayBuffer();
+  const result = await window.mammoth.extractRawText({arrayBuffer:buffer});
+  return normalizeDocumentText(result.value);
+}
+
+function splitDocumentLines(text){
+  return normalizeDocumentText(text)
+    .split(/\n+/)
+    .map(collapseWhitespace)
+    .filter(Boolean);
+}
+
+function pickClosestScore(segment, alias){
+  const matches = [...String(segment || '').matchAll(/\b(\d{1,3}(?:\.\d+)?)\s*%?\b/g)]
+    .map(match => ({value:Number(match[1]), index:match.index || 0}))
+    .filter(item => item.value >= 0 && item.value <= 100);
+  if(!matches.length) return null;
+
+  const aliasIndex = String(segment || '').toLowerCase().indexOf(alias.toLowerCase());
+  if(aliasIndex === -1) return matches[0].value;
+
+  matches.sort((left, right) => Math.abs(left.index - aliasIndex) - Math.abs(right.index - aliasIndex));
+  return matches[0].value;
+}
+
+function findLabelledScore(text, aliases){
+  const lines = splitDocumentLines(text);
+  const flat = lines.join(' \n ');
+  for(const alias of aliases){
+    const aliasWords = alias.toLowerCase().split(/\s+/).filter(Boolean);
+    for(let index = 0; index < lines.length; index += 1){
+      const segment = [lines[index], lines[index + 1] || ''].join(' ');
+      const lower = segment.toLowerCase();
+      if(aliasWords.every(word => lower.includes(word))){
+        const score = pickClosestScore(segment, alias);
+        if(score != null) return score;
+      }
+    }
+    if(flat.toLowerCase().includes(alias.toLowerCase())){
+      const score = pickClosestScore(flat, alias);
+      if(score != null) return score;
+    }
+  }
+  return null;
+}
+
+function toIsoDate(raw){
+  const cleaned = String(raw || '').trim().replace(/\./g, '/');
+  if(/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(cleaned)){
+    const parts = cleaned.split(/[/-]/);
+    const month = parts[0].padStart(2, '0');
+    const day = parts[1].padStart(2, '0');
+    const year = (parts[2].length === 2 ? '20' + parts[2] : parts[2]).padStart(4, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const parsed = new Date(cleaned);
+  if(Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0,10);
+}
+
+function parseShopDateFromText(text){
+  const patterns = [
+    /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g,
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b/ig
+  ];
+  for(const pattern of patterns){
+    const match = String(text || '').match(pattern);
+    if(match && match[0]){
+      return toIsoDate(match[0]);
+    }
+  }
+  return '';
+}
+
+function parseShopScoresFromText(text){
+  const scores = {shopDate: parseShopDateFromText(text)};
+  SHOP_SCORE_FIELDS.forEach(field => {
+    scores[field.key] = findLabelledScore(text, field.aliases);
+  });
+  return scores;
+}
+
+function applyShopScores(scores){
+  SHOP_SCORE_FIELDS.forEach(field => {
+    if(scores[field.key] == null) return;
+    const input = document.getElementById(field.inputId);
+    if(input) input.value = scores[field.key];
+  });
+  if(scores.shopDate){
+    const shopDate = document.getElementById('np-shop-date');
+    if(shopDate) shopDate.value = scores.shopDate;
+  }
+  updatePlanTypeSuggestion(true);
+}
+
+async function handleShopSourceUpload(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+
+  UI.newPlanDraft.shopSourceFileName = file.name;
+  UI.newPlanDraft.shopSummary = 'Reading uploaded shop report...';
+  UI.newPlanDraft.shopError = '';
+  UI.newPlanDraft.shopTone = 'info';
+  syncNewPlanDraftToDom();
+
+  try{
+    const text = await extractTextFromFile(file);
+    const scores = parseShopScoresFromText(text);
+    applyShopScores(scores);
+    const filled = SHOP_SCORE_FIELDS.filter(field => scores[field.key] != null);
+    if(filled.length){
+      UI.newPlanDraft.shopSummary = `${file.name} filled ${filled.length} score field${filled.length === 1 ? '' : 's'}${scores.shopDate ? ' and the shop date' : ''}.`;
+      UI.newPlanDraft.shopTone = 'success';
+    }else{
+      UI.newPlanDraft.shopSummary = `${file.name} uploaded, but no shop scores were confidently detected. You can still finish the scorecard manually.`;
+      UI.newPlanDraft.shopTone = 'warn';
+    }
+  }catch(error){
+    UI.newPlanDraft.shopError = `Could not read ${file.name}. ${error.message}`;
+    UI.newPlanDraft.shopSummary = '';
+    UI.newPlanDraft.shopTone = 'danger';
+  }
+
+  syncNewPlanDraftToDom();
+  event.target.value = '';
+}
+
+function detectActionArea(text){
+  const lower = normalizeDocumentText(text).toLowerCase();
+  let bestArea = 'General';
+  let bestIndex = -1;
+  ACTION_ITEM_AREA_RULES.forEach(rule => {
+    rule.labels.forEach(label => {
+      const index = lower.lastIndexOf(label);
+      if(index > bestIndex){
+        bestIndex = index;
+        bestArea = rule.area;
+      }
+    });
+  });
+  return bestArea;
+}
+
+function dedupeActionItems(items){
+  const seen = new Set();
+  return items.filter(item => {
+    const area = collapseWhitespace(item.area || 'General') || 'General';
+    const text = collapseWhitespace(item.text || '');
+    if(text.length < 8) return false;
+    const key = `${area.toLowerCase()}|${text.toLowerCase()}`;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    item.area = area;
+    item.text = text;
+    return true;
+  });
+}
+
+function extractActionItemsFromText(text){
+  const normalized = normalizeDocumentText(text);
+  const items = [];
+  const blockPattern = /(?:^|\n)\s*(?:\(?\d{1,2}\)?[.)]|[-*•])\s+([\s\S]*?)(?=(?:\n\s*(?:\(?\d{1,2}\)?[.)]|[-*•])\s+)|$)/g;
+  const blockMatches = [...normalized.matchAll(blockPattern)];
+
+  if(blockMatches.length){
+    blockMatches.forEach(match => {
+      const rawText = collapseWhitespace(match[1]);
+      const prefix = normalized.slice(Math.max(0, (match.index || 0) - 240), match.index || 0);
+      if(rawText.length >= 8){
+        items.push({
+          area: detectActionArea(prefix + '\n' + rawText),
+          text: rawText
+        });
+      }
+    });
+    const dedupedBlocks = dedupeActionItems(items);
+    if(dedupedBlocks.length) return dedupedBlocks;
+  }
+
+  const lines = splitDocumentLines(normalized);
+  let currentArea = 'General';
+  let currentItem = null;
+
+  lines.forEach(line => {
+    const area = detectActionArea(line);
+    if(area !== 'General' && line.length <= 90 && !/^\d/.test(line)){
+      currentArea = area;
+      return;
+    }
+
+    const bulletMatch = line.match(/^(?:\(?\d{1,2}\)?[.)]|[-*•])\s+(.+)/);
+    if(bulletMatch){
+      if(currentItem) items.push(currentItem);
+      currentItem = {area: currentArea, text: collapseWhitespace(bulletMatch[1])};
+      return;
+    }
+
+    if(currentItem && line.length <= 220){
+      currentItem.text = collapseWhitespace(`${currentItem.text} ${line}`);
+      return;
+    }
+
+    if(line.length > 30 && /(develop|complete|review|demonstrate|offer|capture|send|provide|schedule|maintain|ask|log|audit|follow)/i.test(line)){
+      items.push({area: currentArea, text: line});
+    }
+  });
+
+  if(currentItem) items.push(currentItem);
+  return dedupeActionItems(items);
+}
+
+async function handlePlanSourceUpload(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+
+  UI.newPlanDraft.planSourceFileName = file.name;
+  UI.newPlanDraft.planSummary = 'Reading uploaded coaching / PIP document...';
+  UI.newPlanDraft.planError = '';
+  UI.newPlanDraft.planTone = 'info';
+  syncNewPlanDraftToDom();
+
+  try{
+    const text = await extractTextFromFile(file);
+    const extractedItems = extractActionItemsFromText(text);
+    const previousImportedText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
+    UI.newPlanDraft.extractedActionItems = extractedItems;
+
+    if(extractedItems.length){
+      const nextImportedText = formatActionItemsForTextarea(extractedItems);
+      const textarea = document.getElementById('np-items');
+      if(textarea){
+        const currentValue = textarea.value.trim();
+        if(!currentValue || currentValue === previousImportedText || confirm('Replace the current action items with the ones extracted from the uploaded plan?')){
+          textarea.value = nextImportedText;
+        }
+      }
+      UI.newPlanDraft.planSummary = `${file.name} loaded ${extractedItems.length} action item${extractedItems.length === 1 ? '' : 's'} for the plan generator.`;
+      UI.newPlanDraft.planTone = 'success';
+    }else{
+      UI.newPlanDraft.planSummary = `${file.name} uploaded, but no clear action items were detected. You can still paste or type items manually below.`;
+      UI.newPlanDraft.planTone = 'warn';
+    }
+  }catch(error){
+    UI.newPlanDraft.planError = `Could not read ${file.name}. ${error.message}`;
+    UI.newPlanDraft.planSummary = '';
+    UI.newPlanDraft.planTone = 'danger';
+  }
+
+  syncNewPlanDraftToDom();
+  event.target.value = '';
+}
+
 function renderEmployees(){
+  const employees = visibleEmployees();
+  const isAdmin = STATE.currentUser && STATE.currentUser.role === 'admin';
+  const defaultManagerId = isAdmin ? '' : (STATE.currentUser ? STATE.currentUser.id : '');
+  const defaultRegion = currentDefaultRegion();
+  const defaultCommunity = currentDefaultCommunity();
+
   return `
     <div class="page">
       <div class="grid-2-equal">
         <div class="card">
           <div class="section-title">
             <div>
-              <h2>Add employee</h2>
-              <p>Build the roster that powers plan creation and exports.</p>
+              <h2>Roster upload</h2>
+              <p>Import employee data from CSV or Excel, or use the template below to supplement the live roster.</p>
             </div>
           </div>
-          <div class="form-grid cols-2">
-            <div><label>Full name</label><input id="emp-name"></div>
-            <div><label>Role</label><input id="emp-role" list="role-options"></div>
-          </div>
-          <div class="form-grid cols-2" style="margin-top:12px">
-            <div><label>Community</label><input id="emp-community" list="community-options"></div>
-            <div>
-              <label>Region</label>
-              <select id="emp-region">
-                <option value="">Select region</option>
-                ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}">${value.name}</option>`).join('')}
-              </select>
+          <div class="file-box">
+            <strong>Upload employee roster</strong>
+            <div class="small muted">Accepted columns: Name, Community, Region, Role, Manager, or Manager ID</div>
+            <div style="margin-top:12px">
+              <input id="roster-upload" type="file" accept=".csv,.xlsx,.xls" onchange="handleRosterUpload(event)">
             </div>
           </div>
-          <div style="margin-top:14px">
-            <button class="btn btn-primary" onclick="addEmployee()">Add employee</button>
+          <div id="roster-status" style="margin-top:12px"><div class="alert alert-info">Uploads will add new employees and update matching roster records when the same name/community already exists.</div></div>
+          <div class="inline" style="margin-top:12px">
+            <button class="btn btn-soft" onclick="downloadRosterTemplate()">Download template CSV</button>
           </div>
         </div>
 
         <div class="card">
           <div class="section-title">
             <div>
-              <h2>Roster</h2>
-              <p>${STATE.employees.length} employees currently loaded.</p>
+              <h2>Add employee manually</h2>
+              <p>Assign the manager, area, and community at entry so visibility rules work immediately.</p>
             </div>
           </div>
-          ${STATE.employees.length ? `
-            <div class="stack">
-              ${STATE.employees.map(emp => `
-                <div class="history-card">
-                  <div class="inline" style="justify-content:space-between">
-                    <div>
-                      <strong>${emp.name}</strong>
-                      <div class="small muted">${emp.role || 'No role'} · ${emp.community || 'No community'} · ${REGIONS[emp.region] ? REGIONS[emp.region].short : 'No region'}</div>
-                    </div>
-                    <button class="btn btn-danger btn-sm" onclick="removeEmployee('${emp.id}')">Remove</button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : '<div class="alert alert-info">No employees added yet.</div>'}
+          <div class="form-grid cols-2">
+            <div><label>Full name</label><input id="emp-name" placeholder="First Last"></div>
+            <div><label>Role</label><input id="emp-role" list="role-options" placeholder="Leasing Professional"></div>
+          </div>
+          <div class="form-grid cols-2" style="margin-top:12px">
+            <div><label>Manager</label><select id="emp-manager" ${isAdmin ? '' : 'disabled'}>${renderManagerOptions(defaultManagerId, isAdmin ? 'Select manager' : 'Assigned to you', isAdmin ? managerUsers() : assignableManagers())}</select></div>
+            <div><label>Area / region</label><select id="emp-region">
+              <option value="">Select area</option>
+              ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}" ${defaultRegion === key ? 'selected' : ''}>${value.name}</option>`).join('')}
+            </select></div>
+          </div>
+          <div style="margin-top:12px">
+            <label>Community</label>
+            <input id="emp-community" list="community-options" value="${escapeHtml(defaultCommunity)}" placeholder="Select or type community">
+          </div>
+          <div style="margin-top:14px">
+            <button class="btn btn-primary" onclick="addEmployee()">Add employee</button>
+          </div>
         </div>
       </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>Roster</h2>
+            <p>${employees.length} employee${employees.length === 1 ? '' : 's'} currently visible in your access scope.</p>
+          </div>
+        </div>
+        ${employees.length ? `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Manager</th>
+                  <th>Role</th>
+                  <th>Community</th>
+                  <th>Area</th>
+                  <th>Active Plans</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employees.map(employee => {
+                  const active = visiblePlans().filter(plan => plan.employeeId === employee.id && plan.status === 'active');
+                  return `
+                    <tr>
+                      <td><strong>${escapeHtml(employee.name)}</strong></td>
+                      <td>
+                        <select onchange="updateEmployeeManager('${employee.id}', this.value)" ${isAdmin ? '' : 'disabled'}>
+                          ${renderManagerOptions(employee.managerId || '', isAdmin ? 'Unassigned' : (managerName(employee.managerId) || 'Assigned to you'), isAdmin ? managerUsers() : assignableManagers())}
+                        </select>
+                      </td>
+                      <td><input value="${escapeHtml(employee.role || '')}" list="role-options" onchange="updateEmployeeField('${employee.id}','role', this.value)"></td>
+                      <td><input value="${escapeHtml(employee.community || '')}" list="community-options" onchange="updateEmployeeField('${employee.id}','community', this.value)"></td>
+                      <td>
+                        <select onchange="updateEmployeeRegion('${employee.id}', this.value)">
+                          <option value="">Unassigned</option>
+                          ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}" ${employee.region === key ? 'selected' : ''}>${value.short}</option>`).join('')}
+                        </select>
+                      </td>
+                      <td>
+                        ${active.length ? active.map(plan => `<span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>`).join('') : '<span class="small muted">None</span>'}
+                      </td>
+                      <td>
+                        <div class="inline">
+                          <button class="btn btn-sm btn-soft" onclick="switchView('newplan')">New plan</button>
+                          ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="removeEmployee('${employee.id}')">Remove</button>` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : '<div class="alert alert-info">No employees are currently in your access scope. Add one manually or upload a roster file to get started.</div>'}
+      </div>
+
       <datalist id="role-options">${ROLE_OPTIONS.map(role => `<option value="${role}">`).join('')}</datalist>
-      <datalist id="community-options">${COMMUNITY_OPTIONS.map(community => `<option value="${community}">`).join('')}</datalist>
+      <datalist id="community-options">${communityChoices().map(community => `<option value="${escapeHtml(community)}">`).join('')}</datalist>
     </div>
   `;
 }
@@ -947,27 +1834,165 @@ function addEmployee(){
     alert('Enter the employee name.');
     return;
   }
-  STATE.employees.push({
-    id: genId(),
+
+  const managerField = document.getElementById('emp-manager');
+  const outcome = upsertEmployeeRecord({
     name,
-    role: document.getElementById('emp-role').value.trim(),
-    community: document.getElementById('emp-community').value.trim(),
-    region: document.getElementById('emp-region').value
+    role: document.getElementById('emp-role').value.trim() || 'Leasing Professional',
+    community: document.getElementById('emp-community').value.trim() || currentDefaultCommunity(),
+    region: document.getElementById('emp-region').value || currentDefaultRegion(),
+    managerId: (STATE.currentUser && STATE.currentUser.role !== 'admin') ? STATE.currentUser.id : (managerField ? managerField.value : '')
   });
+
+  saveState();
+  render();
+  alert(outcome === 'updated' ? 'Employee updated from the manual entry form.' : 'Employee added to the roster.');
+}
+
+function findEmployeeMatch(name, community){
+  const normalizedName = normalizeComparable(name);
+  const normalizedCommunity = normalizeComparable(community);
+  return STATE.employees.find(employee => {
+    if(normalizeComparable(employee.name) !== normalizedName) return false;
+    if(normalizedCommunity) return normalizeComparable(employee.community) === normalizedCommunity;
+    return true;
+  });
+}
+
+function upsertEmployeeRecord(record){
+  const normalized = normalizeEmployee(record);
+  const existing = normalized.id ? STATE.employees.find(employee => employee.id === normalized.id) : findEmployeeMatch(normalized.name, normalized.community);
+  if(existing){
+    Object.assign(existing, {
+      ...existing,
+      role: normalized.role || existing.role,
+      community: normalized.community || existing.community,
+      region: normalized.region || existing.region,
+      managerId: normalized.managerId || existing.managerId
+    });
+    return 'updated';
+  }
+  STATE.employees.push(normalized);
+  return 'added';
+}
+
+function inferRegionFromText(value){
+  const raw = normalizeComparable(value);
+  if(raw.includes('west') || raw.includes('central')) return 'west';
+  if(raw.includes('east')) return 'east';
+  if(raw.includes('student')) return 'student';
+  if(raw.includes('valdosta')) return 'valdosta';
+  if(raw.includes('jax')) return 'jax';
+  return '';
+}
+
+function updateEmployeeField(id, field, value){
+  const employee = STATE.employees.find(item => item.id === id);
+  if(!employee || !canUserAccessEmployee(STATE.currentUser, employee)) return;
+  if(field === 'managerId' && STATE.currentUser.role !== 'admin') return;
+  employee[field] = String(value || '').trim();
   saveState();
   render();
 }
 
+function updateEmployeeManager(id, managerId){
+  updateEmployeeField(id, 'managerId', managerId);
+}
+
+function updateEmployeeRegion(id, region){
+  updateEmployeeField(id, 'region', region);
+}
+
 function removeEmployee(id){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
   if(!confirm('Remove this employee from the roster?')) return;
-  STATE.employees = STATE.employees.filter(emp => emp.id !== id);
+  STATE.employees = STATE.employees.filter(employee => employee.id !== id);
   saveState();
   render();
+}
+
+function handleRosterUpload(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+
+  const status = document.getElementById('roster-status');
+  if(status) status.innerHTML = '<div class="alert alert-info">Importing roster file...</div>';
+
+  const reader = new FileReader();
+  reader.onload = function(loadEvent){
+    try{
+      const workbook = XLSX.read(loadEvent.target.result, {type:'binary'});
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+      if(!rows.length){
+        throw new Error('The uploaded file did not contain any rows.');
+      }
+
+      const headers = rows[0].map(header => normalizeComparable(header));
+      const nameIndex = headers.findIndex(header => header.includes('name'));
+      const communityIndex = headers.findIndex(header => header.includes('community'));
+      const roleIndex = headers.findIndex(header => header.includes('role') || header.includes('title'));
+      const regionIndex = headers.findIndex(header => header.includes('region') || header.includes('area'));
+      const managerIdIndex = headers.findIndex(header => header.includes('manager id'));
+      const managerNameIndex = headers.findIndex(header => header === 'manager' || header === 'manager name' || header.includes('assigned manager'));
+
+      if(nameIndex < 0){
+        throw new Error('A Name column is required.');
+      }
+
+      let added = 0;
+      let updated = 0;
+
+      rows.slice(1).forEach(row => {
+        const name = String(row[nameIndex] || '').trim();
+        if(!name) return;
+
+        const community = communityIndex >= 0 ? String(row[communityIndex] || '').trim() : currentDefaultCommunity();
+        const role = roleIndex >= 0 ? String(row[roleIndex] || '').trim() : 'Leasing Professional';
+        const region = regionIndex >= 0 ? inferRegionFromText(row[regionIndex]) : currentDefaultRegion();
+        const managerId = STATE.currentUser.role === 'admin'
+          ? resolveManagerId(managerIdIndex >= 0 ? row[managerIdIndex] : '', managerNameIndex >= 0 ? row[managerNameIndex] : '')
+          : STATE.currentUser.id;
+
+        const outcome = upsertEmployeeRecord({
+          name,
+          community,
+          role,
+          region,
+          managerId
+        });
+        if(outcome === 'added') added += 1;
+        else updated += 1;
+      });
+
+      saveState();
+      render();
+      const nextStatus = document.getElementById('roster-status');
+      if(nextStatus) nextStatus.innerHTML = `<div class="alert alert-success">${added} employee${added === 1 ? '' : 's'} added and ${updated} updated from ${escapeHtml(file.name)}.</div>`;
+    }catch(error){
+      if(status) status.innerHTML = `<div class="alert alert-danger">Upload error: ${escapeHtml(error.message)}</div>`;
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function downloadRosterTemplate(){
+  const csv = [
+    '"Name","Community","Region","Role","Manager"',
+    '"Jane Smith","RISE at Nocatee","west","Leasing Professional","West Manager"',
+    '"John Doe","Pilots Pointe","student","Leasing Manager","Student Manager 1"'
+  ].join('\n');
+  const link = document.createElement('a');
+  link.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  link.download = 'RISE_Roster_Template.csv';
+  link.click();
 }
 
 function renderWeekly(){
   const plans = activePlans();
-  if(!UI.selectedWeeklyPlanId && plans[0]) UI.selectedWeeklyPlanId = plans[0].id;
+  if((UI.selectedWeeklyPlanId && !plans.some(item => item.id === UI.selectedWeeklyPlanId)) || !UI.selectedWeeklyPlanId){
+    UI.selectedWeeklyPlanId = plans[0] ? plans[0].id : null;
+  }
   const plan = getPlan(UI.selectedWeeklyPlanId);
   const employee = plan ? getEmployee(plan.employeeId) : null;
   const schedule = plan ? getSchedule(plan) : [];
@@ -1403,6 +2428,15 @@ function openPlanDetail(planId){
                 ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Download</button>` : ''}
               </div>
             </div>
+            ${(plan.shopSourceName || plan.planSourceName) ? `
+              <div class="history-card">
+                <strong>Plan setup source files</strong>
+                <div class="small muted" style="margin-top:6px">
+                  ${plan.shopSourceName ? `Shop source: ${escapeHtml(plan.shopSourceName)}` : 'Shop source not saved'}<br>
+                  ${plan.planSourceName ? `Plan source: ${escapeHtml(plan.planSourceName)}` : 'Plan source not saved'}
+                </div>
+              </div>
+            ` : ''}
             <div class="history-card">
               <strong>Document output</strong>
               <div class="small muted" style="margin:6px 0 10px">Generate the formal employee plan document in a branded print view.</div>
@@ -1882,6 +2916,266 @@ function exportWeeklyPDF(){
   win.document.close();
 }
 
+function countAdmins(){
+  return STATE.users.filter(user => user.role === 'admin').length;
+}
+
+function renderSettings(){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')){
+    return `
+      <div class="page">
+        <div class="alert alert-danger">Only admins can manage passcode access settings.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="page">
+      <div class="section-title" style="margin-bottom:18px">
+        <div>
+          <h2>Passcode access settings</h2>
+          <p>Create manager passcodes, set their scope, and keep the unlock screen limited to the right roster slice.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openAddUser()">Add access code</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Access</th>
+                <th>Passcode</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sortedUsers(STATE.users).map(user => `
+                <tr>
+                  <td><strong>${escapeHtml(user.name)}</strong></td>
+                  <td><span class="badge ${user.role === 'admin' ? 'badge-admin' : 'badge-active'}">${user.role === 'admin' ? 'Admin' : 'Manager'}</span></td>
+                  <td><span class="badge badge-soft">${escapeHtml(userScopeLabel(user))}</span></td>
+                  <td><span class="mono">••••</span></td>
+                  <td>
+                    <div class="inline">
+                      <button class="btn btn-sm btn-soft" onclick="openEditUser('${user.id}')">Edit</button>
+                      ${user.id !== STATE.currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="removeUser('${user.id}')">Remove</button>` : ''}
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderScopeTypeOptions(selected, role){
+  return ACCESS_SCOPE_OPTIONS.map(option => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''}>${option.label}</option>`).join('');
+}
+
+function toggleUserScopeFields(prefix){
+  const roleField = document.getElementById(`${prefix}-role`);
+  const scopeTypeField = document.getElementById(`${prefix}-scope-type`);
+  const regionWrap = document.getElementById(`${prefix}-region-wrap`);
+  const communityWrap = document.getElementById(`${prefix}-community-wrap`);
+  if(!roleField || !scopeTypeField || !regionWrap || !communityWrap) return;
+
+  if(roleField.value === 'admin'){
+    scopeTypeField.value = 'all';
+    scopeTypeField.disabled = true;
+  }else{
+    scopeTypeField.disabled = false;
+    if(scopeTypeField.value === 'all') scopeTypeField.value = 'manager_only';
+  }
+
+  regionWrap.classList.toggle('hidden', scopeTypeField.value !== 'region');
+  communityWrap.classList.toggle('hidden', scopeTypeField.value !== 'community');
+}
+
+function openAddUser(){
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Add access code</h3>
+      <div class="sub">Create a passcode and define how much of the roster this person can unlock.</div>
+      <div class="form-grid cols-2">
+        <div style="grid-column:1/-1"><label>Full name</label><input id="nu-name"></div>
+      </div>
+      <div class="form-grid cols-2" style="margin-top:12px">
+        <div><label>Passcode</label><input id="nu-pin" type="password" maxlength="12" inputmode="numeric"></div>
+        <div><label>Role</label><select id="nu-role" onchange="toggleUserScopeFields('nu')"><option value="manager">Manager</option><option value="admin">Admin</option></select></div>
+      </div>
+      <div style="margin-top:12px">
+        <label>Access filter</label>
+        <select id="nu-scope-type" onchange="toggleUserScopeFields('nu')">${renderScopeTypeOptions('manager_only','manager')}</select>
+      </div>
+      <div id="nu-region-wrap" class="hidden" style="margin-top:12px">
+        <label>Allowed area / region</label>
+        <select id="nu-scope-region">
+          <option value="">Select area</option>
+          ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}">${value.name}</option>`).join('')}
+        </select>
+      </div>
+      <div id="nu-community-wrap" class="hidden" style="margin-top:12px">
+        <label>Allowed community</label>
+        <input id="nu-scope-community" list="user-community-options" placeholder="Select or type community">
+      </div>
+      <datalist id="user-community-options">${communityChoices().map(community => `<option value="${escapeHtml(community)}">`).join('')}</datalist>
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveNewUser()">Add access code</button>
+      </div>
+    </div>
+  `);
+  toggleUserScopeFields('nu');
+}
+
+function saveNewUser(){
+  const name = String(document.getElementById('nu-name').value || '').trim();
+  const pin = String(document.getElementById('nu-pin').value || '').trim();
+  const role = document.getElementById('nu-role').value;
+  const scopeType = role === 'admin' ? 'all' : document.getElementById('nu-scope-type').value;
+  const scopeValue = scopeType === 'region'
+    ? document.getElementById('nu-scope-region').value
+    : scopeType === 'community'
+      ? String(document.getElementById('nu-scope-community').value || '').trim()
+      : '';
+  const id = generateUserIdFromName(name);
+
+  if(!name || !pin){
+    alert('Name and passcode are required.');
+    return;
+  }
+  if(isPasscodeTaken(pin)){
+    alert('That passcode is already assigned to another user. Use a unique passcode.');
+    return;
+  }
+  if(scopeType === 'region' && !scopeValue){
+    alert('Select an area / region for this user.');
+    return;
+  }
+  if(scopeType === 'community' && !scopeValue){
+    alert('Enter a community for this user.');
+    return;
+  }
+
+  STATE.users.push(normalizeUser({id, name, pin, role, scopeType, scopeValue}));
+  saveState();
+  closeModal();
+  render();
+}
+
+function openEditUser(userId){
+  const user = STATE.users.find(item => item.id === userId);
+  if(!user) return;
+
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Edit access code</h3>
+      <div class="sub">Adjust the passcode, role, or scope for ${escapeHtml(user.name)}.</div>
+      <div class="form-grid cols-2">
+        <div><label>Full name</label><input id="eu-name" value="${escapeHtml(user.name)}"></div>
+        <div><label>System ID</label><input value="${escapeHtml(user.id)}" disabled></div>
+      </div>
+      <div class="form-grid cols-2" style="margin-top:12px">
+        <div><label>New passcode</label><input id="eu-pin" type="password" maxlength="12" inputmode="numeric" placeholder="Leave blank to keep current"></div>
+        <div><label>Role</label><select id="eu-role" onchange="toggleUserScopeFields('eu')"><option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option><option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option></select></div>
+      </div>
+      <div style="margin-top:12px">
+        <label>Access filter</label>
+        <select id="eu-scope-type" onchange="toggleUserScopeFields('eu')">${renderScopeTypeOptions(user.scopeType, user.role)}</select>
+      </div>
+      <div id="eu-region-wrap" class="hidden" style="margin-top:12px">
+        <label>Allowed area / region</label>
+        <select id="eu-scope-region">
+          <option value="">Select area</option>
+          ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}" ${user.scopeType === 'region' && user.scopeValue === key ? 'selected' : ''}>${value.name}</option>`).join('')}
+        </select>
+      </div>
+      <div id="eu-community-wrap" class="hidden" style="margin-top:12px">
+        <label>Allowed community</label>
+        <input id="eu-scope-community" list="user-community-options-edit" value="${user.scopeType === 'community' ? escapeHtml(user.scopeValue) : ''}" placeholder="Select or type community">
+      </div>
+      <datalist id="user-community-options-edit">${communityChoices().map(community => `<option value="${escapeHtml(community)}">`).join('')}</datalist>
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditUser('${user.id}')">Save changes</button>
+      </div>
+    </div>
+  `);
+  toggleUserScopeFields('eu');
+}
+
+function saveEditUser(userId){
+  const user = STATE.users.find(item => item.id === userId);
+  if(!user) return;
+
+  const nextRole = document.getElementById('eu-role').value;
+  if(user.role === 'admin' && nextRole !== 'admin' && countAdmins() === 1){
+    alert('At least one admin account must remain.');
+    return;
+  }
+
+  const scopeType = nextRole === 'admin' ? 'all' : document.getElementById('eu-scope-type').value;
+  const scopeValue = scopeType === 'region'
+    ? document.getElementById('eu-scope-region').value
+    : scopeType === 'community'
+      ? String(document.getElementById('eu-scope-community').value || '').trim()
+      : '';
+
+  if(scopeType === 'region' && !scopeValue){
+    alert('Select an area / region for this user.');
+    return;
+  }
+  if(scopeType === 'community' && !scopeValue){
+    alert('Enter a community for this user.');
+    return;
+  }
+
+  user.name = String(document.getElementById('eu-name').value || '').trim() || user.name;
+  user.role = nextRole;
+  user.scopeType = scopeType;
+  user.scopeValue = scopeValue;
+  const nextPin = String(document.getElementById('eu-pin').value || '').trim();
+  if(nextPin){
+    if(isPasscodeTaken(nextPin, user.id)){
+      alert('That passcode is already assigned to another user. Use a unique passcode.');
+      return;
+    }
+    user.pin = nextPin;
+  }
+  if(user.role === 'admin'){
+    user.scopeType = 'all';
+    user.scopeValue = '';
+  }
+
+  saveState();
+  closeModal();
+  render();
+}
+
+function removeUser(userId){
+  const user = STATE.users.find(item => item.id === userId);
+  if(!user) return;
+  if(user.id === STATE.currentUser.id){
+    alert('Remove a different account or unlock as another admin first.');
+    return;
+  }
+  if(user.role === 'admin' && countAdmins() === 1){
+    alert('At least one admin account must remain.');
+    return;
+  }
+  if(!confirm(`Remove ${user.name}?`)) return;
+  STATE.users = STATE.users.filter(item => item.id !== userId);
+  saveState();
+  render();
+}
+
 function openModal(html){
   document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
 }
@@ -1902,8 +3196,8 @@ function escapeHtml(value){
 function seedDemoData(){
   if(!confirm('Load demo data into this browser? Existing saved data will be kept.')) return;
   if(!STATE.employees.length){
-    const empA = {id:genId(),name:'Brieanna Steed',role:'Leasing Professional',community:'The Preserve at Tech',region:'student'};
-    const empB = {id:genId(),name:'Jordan Alvarez',role:'Leasing Manager',community:'RISE at Nocatee',region:'west'};
+    const empA = {id:genId(),name:'Brieanna Steed',role:'Leasing Professional',community:'The Preserve at Tech',region:'student',managerId:'mgr_student1'};
+    const empB = {id:genId(),name:'Jordan Alvarez',role:'Leasing Manager',community:'RISE at Nocatee',region:'west',managerId:'mgr_west'};
     STATE.employees.push(empA, empB);
     STATE.plans.push({
       id: genId(),
@@ -1974,9 +3268,9 @@ function seedDemoData(){
 }
 
 function resetAllData(){
-  if(!confirm('Clear all saved employees and plans from this browser?')) return;
-  STATE = {employees:[],plans:[],currentView:'dashboard'};
-  UI = {currentView:'dashboard',planFilter:'active',selectedWeeklyPlanId:null,newPlanType:'coaching'};
+  if(!confirm('Clear all saved users, employees, and plans from this browser?')) return;
+  STATE = {users:makeDefaultUsers(),employees:[],plans:[],currentView:'dashboard',currentUser:null};
+  UI = {currentView:'dashboard',planFilter:'active',selectedWeeklyPlanId:null,newPlanType:'coaching',newPlanDraft:makeNewPlanDraft()};
   localStorage.removeItem(STORAGE_KEY);
   render();
 }
