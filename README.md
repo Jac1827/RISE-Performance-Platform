@@ -4,19 +4,29 @@ This repo now includes a GitHub Pages-ready static version of the employee coach
 
 ## What is included
 
+- Published company roster bootstrap from the bundled HR workbook asset
 - Employee roster management
 - Passcode-only privacy gate with admin-managed user scopes and employee visibility filters
 - Coaching and PIP plan creation
 - Admin-managed benchmark criteria that recommend coaching or PIP on the New Plan screen
+- Adjustable MSOE benchmark criteria plus MSOE document upload support on the New Plan screen
 - Client-side shop report and plan-document uploads for PDF/DOCX/TXT score and action-item extraction
 - Shop management page for targeted shop requests plus updated Ellis report uploads/history
 - Employee roster CSV/Excel upload plus manual entry with manager, region, and community assignment
+- Employee profile view with running history, quick document access, and correspondence log shortcuts
+- Regional alert-owner assignment plus bulk roster assignment tools
+- Employee termination tracking with reason/date retention
+- Write-up tracker with running employee history, escalation guidance, and branded export views
+- Write-up editing plus post-save acknowledgement uploads on saved records
+- Write-up generator with support-detail uploads from PDF/DOCX/TXT/EML source files
+- Write-up acknowledgement uploads plus HR/regional alert email triggers when coaching or PIP is recommended
+- HR approval workflow for plans with manager notification drafting and logged approval correspondence
 - Signed plan upload stored in browser local storage
 - Automatic weekly meeting cadence after plan presentation
 - Standard meeting labels plus one-off custom meeting types
 - Weekly updates with action-item review history
 - Plan completion trigger for `Shop Ordered` with a prefilled email to `tea.jihad@risere.com`
-- Weekly Excel export
+- Reporting center with manager/community summaries, filtered Excel/PDF exports, and bulk employee document downloads
 - RISE-branded print view for PDF export
 - Formal employee plan document print view
 
@@ -32,5 +42,6 @@ This repo now includes a GitHub Pages-ready static version of the employee coach
 
 - All dashboard data is stored in the browser with `localStorage`.
 - The passcode screen is a client-side privacy layer for trusted devices, not server-enforced security.
+- When the bundled company roster version changes, the app replaces the saved employee roster and clears saved plans/write-ups because those records are tied to employee IDs.
 - The Tea notification uses `mailto:` because this is a static site with no mail backend.
 - Signed documents are also stored in browser storage, so extremely large files are not recommended.
