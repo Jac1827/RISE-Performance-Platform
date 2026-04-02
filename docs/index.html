@@ -108,6 +108,7 @@
     font-size:30px;
     font-weight:800;
     line-height:1;
+    cursor:pointer;
   }
   .stat-link:hover{text-decoration:underline}
   .profile-link{
@@ -1542,9 +1543,8 @@ function doLogin(){
   const matches = passcode ? STATE.users.filter(user => user.pin === passcode) : [];
   if(matches.length === 1){
     STATE.currentUser = matches[0];
-    if(UI.currentView === 'settings' && STATE.currentUser.role !== 'admin'){
-      UI.currentView = 'dashboard';
-    }
+    UI.currentView = 'dashboard';
+    saveState();
     render();
     return;
   }
@@ -1643,17 +1643,17 @@ function renderDashboard(){
       <div class="stats">
         <div class="card stat-card">
           <div class="label">Active Plans</div>
-          <div class="value">${active.length}</div>
+          <div><button class="stat-link" onclick="openDashboardPlanQueue('active')">${active.length}</button></div>
           <div class="sub">Open coaching and PIP plans</div>
         </div>
         <div class="card stat-card">
           <div class="label">Employees</div>
-          <div class="value">${employees.length}</div>
+          <div><button class="stat-link" onclick="openDashboardEmployees()">${employees.length}</button></div>
           <div class="sub">Employees in your access scope</div>
         </div>
         <div class="card stat-card">
           <div class="label">Needs Attention</div>
-          <div class="value">${attention.length}</div>
+          <div><button class="stat-link" onclick="openDashboardPlanQueue('attention')">${attention.length}</button></div>
           <div class="sub">Active plans with alerts</div>
         </div>
         <div class="card stat-card">
@@ -1736,10 +1736,31 @@ function openShopPage(){
   render();
 }
 
+function planFilterLabel(filter){
+  if(filter === 'shop_ordered') return 'Shop Ordered';
+  if(filter === 'attention') return 'Needs Attention';
+  return filter.charAt(0).toUpperCase() + filter.slice(1);
+}
+
+function openDashboardPlanQueue(filter){
+  UI.planFilter = filter;
+  UI.currentView = 'plans';
+  saveState();
+  render();
+}
+
+function openDashboardEmployees(){
+  UI.employeeRosterFilters = makeEmployeeRosterFilters();
+  UI.currentView = 'employees';
+  saveState();
+  render();
+}
+
 function renderPlans(){
-  const tabs = ['active','shop_ordered','completed','archived','all'];
+  const tabs = ['active','attention','shop_ordered','completed','archived','all'];
   const filtered = visiblePlans().filter(plan => {
     if(UI.planFilter === 'all') return true;
+    if(UI.planFilter === 'attention') return getPlanAlerts(plan).length > 0;
     return plan.status === UI.planFilter;
   });
 
@@ -1752,7 +1773,7 @@ function renderPlans(){
         </div>
       </div>
       <div class="inline" style="margin-bottom:14px">
-        ${tabs.map(tab => `<button class="pill ${UI.planFilter === tab ? 'active' : ''}" onclick="setPlanFilter('${tab}')">${tab === 'shop_ordered' ? 'Shop Ordered' : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>`).join('')}
+        ${tabs.map(tab => `<button class="pill ${UI.planFilter === tab ? 'active' : ''}" onclick="setPlanFilter('${tab}')">${planFilterLabel(tab)}</button>`).join('')}
       </div>
       <div class="card">
         <div class="table-wrap">
@@ -1817,6 +1838,7 @@ function renderPlans(){
 
 function setPlanFilter(filter){
   UI.planFilter = filter;
+  saveState();
   render();
 }
 
