@@ -372,6 +372,106 @@ const SHOP_SCORE_FIELDS = [
   {key:'demoScore', inputId:'np-demo-closing', label:'demonstrating / closing', aliases:['demonstrating / closing','demonstrating and closing','demonstrating','closing']}
 ];
 const MSOE_SCORE_ALIASES = ['msoe rating','msoe score','msoe total','msoe result','msoe'];
+const PERFORMANCE_REMEDY_LIBRARY = [
+  {
+    key:'attendance',
+    area:'Attendance / Reliability',
+    match:/attendance|late|tardy|absence|no call|call[- ]?out|punctual|schedule/i,
+    focus:'Report on time for every scheduled shift, communicate any unavoidable issue before the shift begins, and maintain reliable coverage throughout the full review period.',
+    accountability:'Track attendance weekly and review any exceptions with the manager immediately.'
+  },
+  {
+    key:'customer_service',
+    area:'Customer Service',
+    match:/customer service|resident|complaint|service recovery|professional|tone|attitude|communication|rude/i,
+    focus:'Use a professional tone in every resident and prospect interaction, resolve concerns with the approved service standard, and de-escalate issues before leadership follow-up is needed.',
+    accountability:'Document service recovery steps and review recent interactions during each weekly check-in.'
+  },
+  {
+    key:'telephone',
+    area:'Telephone',
+    match:/phone|telephone|call|voicemail/i,
+    focus:'Use the full call flow on every prospect conversation by greeting professionally, confirming needs, highlighting key community value, and closing with a direct appointment ask.',
+    accountability:'Self-audit recent calls weekly and track appointment conversion with the manager.'
+  },
+  {
+    key:'followup',
+    area:'Follow-Up',
+    match:/follow[- ]?up|crm|lead|email|response time|prospect follow/i,
+    focus:'Send same-day follow-up after every prospect interaction, include a clear next step, and keep CRM notes current after each touchpoint.',
+    accountability:'Review completion rates and any missed follow-ups in each weekly meeting.'
+  },
+  {
+    key:'greeting',
+    area:'Greeting',
+    match:/greeting|greet|first impression|welcome/i,
+    focus:'Deliver the approved greeting within the first moments of each interaction and establish rapport before transitioning into discovery.',
+    accountability:'Practice the opening approach and review live examples with the manager each week.'
+  },
+  {
+    key:'needs',
+    area:'Needs Assessment',
+    match:/identifying needs|needs assessment|discovery|qualify|budget|move date|household|preferences|decision-maker/i,
+    focus:'Ask a complete discovery set covering move timeline, budget, household needs, desired features, and decision-makers before recommending options.',
+    accountability:'Document discovery notes for each interaction and review examples during weekly coaching.'
+  },
+  {
+    key:'onsite',
+    area:'On-Site Presentation',
+    match:/on[- ]?site|tour|presentation|amenit|property walk|tour path/i,
+    focus:'Lead a structured on-site presentation that connects the apartment and amenities directly to the prospect’s stated priorities.',
+    accountability:'Capture tour observations weekly and review them with the manager for coaching.'
+  },
+  {
+    key:'closing',
+    area:'Demonstrating / Closing',
+    match:/close|closing|application|lease|objection|ask for the sale/i,
+    focus:'End each tour or sales conversation with a direct application ask, address objections confidently, and confirm the next commitment before the prospect leaves.',
+    accountability:'Track close attempts and review objection handling during weekly follow-ups.'
+  },
+  {
+    key:'leasing',
+    area:'Leasing Fundamentals',
+    match:/leasing|prospect|application|conversion|lead management/i,
+    focus:'Execute the full leasing workflow consistently from greeting through close, keep prospect activity current, and move each lead to a documented next step.',
+    accountability:'Review conversion activity and missed opportunities with the manager each week.'
+  },
+  {
+    key:'compliance',
+    area:'Compliance / Documentation',
+    match:/policy|compliance|paperwork|documentation|audit|procedure|process|lease file|fair housing|required form/i,
+    focus:'Follow the required policy and documentation checklist every time, complete all records accurately, and verify each step before final submission.',
+    accountability:'Submit work for periodic audit and correct any variances immediately.'
+  },
+  {
+    key:'safety',
+    area:'Safety',
+    match:/safety|incident|hazard|injury|ppe|unsafe/i,
+    focus:'Follow all required safety practices, correct hazards immediately, and escalate any unsafe condition without delay.',
+    accountability:'Document safety checks and review compliance expectations with the manager weekly.'
+  },
+  {
+    key:'maintenance',
+    area:'Operational Execution',
+    match:/maintenance|make ready|turn|cleanliness|housekeeping|work order/i,
+    focus:'Complete assigned operational work to standard, follow the required checklist, and verify the finished result before closing the task.',
+    accountability:'Review completed work, open punch items, and quality expectations with the manager each week.'
+  },
+  {
+    key:'productivity',
+    area:'Time Management',
+    match:/deadline|task|priority|time management|organization|productivity|planning/i,
+    focus:'Prioritize daily workload using a written plan, complete high-impact tasks first, and close assigned work by the agreed deadline.',
+    accountability:'Review open tasks and completion status with the manager each week.'
+  },
+  {
+    key:'general',
+    area:'General Performance',
+    match:/.*/i,
+    focus:'Demonstrate the documented performance standard consistently, correct gaps immediately, and sustain measurable improvement throughout the review period.',
+    accountability:'Bring documented examples of progress to each weekly review meeting.'
+  }
+];
 
 if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions){
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
@@ -379,7 +479,11 @@ if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions){
 
 function makeNewPlanDraft(){
   return {
+    employeeId: '',
     extractedActionItems: [],
+    selectedWriteupIds: [],
+    recommendedActionItems: [],
+    selectedRecommendationIds: [],
     shopSourceFileName: '',
     shopSummary: '',
     shopError: '',
@@ -437,6 +541,10 @@ function makeEmployeeRosterFilters(){
 }
 
 function makeCorrespondenceLog(){
+  return [];
+}
+
+function makeEmployeeEventLog(){
   return [];
 }
 
@@ -501,6 +609,7 @@ function normalizePlan(plan){
   return {
     ...plan,
     actionItems: Array.isArray(plan && plan.actionItems) ? plan.actionItems : [],
+    linkedWriteupIds: Array.isArray(plan && plan.linkedWriteupIds) ? plan.linkedWriteupIds : [],
     weeklyUpdates: Array.isArray(plan && plan.weeklyUpdates) ? plan.weeklyUpdates : [],
     meetings: Array.isArray(plan && plan.meetings) ? plan.meetings : [],
     consequences: plan && plan.consequences != null ? Boolean(plan.consequences) : plan && plan.type === 'pip',
@@ -553,6 +662,18 @@ function normalizeCorrespondence(entry){
     summary: String(entry && entry.summary || ''),
     body: String(entry && entry.body || ''),
     attachmentName: String(entry && entry.attachmentName || ''),
+    createdBy: String(entry && entry.createdBy || '')
+  };
+}
+
+function normalizeEmployeeEvent(entry){
+  return {
+    id: String(entry && entry.id || fallbackId('evt')),
+    employeeId: String(entry && entry.employeeId || ''),
+    date: String(entry && entry.date || today()),
+    type: String(entry && entry.type || 'note'),
+    title: String(entry && entry.title || 'Employee record updated'),
+    detail: String(entry && entry.detail || ''),
     createdBy: String(entry && entry.createdBy || '')
   };
 }
@@ -631,12 +752,13 @@ function loadState(){
       plans: Array.isArray(stored.plans) ? stored.plans.map(normalizePlan) : [],
       writeups: Array.isArray(stored.writeups) ? stored.writeups.map(normalizeWriteup).filter(writeup => writeup.employeeId) : [],
       correspondence: Array.isArray(stored.correspondence) ? stored.correspondence.map(normalizeCorrespondence).filter(entry => entry.employeeId) : makeCorrespondenceLog(),
+      employeeEvents: Array.isArray(stored.employeeEvents) ? stored.employeeEvents.map(normalizeEmployeeEvent).filter(entry => entry.employeeId) : makeEmployeeEventLog(),
       rosterVersion: stored.rosterVersion || '',
       currentView: stored.currentView || 'dashboard',
       currentUser: null
     };
   }catch(err){
-    return {users:makeDefaultUsers(),settings:makeDefaultSettings(),employees:[],plans:[],writeups:[],correspondence:makeCorrespondenceLog(),rosterVersion:'',currentView:'dashboard',currentUser:null};
+    return {users:makeDefaultUsers(),settings:makeDefaultSettings(),employees:[],plans:[],writeups:[],correspondence:makeCorrespondenceLog(),employeeEvents:makeEmployeeEventLog(),rosterVersion:'',currentView:'dashboard',currentUser:null};
   }
 }
 
@@ -649,6 +771,7 @@ function saveState(){
     plans: STATE.plans,
     writeups: STATE.writeups,
     correspondence: STATE.correspondence,
+    employeeEvents: STATE.employeeEvents,
     rosterVersion: STATE.rosterVersion,
     currentView: STATE.currentView
   }));
@@ -1111,6 +1234,12 @@ function correspondenceForEmployee(employeeId){
     .sort((left, right) => (right.date || '').localeCompare(left.date || '') || (right.id || '').localeCompare(left.id || ''));
 }
 
+function employeeEventsForEmployee(employeeId){
+  return (STATE.employeeEvents || [])
+    .filter(entry => entry.employeeId === employeeId)
+    .sort((left, right) => (right.date || '').localeCompare(left.date || '') || (right.id || '').localeCompare(left.id || ''));
+}
+
 function plansForEmployee(employeeId){
   return visiblePlans()
     .filter(plan => plan.employeeId === employeeId)
@@ -1139,6 +1268,13 @@ function logCorrespondence(entry){
   const record = normalizeCorrespondence(entry);
   if(!STATE.correspondence) STATE.correspondence = [];
   STATE.correspondence.push(record);
+  return record;
+}
+
+function logEmployeeEvent(entry){
+  const record = normalizeEmployeeEvent(entry);
+  if(!STATE.employeeEvents) STATE.employeeEvents = [];
+  STATE.employeeEvents.push(record);
   return record;
 }
 
@@ -1177,6 +1313,7 @@ function employeeActivityFeed(employeeId){
   const plans = plansForEmployee(employeeId);
   const writeups = writeupsForEmployee(employeeId);
   const correspondence = correspondenceForEmployee(employeeId);
+  const employeeEvents = employeeEventsForEmployee(employeeId);
   const events = [];
 
   plans.forEach(plan => {
@@ -1197,6 +1334,10 @@ function employeeActivityFeed(employeeId){
 
   writeups.forEach(writeup => {
     events.push({date: writeup.date || writeup.createdAt || '', kind: 'writeup', tone: writeupLevelBadgeClass(writeup.level), title: writeup.title || writeupLevelLabel(writeup.level), detail: writeup.details || 'Write-up recorded.', writeupId: writeup.id});
+  });
+
+  employeeEvents.forEach(entry => {
+    events.push({date: entry.date || '', kind: entry.type || 'note', tone: 'badge-soft', title: entry.title || 'Employee record updated', detail: entry.detail || 'Employee record updated.', employeeEventId: entry.id});
   });
 
   correspondence.forEach(entry => {
@@ -1277,6 +1418,221 @@ function pctComplete(plan){
   const now = new Date();
   if(end <= start) return 100;
   return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+function capitalizeSentence(value){
+  const text = collapseWhitespace(value);
+  if(!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function ensureSentenceText(value){
+  const text = collapseWhitespace(value);
+  if(!text) return '';
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function remedyProfileForContext(area, text){
+  const haystack = [area, text].filter(Boolean).join(' ');
+  return PERFORMANCE_REMEDY_LIBRARY.find(profile => profile.match.test(haystack)) || PERFORMANCE_REMEDY_LIBRARY[PERFORMANCE_REMEDY_LIBRARY.length - 1];
+}
+
+function buildDetailedActionItem(area, text){
+  const profile = remedyProfileForContext(area, text);
+  const base = collapseWhitespace(text);
+  let detail = '';
+
+  if(base && base.split(/\s+/).length >= 5){
+    detail = ensureSentenceText(capitalizeSentence(base));
+  }else{
+    detail = ensureSentenceText(profile.focus);
+  }
+
+  if(!/\b(daily|weekly|each|every|per|track|log|document|review|audit|maintain|same-day|immediately|submit|bring)\b/i.test(detail)){
+    detail = `${detail} ${profile.accountability}`;
+  }
+
+  return {
+    area: !area || normalizeComparable(area) === 'general' ? (profile.area || 'General Performance') : area,
+    text: collapseWhitespace(detail)
+  };
+}
+
+function buildWriteupActionRecommendations(writeups){
+  const recommendations = [];
+
+  (Array.isArray(writeups) ? writeups : []).forEach(writeup => {
+    const context = [
+      writeup.category,
+      writeup.title,
+      writeup.details,
+      writeup.expectations,
+      writeup.correctiveAction,
+      writeup.consequences
+    ].filter(Boolean).join(' ');
+    const profile = remedyProfileForContext(writeup.category, context);
+    const candidates = [];
+
+    if(writeup.correctiveAction) candidates.push({seed: writeup.correctiveAction, label: 'Corrective action'});
+    if(writeup.expectations && normalizeComparable(writeup.expectations) !== normalizeComparable(writeup.correctiveAction)) candidates.push({seed: writeup.expectations, label: 'Expectation'});
+    if(!candidates.length) candidates.push({seed: '', label: 'Suggested remedy'});
+
+    candidates.slice(0, 2).forEach((candidate, index) => {
+      const item = buildDetailedActionItem(profile.area, candidate.seed || '');
+      recommendations.push({
+        id: `${writeup.id}_${index}_${profile.key}`,
+        writeupId: writeup.id,
+        area: item.area,
+        text: item.text,
+        sourceTitle: writeup.title || writeupLevelLabel(writeup.level),
+        sourceDate: writeup.date || writeup.createdAt || '',
+        sourceCategory: writeup.category || '',
+        sourceLabel: candidate.label
+      });
+    });
+  });
+
+  const seen = new Set();
+  return recommendations.filter(item => {
+    const key = `${normalizeComparable(item.area)}|${normalizeComparable(item.text)}`;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function selectedNewPlanRecommendationItems(){
+  const selectedIds = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
+  return dedupeActionItems((UI.newPlanDraft.recommendedActionItems || [])
+    .filter(item => selectedIds.has(item.id))
+    .map(item => ({area: item.area || 'General Performance', text: item.text || ''})));
+}
+
+function syncNewPlanWriteupTools(){
+  const host = document.getElementById('np-writeup-tools');
+  if(host) host.innerHTML = renderNewPlanWriteupTools();
+}
+
+function setNewPlanEmployee(employeeId){
+  UI.newPlanDraft.employeeId = String(employeeId || '');
+  const writeups = UI.newPlanDraft.employeeId ? writeupsForEmployee(UI.newPlanDraft.employeeId) : [];
+  UI.newPlanDraft.selectedWriteupIds = writeups.map(writeup => writeup.id);
+  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  syncNewPlanManager();
+  updatePlanTypeSuggestion(false);
+  syncNewPlanWriteupTools();
+}
+
+function toggleNewPlanWriteup(writeupId, checked){
+  const next = new Set(UI.newPlanDraft.selectedWriteupIds || []);
+  if(checked) next.add(writeupId);
+  else next.delete(writeupId);
+  UI.newPlanDraft.selectedWriteupIds = [...next];
+  const writeups = writeupsForEmployee(UI.newPlanDraft.employeeId).filter(writeup => next.has(writeup.id));
+  const previousSelections = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
+  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems
+    .map(item => item.id)
+    .filter(id => previousSelections.has(id));
+  if(!UI.newPlanDraft.selectedRecommendationIds.length){
+    UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  }
+  syncNewPlanWriteupTools();
+}
+
+function toggleNewPlanRecommendation(itemId, checked){
+  const next = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
+  if(checked) next.add(itemId);
+  else next.delete(itemId);
+  UI.newPlanDraft.selectedRecommendationIds = [...next];
+  syncNewPlanWriteupTools();
+}
+
+function mergeSelectedNewPlanRecommendations(replaceAll){
+  const textarea = document.getElementById('np-items');
+  if(!textarea) return;
+  const selected = selectedNewPlanRecommendationItems();
+  if(!selected.length){
+    alert('Select at least one recommended remedy first.');
+    return;
+  }
+  const current = parseActionItems(textarea.value);
+  const merged = replaceAll
+    ? selected
+    : dedupeActionItems([...current, ...selected]);
+  textarea.value = formatActionItemsForTextarea(merged);
+}
+
+function renderNewPlanWriteupTools(){
+  const employeeId = UI.newPlanDraft.employeeId || '';
+  const employee = employeeId ? getEmployee(employeeId) : null;
+  if(!employee){
+    return '<div class="history-card"><h4>Historical write-up remedies</h4><div class="small muted">Select an employee to review historical write-ups and pull recommended remedies into the new plan.</div></div>';
+  }
+
+  const writeups = writeupsForEmployee(employee.id);
+  if(!writeups.length){
+    return '<div class="history-card"><h4>Historical write-up remedies</h4><div class="small muted">No write-ups are on file for this employee yet, so only uploaded source documents and manual action items will feed this plan.</div></div>';
+  }
+
+  const selectedWriteups = new Set(UI.newPlanDraft.selectedWriteupIds || []);
+  const selectedRecommendations = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
+  const recommendation = evaluateWriteupRecommendation(employee.id);
+  const alertClass = recommendation.tone === 'danger' ? 'alert-danger' : recommendation.tone === 'warn' ? 'alert-warn' : 'alert-info';
+
+  return `
+    <div class="history-card">
+      <h4>Historical write-up remedies</h4>
+      <div class="small muted" style="margin-top:6px">Select the write-ups that should inform this new plan. The platform will suggest detailed remedies you can add to the action-item list.</div>
+      <div class="alert ${alertClass}" style="margin-top:12px">${escapeHtml(recommendation.message)}</div>
+      <div class="stack" style="margin-top:12px">
+        ${writeups.map(writeup => `
+          <label class="history-card" style="background:#fff">
+            <div class="checkbox-row">
+              <input type="checkbox" ${selectedWriteups.has(writeup.id) ? 'checked' : ''} onchange="toggleNewPlanWriteup('${writeup.id}', this.checked)">
+              <div style="flex:1">
+                <div class="inline" style="margin-bottom:6px">
+                  <strong>${escapeHtml(writeup.title || writeupLevelLabel(writeup.level))}</strong>
+                  <span class="badge ${writeupLevelBadgeClass(writeup.level)}">${escapeHtml(writeupLevelLabel(writeup.level))}</span>
+                  <span class="badge badge-soft">${escapeHtml(formatDate(writeup.date || writeup.createdAt || ''))}</span>
+                </div>
+                <div class="small muted">${escapeHtml(writeup.category)} · ${escapeHtml((writeup.details || '').slice(0, 180) || 'No details saved.')}${(writeup.details || '').length > 180 ? '...' : ''}</div>
+              </div>
+            </div>
+          </label>
+        `).join('')}
+      </div>
+      <div style="margin-top:16px">
+        <h4>${UI.newPlanDraft.recommendedActionItems.length} recommended remed${UI.newPlanDraft.recommendedActionItems.length === 1 ? 'y' : 'ies'}</h4>
+        ${UI.newPlanDraft.recommendedActionItems.length ? `
+          <div class="stack" style="margin-top:10px">
+            ${UI.newPlanDraft.recommendedActionItems.map(item => `
+              <label class="history-card" style="background:#fff">
+                <div class="checkbox-row">
+                  <input type="checkbox" ${selectedRecommendations.has(item.id) ? 'checked' : ''} onchange="toggleNewPlanRecommendation('${item.id}', this.checked)">
+                  <div style="flex:1">
+                    <div class="inline" style="margin-bottom:6px">
+                      <strong>${escapeHtml(item.area)}</strong>
+                      <span class="badge badge-soft">${escapeHtml(item.sourceLabel)}</span>
+                      <span class="badge badge-soft">${escapeHtml(item.sourceCategory || 'Write-up')}</span>
+                    </div>
+                    <div class="small muted" style="margin-bottom:6px">From ${escapeHtml(item.sourceTitle)} · ${escapeHtml(formatDate(item.sourceDate || ''))}</div>
+                    <div class="small">${escapeHtml(item.text)}</div>
+                  </div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+          <div class="inline" style="margin-top:12px">
+            <button class="btn btn-soft btn-sm" onclick="mergeSelectedNewPlanRecommendations(false)">Add selected remedies</button>
+            <button class="btn btn-accent btn-sm" onclick="mergeSelectedNewPlanRecommendations(true)">Replace action items</button>
+            <span class="small muted">${selectedNewPlanRecommendationItems().length} selected for the plan</span>
+          </div>
+        ` : '<div class="alert alert-info" style="margin-top:10px">Select one or more write-ups to generate recommended remedies for this plan.</div>'}
+      </div>
+    </div>
+  `;
 }
 
 function parseActionItems(text){
@@ -1625,6 +1981,18 @@ function renderView(){
   return renderDashboard();
 }
 
+function openNewPlanForEmployee(employeeId){
+  UI.newPlanDraft = makeNewPlanDraft();
+  UI.newPlanDraft.employeeId = String(employeeId || '');
+  const writeups = UI.newPlanDraft.employeeId ? writeupsForEmployee(UI.newPlanDraft.employeeId) : [];
+  UI.newPlanDraft.selectedWriteupIds = writeups.map(writeup => writeup.id);
+  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  UI.currentView = 'newplan';
+  saveState();
+  render();
+}
+
 function renderDashboard(){
   const plans = trackedPlans();
   const active = plans.filter(plan => plan.status === 'active');
@@ -1928,7 +2296,10 @@ function syncNewPlanDraftToDom(){
 
 function renderNewPlan(){
   const employees = activeVisibleEmployees();
-  const managerDefault = STATE.currentUser ? STATE.currentUser.name : 'Manager Name';
+  const selectedEmployee = UI.newPlanDraft.employeeId ? getEmployee(UI.newPlanDraft.employeeId) : null;
+  const managerDefault = selectedEmployee
+    ? (managerDisplayName(selectedEmployee) || (STATE.currentUser ? STATE.currentUser.name : 'Manager Name'))
+    : (STATE.currentUser ? STATE.currentUser.name : 'Manager Name');
   const importedItemsText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
   return `
     <div class="page">
@@ -1944,9 +2315,9 @@ function renderNewPlan(){
           <div class="form-grid cols-2">
             <div>
               <label>Employee</label>
-              <select id="np-employee" onchange="syncNewPlanManager();updatePlanTypeSuggestion(false)">
+              <select id="np-employee" onchange="setNewPlanEmployee(this.value)">
                 <option value="">Select employee</option>
-                ${employees.map(emp => `<option value="${emp.id}">${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
+                ${employees.map(emp => `<option value="${emp.id}" ${UI.newPlanDraft.employeeId === emp.id ? 'selected' : ''}>${emp.name} · ${emp.community || 'No community'}</option>`).join('')}
               </select>
             </div>
             <div>
@@ -2056,6 +2427,8 @@ function renderNewPlan(){
             </div>
           </div>
 
+          <div id="np-writeup-tools" style="margin-bottom:14px">${renderNewPlanWriteupTools()}</div>
+
           <div class="checkbox-row" style="margin-bottom:14px">
             <input type="checkbox" id="np-requires-shop">
             <div>
@@ -2127,7 +2500,8 @@ function updatePlanTypeSuggestion(autoSelect){
 function previewNewPlan(){
   const employee = getEmployee(document.getElementById('np-employee').value);
   const items = parseActionItems(document.getElementById('np-items').value);
-  const effectiveItems = items.length ? items : UI.newPlanDraft.extractedActionItems;
+  const selectedRecommendations = selectedNewPlanRecommendationItems();
+  const effectiveItems = items.length ? dedupeActionItems([...items, ...selectedRecommendations]) : dedupeActionItems([...selectedRecommendations, ...UI.newPlanDraft.extractedActionItems]);
   const box = document.getElementById('new-plan-preview');
   if(!employee){
     box.innerHTML = '<div class="alert alert-danger">Select an employee first.</div>';
@@ -2159,9 +2533,13 @@ function buildPlanFromForm(){
   }
 
   const manualItems = parseActionItems(document.getElementById('np-items').value);
-  const actionItems = manualItems.length
-    ? manualItems
-    : UI.newPlanDraft.extractedActionItems.map(item => ({area:item.area || 'General', text:item.text || ''}));
+  const selectedRecommendationItems = selectedNewPlanRecommendationItems();
+  const importedItems = UI.newPlanDraft.extractedActionItems.map(item => ({area:item.area || 'General', text:item.text || ''}));
+  const actionItems = dedupeActionItems(
+    manualItems.length
+      ? [...manualItems, ...selectedRecommendationItems]
+      : [...selectedRecommendationItems, ...importedItems]
+  );
 
   return {
     id: genId(),
@@ -2186,6 +2564,7 @@ function buildPlanFromForm(){
     meetings: [],
     consequences: UI.newPlanType === 'pip',
     requiresUpdatedShop: document.getElementById('np-requires-shop').checked,
+    linkedWriteupIds: [...(UI.newPlanDraft.selectedWriteupIds || [])],
     shopSourceName: UI.newPlanDraft.shopSourceFileName || '',
     msoeSourceName: UI.newPlanDraft.msoeSourceFileName || '',
     planSourceName: UI.newPlanDraft.planSourceFileName || ''
@@ -2512,7 +2891,7 @@ function extractActionItemsFromText(text){
       }
     });
     const dedupedBlocks = dedupeActionItems(items);
-    if(dedupedBlocks.length) return dedupedBlocks;
+    if(dedupedBlocks.length) return dedupedBlocks.map(item => buildDetailedActionItem(item.area, item.text));
   }
 
   const lines = splitDocumentLines(normalized);
@@ -2544,7 +2923,7 @@ function extractActionItemsFromText(text){
   });
 
   if(currentItem) items.push(currentItem);
-  return dedupeActionItems(items);
+  return dedupeActionItems(items).map(item => buildDetailedActionItem(item.area, item.text));
 }
 
 async function handlePlanSourceUpload(event){
@@ -2831,7 +3210,8 @@ function renderEmployees(){
                       </td>
                       <td>
                         <div class="inline">
-                          ${isEmployeeTerminated(employee) ? '' : `<button class="btn btn-sm btn-soft" onclick="switchView('newplan')">New plan</button>`}
+                          ${isEmployeeTerminated(employee) ? '' : `<button class="btn btn-sm btn-soft" onclick="openNewPlanForEmployee('${employee.id}')">New plan</button>`}
+                          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openPromoteEmployeeModal('${employee.id}')">Promote</button>` : ''}
                           ${isAdmin ? (isEmployeeTerminated(employee)
                             ? `<button class="btn btn-sm btn-warn" onclick="reactivateEmployee('${employee.id}')">Reactivate</button>`
                             : `<button class="btn btn-sm btn-warn" onclick="openTerminateEmployeeModal('${employee.id}')">Terminate</button>`) : ''}
@@ -3187,6 +3567,85 @@ function updateEmployeeRegion(id, region){
   updateEmployeeField(id, 'region', region);
 }
 
+function openPromoteEmployeeModal(id){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  const employee = STATE.employees.find(item => item.id === id);
+  if(!employee) return;
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Promote / reassign employee</h3>
+      <div class="sub">Update the title, area, and direct manager, then log the change on the employee profile timeline.</div>
+      <div class="form-grid cols-2">
+        <div>
+          <label>New title</label>
+          <input id="promote-role" list="role-options" value="${escapeHtml(employee.role || '')}">
+        </div>
+        <div>
+          <label>New direct manager</label>
+          <select id="promote-manager">${renderManagerOptions(employee.managerId || '', 'Select manager', managerUsers())}</select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label>New area / region</label>
+        <select id="promote-region">
+          <option value="">Unassigned</option>
+          ${Object.entries(REGIONS).map(([key, value]) => `<option value="${key}" ${employee.region === key ? 'selected' : ''}>${value.name}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-top:12px">
+        <label>Change note</label>
+        <textarea id="promote-note" placeholder="Optional note about the promotion, title change, or reassignment."></textarea>
+      </div>
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEmployeePromotion('${employee.id}')">Save promotion</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveEmployeePromotion(id){
+  const employee = STATE.employees.find(item => item.id === id);
+  if(!employee) return;
+  const nextRole = String(document.getElementById('promote-role').value || '').trim() || employee.role || 'Employee';
+  const nextManagerId = String(document.getElementById('promote-manager').value || '').trim();
+  const nextRegion = String(document.getElementById('promote-region').value || '').trim();
+  const note = String(document.getElementById('promote-note').value || '').trim();
+
+  const previousRole = employee.role || 'Not set';
+  const previousManager = managerDisplayName(employee) || 'Unassigned';
+  const previousRegion = employee.region && REGIONS[employee.region] ? REGIONS[employee.region].name : (employee.region || 'Unassigned');
+  const nextManager = nextManagerId ? managerName(nextManagerId) : 'Unassigned';
+  const nextRegionLabel = nextRegion && REGIONS[nextRegion] ? REGIONS[nextRegion].name : (nextRegion || 'Unassigned');
+  const noChange = normalizeComparable(previousRole) === normalizeComparable(nextRole)
+    && String(employee.managerId || '') === nextManagerId
+    && String(employee.region || '') === nextRegion;
+
+  if(noChange && !note){
+    alert('Update at least one field or add a change note before saving.');
+    return;
+  }
+
+  employee.role = nextRole;
+  employee.managerId = nextManagerId;
+  employee.managerName = nextManagerId ? managerName(nextManagerId) : '';
+  employee.region = nextRegion;
+
+  logEmployeeEvent({
+    employeeId: employee.id,
+    type: 'promotion',
+    date: today(),
+    title: 'Promotion / assignment update',
+    detail: `Role: ${previousRole} -> ${nextRole}. Area: ${previousRegion} -> ${nextRegionLabel}. Manager: ${previousManager} -> ${nextManager}.${note ? ' Note: ' + note : ''}`,
+    createdBy: STATE.currentUser ? STATE.currentUser.name : ''
+  });
+
+  saveState();
+  closeModal();
+  render();
+}
+
 function openTerminateEmployeeModal(id){
   if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
   const employee = STATE.employees.find(item => item.id === id);
@@ -3216,6 +3675,14 @@ function saveEmployeeTermination(id){
   employee.status = 'Terminated';
   employee.terminationDate = document.getElementById('term-date').value || today();
   employee.terminationReason = String(document.getElementById('term-reason').value || '').trim();
+  logEmployeeEvent({
+    employeeId: employee.id,
+    type: 'status_change',
+    date: employee.terminationDate || today(),
+    title: 'Employee terminated',
+    detail: employee.terminationReason ? `Termination reason: ${employee.terminationReason}` : 'Employee marked as terminated in the roster.',
+    createdBy: STATE.currentUser ? STATE.currentUser.name : ''
+  });
   saveState();
   closeModal();
   render();
@@ -3229,6 +3696,14 @@ function reactivateEmployee(id){
   employee.status = 'Active';
   employee.terminationDate = '';
   employee.terminationReason = '';
+  logEmployeeEvent({
+    employeeId: employee.id,
+    type: 'status_change',
+    date: today(),
+    title: 'Employee reactivated',
+    detail: 'Employee was returned to active status in the roster.',
+    createdBy: STATE.currentUser ? STATE.currentUser.name : ''
+  });
   saveState();
   render();
 }
@@ -6182,6 +6657,7 @@ function resetAllData(){
     plans: [],
     writeups: [],
     correspondence: makeCorrespondenceLog(),
+    employeeEvents: makeEmployeeEventLog(),
     rosterVersion: '',
     currentView: 'dashboard',
     currentUser: null
