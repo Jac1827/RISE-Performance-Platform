@@ -2,6 +2,7 @@
   const STORAGE_KEY = "rise_financial_accountability_page_v1";
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
+  const FINANCIAL_HISTORY_STORAGE_KEY = "rise_financial_history_v1";
   const AUTO_IMPORT_SCOPE = "__AUTO__";
   const APPROVED_BUDGET_STORAGE_KEY = "rise_financial_accountability_approved_budgets_v1";
 
@@ -160,6 +161,11 @@
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
     },
+    snapshotScope: {
+      mode: "all",
+      search: "",
+      selectedEntities: [],
+    },
     datasets: {
       financial: null,
       operations: null,
@@ -184,9 +190,19 @@
     financialImportSummary: document.getElementById("financial-import-summary"),
     financialImportCoverage: document.getElementById("financial-import-coverage"),
     financialImportWorkspaceChip: document.getElementById("financial-import-workspace-chip"),
+    financialHistoryStatus: document.getElementById("financial-history-status"),
+    reloadFinancialHistory: document.getElementById("reload-financial-history"),
+    clearFinancialHistory: document.getElementById("clear-financial-history"),
     openFinancialImport: document.getElementById("open-financial-import"),
     openFinancialImportHeader: document.getElementById("open-financial-import-header"),
     financialInput: document.getElementById("financial-input"),
+    snapshotScopeMode: document.getElementById("snapshot-scope-mode"),
+    snapshotEntitySearch: document.getElementById("snapshot-entity-search"),
+    snapshotSelectVisible: document.getElementById("snapshot-select-visible"),
+    snapshotClearSelection: document.getElementById("snapshot-clear-selection"),
+    snapshotScopeSummary: document.getElementById("snapshot-scope-summary"),
+    snapshotScopeCount: document.getElementById("snapshot-scope-count"),
+    snapshotEntityChips: document.getElementById("snapshot-entity-chips"),
     snapshotGrid: document.getElementById("snapshot-grid"),
     rankingBody: document.getElementById("ranking-body"),
     selectedPropertyShell: document.getElementById("selected-property-shell"),
@@ -502,6 +518,68 @@
     return "merge into the loaded financial history";
   }
 
+  function getSnapshotScopeLabel(modeValue, selectedCount = 0) {
+    if (modeValue === "corporate") {
+      return "RISE Corporate only";
+    }
+    if (modeValue === "communities") {
+      return "communities only";
+    }
+    if (modeValue === "custom") {
+      return selectedCount > 0 ? `${selectedCount} selected entities` : "custom selection";
+    }
+    return "all loaded entities";
+  }
+
+  function formatStoredTimestamp(value) {
+    if (!value) {
+      return "--";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return String(value);
+    }
+    return parsed.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function loadFinancialHistoryStore() {
+    try {
+      const raw = window.localStorage.getItem(FINANCIAL_HISTORY_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function saveFinancialHistoryStore(dataset) {
+    if (!dataset?.records?.length) {
+      return;
+    }
+
+    const payload = {
+      savedAt: new Date().toISOString(),
+      dataset: {
+        type: "financial",
+        fileName: dataset.fileName || "financial-history.csv",
+        sourceKind: dataset.sourceKind || "file",
+        sourceText: dataset.sourceText || "",
+        records: dataset.records || [],
+        diagnostics: dataset.diagnostics || null,
+      },
+    };
+    window.localStorage.setItem(FINANCIAL_HISTORY_STORAGE_KEY, JSON.stringify(payload));
+  }
+
+  function clearFinancialHistoryStore() {
+    window.localStorage.removeItem(FINANCIAL_HISTORY_STORAGE_KEY);
+  }
+
   function populateFinancialImportScopeOptions() {
     if (!dom.financialImportScope) {
       return;
@@ -692,6 +770,63 @@
       periodStart: periods[0] || null,
       periodEnd: periods[periods.length - 1] || null,
     };
+  }
+
+  function normalizeStoredFinancialDataset(dataset, fallbackFileName = "Stored financial history") {
+    if (!dataset?.records?.length) {
+      return null;
+    }
+
+    return {
+      type: "financial",
+      fileName: dataset.fileName || fallbackFileName,
+      sourceKind: dataset.sourceKind || "stored",
+      sourceText: dataset.sourceText || "",
+      records: dataset.records || [],
+      diagnostics:
+        dataset.diagnostics || {
+          parsedRows: dataset.records.length,
+          fileRows: dataset.records.length,
+          missingRequired: [],
+          missingRecommended: [],
+          detected: {},
+        },
+    };
+  }
+
+  function getFinancialEntityNames() {
+    return Array.from(
+      new Set((state.datasets.financial?.records || []).map((record) => record.property).filter(Boolean)),
+    ).sort((left, right) => left.localeCompare(right));
+  }
+
+  function getScopeEntityPool(properties, mode) {
+    if (mode === "corporate") {
+      return properties.filter((property) => property === "RISE Corporate");
+    }
+    if (mode === "communities") {
+      return properties.filter((property) => property !== "RISE Corporate");
+    }
+    return properties;
+  }
+
+  function getScopedPropertyNames(properties) {
+    const mode = state.snapshotScope.mode || "all";
+    if (mode === "custom") {
+      const selected = new Set((state.snapshotScope.selectedEntities || []).filter(Boolean));
+      return properties.filter((property) => selected.has(property));
+    }
+    return getScopeEntityPool(properties, mode);
+  }
+
+  function getVisibleScopeEntityNames(properties) {
+    const mode = state.snapshotScope.mode || "all";
+    const basePool = mode === "custom" ? properties : getScopeEntityPool(properties, mode);
+    const search = normalizeCommunityLookupName(state.snapshotScope.search || "");
+    if (!search) {
+      return basePool;
+    }
+    return basePool.filter((property) => normalizeCommunityLookupName(property).includes(search));
   }
 
   function normalizeFinancialRecords(records) {
@@ -1305,12 +1440,18 @@
       parsed.fileName = `${state.datasets[type].fileName || type}.csv + ${fileName}`;
     }
     state.datasets[type] = parsed;
+    if (type === "financial" && sourceKind === "file") {
+      saveFinancialHistoryStore(parsed);
+    }
     persistState();
     render();
   }
 
   function setDatasetObject(type, dataset) {
     state.datasets[type] = dataset;
+    if (type === "financial" && dataset?.records?.length && dataset.sourceKind !== "sample") {
+      saveFinancialHistoryStore(dataset);
+    }
     persistState();
     render();
   }
@@ -1328,6 +1469,11 @@
     state.financialImport = {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
+    };
+    state.snapshotScope = {
+      mode: "all",
+      search: "",
+      selectedEntities: [],
     };
     state.datasets = {
       financial: null,
@@ -1347,6 +1493,7 @@
       selectedProperty: state.selectedProperty,
       manualPeriod: state.manualPeriod,
       financialImport: state.financialImport,
+      snapshotScope: state.snapshotScope,
       datasets: Object.fromEntries(
         Object.entries(state.datasets).map(([key, dataset]) => [
           key,
@@ -1381,6 +1528,13 @@
         scope: parsed.financialImport?.scope || AUTO_IMPORT_SCOPE,
         mode: parsed.financialImport?.mode || "merge",
       };
+      state.snapshotScope = {
+        mode: parsed.snapshotScope?.mode || "all",
+        search: parsed.snapshotScope?.search || "",
+        selectedEntities: Array.isArray(parsed.snapshotScope?.selectedEntities)
+          ? parsed.snapshotScope.selectedEntities
+          : [],
+      };
 
       for (const key of ["financial", "operations", "leasing"]) {
         const entry = parsed.datasets?.[key];
@@ -1411,6 +1565,14 @@
         }
         if (entry.sourceText) {
           state.datasets[key] = parseDataset(key, entry.sourceText, entry.fileName || `${key}.csv`);
+        }
+      }
+
+      if (!state.datasets.financial) {
+        const storedHistory = loadFinancialHistoryStore();
+        const storedDataset = normalizeStoredFinancialDataset(storedHistory?.dataset, "Stored financial history");
+        if (storedDataset) {
+          state.datasets.financial = storedDataset;
         }
       }
       return true;
@@ -2093,13 +2255,22 @@
       state.selectedPeriod = availablePeriods[availablePeriods.length - 1];
     }
 
-    const properties = Array.from(
-      new Set((state.datasets.financial?.records || []).map((record) => record.property).filter(Boolean)),
-    ).sort((left, right) => left.localeCompare(right));
+    const allProperties = getFinancialEntityNames();
+    state.snapshotScope.selectedEntities = (state.snapshotScope.selectedEntities || []).filter((entity) =>
+      allProperties.includes(entity),
+    );
 
-    const propertySummaries = properties
-      .map((property) => buildPropertySummary(property, state.selectedPeriod))
-      .filter(Boolean)
+    const summaryMap = new Map(
+      allProperties
+        .map((property) => [property, buildPropertySummary(property, state.selectedPeriod)])
+        .filter(([, summary]) => Boolean(summary)),
+    );
+
+    const scopedProperties = getScopedPropertyNames(allProperties).filter((property) => summaryMap.has(property));
+    const visibleEntities = getVisibleScopeEntityNames(allProperties);
+
+    const propertySummaries = scopedProperties
+      .map((property) => summaryMap.get(property))
       .sort((left, right) => (left.score ?? 100) - (right.score ?? 100));
 
     if (!state.selectedProperty || !propertySummaries.find((summary) => summary.property === state.selectedProperty)) {
@@ -2111,6 +2282,9 @@
 
     return {
       availablePeriods,
+      allProperties,
+      scopedProperties,
+      visibleEntities,
       propertySummaries,
       selectedSummary,
       portfolio,
@@ -2152,6 +2326,8 @@
     const coverage = getDatasetCoverage(state.datasets.financial);
     const scopeLabel = getFinancialImportScopeLabel(scopeValue);
     const modeLabel = getFinancialImportModeLabel(modeValue);
+    const storedHistory = loadFinancialHistoryStore();
+    const storedCoverage = getDatasetCoverage(storedHistory?.dataset);
 
     if (dom.financialImportWorkspaceChip) {
       dom.financialImportWorkspaceChip.className = `chip ${coverage.recordCount ? "good" : "warn"}`;
@@ -2192,6 +2368,88 @@
         ${visibleEntities}
         ${overflowCount ? `<span class="chip">+${formatNumber(overflowCount)} more</span>` : ""}
       `;
+    }
+
+    if (dom.financialHistoryStatus) {
+      dom.financialHistoryStatus.innerHTML = storedCoverage.recordCount
+        ? `Stored ledger: <strong>${formatNumber(storedCoverage.entityCount)}</strong> entities and <strong>${formatNumber(
+            storedCoverage.recordCount,
+          )}</strong> rows from <span class="mono">${escapeHtml(storedCoverage.periodStart || "--")}</span> to <span class="mono">${escapeHtml(
+            storedCoverage.periodEnd || "--",
+          )}</span>. Last saved ${escapeHtml(formatStoredTimestamp(storedHistory?.savedAt))}.`
+        : "No stored financial ledger yet. Imported file-based history will be saved locally for future trend reviews.";
+    }
+
+    if (dom.reloadFinancialHistory) {
+      dom.reloadFinancialHistory.disabled = !storedCoverage.recordCount;
+    }
+    if (dom.clearFinancialHistory) {
+      dom.clearFinancialHistory.disabled = !storedCoverage.recordCount;
+    }
+  }
+
+  function renderSnapshotScopeControls(view) {
+    if (dom.snapshotScopeMode && dom.snapshotScopeMode.value !== (state.snapshotScope.mode || "all")) {
+      dom.snapshotScopeMode.value = state.snapshotScope.mode || "all";
+    }
+    if (dom.snapshotEntitySearch && dom.snapshotEntitySearch.value !== (state.snapshotScope.search || "")) {
+      dom.snapshotEntitySearch.value = state.snapshotScope.search || "";
+    }
+
+    if (!dom.snapshotEntityChips || !dom.snapshotScopeSummary || !dom.snapshotScopeCount) {
+      return;
+    }
+
+    if (!view) {
+      dom.snapshotScopeSummary.innerHTML =
+        "Load financial history first, then use search and selection to switch the page between corporate, communities, or a custom combined group.";
+      dom.snapshotScopeCount.textContent = "";
+      dom.snapshotEntityChips.innerHTML = `<span class="filter-chip muted">No entities loaded yet</span>`;
+      if (dom.snapshotSelectVisible) {
+        dom.snapshotSelectVisible.disabled = true;
+      }
+      if (dom.snapshotClearSelection) {
+        dom.snapshotClearSelection.disabled = true;
+      }
+      return;
+    }
+
+    const scopedCount = view.scopedProperties.length;
+    const totalCount = view.allProperties.length;
+    const visibleCount = view.visibleEntities.length;
+    const mode = state.snapshotScope.mode || "all";
+    const search = state.snapshotScope.search || "";
+    const selectedSet = new Set(state.snapshotScope.selectedEntities || []);
+    const scopeLabel = getSnapshotScopeLabel(mode, scopedCount);
+
+    dom.snapshotScopeSummary.innerHTML =
+      mode === "custom"
+        ? scopedCount
+          ? `Snapshot is currently scoped to <strong>${escapeHtml(scopeLabel)}</strong>. Search to refine and click chips to add or remove entities from the combined view.`
+          : `Custom scope is active but no entities are selected. Search for communities or corporate, then click chips or use <strong>Select Visible</strong>.`
+        : `Snapshot is currently scoped to <strong>${escapeHtml(scopeLabel)}</strong> with <strong>${formatNumber(
+            scopedCount,
+          )}</strong> of <strong>${formatNumber(totalCount)}</strong> loaded entities reflected across the page.`;
+
+    dom.snapshotScopeCount.textContent = `${formatNumber(visibleCount)} visible · ${formatNumber(scopedCount)} in scope`;
+    dom.snapshotEntityChips.innerHTML = view.visibleEntities.length
+      ? view.visibleEntities
+          .map((entity) => {
+            const active = mode === "custom" ? selectedSet.has(entity) : view.scopedProperties.includes(entity);
+            return `<button class="filter-chip ${active ? "active" : ""}" type="button" data-entity-chip="${escapeHtml(
+              entity,
+            )}">${escapeHtml(entity)}</button>`;
+          })
+          .join("")
+      : `<span class="filter-chip muted">${
+          search ? "No entities match this search" : "No entities available in this scope"
+        }</span>`;
+
+    if (dom.snapshotSelectVisible) {
+      dom.snapshotSelectVisible.disabled = !view.visibleEntities.length;
+    }
+    if (dom.snapshotClearSelection) {
+      dom.snapshotClearSelection.disabled = mode !== "custom" && !search;
     }
   }
 
@@ -2279,6 +2537,8 @@
         ${
           dataset.sourceKind === "dashboard"
             ? `Synced ${formatNumber(diagnostics.parsedRows)} row(s) from the saved operations dashboard history.`
+            : dataset.sourceKind === "stored"
+              ? `Loaded ${formatNumber(diagnostics.parsedRows)} row(s) from the locally stored financial history ledger.`
             : `Parsed ${formatNumber(diagnostics.parsedRows)} of ${formatNumber(
                 diagnostics.fileRows || diagnostics.parsedRows,
               )} data row(s).`
@@ -2312,6 +2572,13 @@
     const loaded = Object.entries(state.datasets)
       .filter(([, dataset]) => dataset?.records.length)
       .map(([key]) => FILE_SPECS[key].label);
+
+    if (!view.propertySummaries.length) {
+      dom.dataReadiness.innerHTML = `
+        Loaded <span class="mono">${loaded.join(", ")}</span>. No entities match the current snapshot scope.
+      `;
+      return;
+    }
 
     dom.dataReadiness.innerHTML = `
       Loaded <span class="mono">${loaded.join(", ")}</span>. ${formatNumber(view.propertySummaries.length)} properties in scope through
@@ -2347,6 +2614,15 @@
       dom.snapshotGrid.innerHTML = `
         <div class="empty-state" style="grid-column: 1 / -1">
           Import a financial CSV to start building the portfolio view.
+        </div>
+      `;
+      return;
+    }
+
+    if (!view.propertySummaries.length) {
+      dom.snapshotGrid.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1">
+          No entities are in the current snapshot scope. Search for a community or corporate entity and select it to review combined trends.
         </div>
       `;
       return;
@@ -2460,7 +2736,7 @@
   function renderSelectedProperty(view) {
     const summary = view?.selectedSummary;
     if (!summary) {
-      dom.selectedPropertyShell.innerHTML = `<div class="empty-state">Select a property once data is loaded.</div>`;
+      dom.selectedPropertyShell.innerHTML = `<div class="empty-state">Select an entity from the filtered scope once financial data is loaded.</div>`;
       return;
     }
 
@@ -2815,7 +3091,7 @@
   }
 
   function renderBoardSummary(view) {
-    if (!view) {
+    if (!view?.selectedSummary || !view.propertySummaries.length) {
       dom.boardSummary.innerHTML = `<div class="empty-state">Board-style summary will appear after the portfolio view is loaded.</div>`;
       return;
     }
@@ -2959,6 +3235,7 @@
 
     const view = computeViewModel();
     renderWorkspaceBridge();
+    renderSnapshotScopeControls(view);
     renderPeriodOptions(view);
     if (dom.manualPeriodInput) {
       dom.manualPeriodInput.value = state.manualPeriod;
@@ -2970,7 +3247,7 @@
     renderLayerContent(view);
     renderCrosswalkContent(view);
     renderBoardSummary(view);
-    updateExportButtons(Boolean(view));
+    updateExportButtons(Boolean(view?.propertySummaries?.length));
     if (dom.applyFinancialUpload) {
       const hasStaged = Boolean(state.pendingFinancial?.dataset?.records?.length);
       dom.applyFinancialUpload.disabled = !hasStaged;
@@ -3440,6 +3717,18 @@
     render();
   }
 
+  function loadStoredFinancialHistoryIntoPage() {
+    const storedHistory = loadFinancialHistoryStore();
+    const storedDataset = normalizeStoredFinancialDataset(storedHistory?.dataset, "Stored financial history");
+    if (!storedDataset) {
+      render();
+      return;
+    }
+    state.datasets.financial = storedDataset;
+    persistState();
+    render();
+  }
+
   function bindDropzone(type) {
     const dropzone = document.getElementById(`${type}-dropzone`);
     const input = document.getElementById(`${type}-input`);
@@ -3471,6 +3760,12 @@
     if (dom.financialImportMode) {
       dom.financialImportMode.value = state.financialImport.mode || "merge";
     }
+    if (dom.snapshotScopeMode) {
+      dom.snapshotScopeMode.value = state.snapshotScope.mode || "all";
+    }
+    if (dom.snapshotEntitySearch) {
+      dom.snapshotEntitySearch.value = state.snapshotScope.search || "";
+    }
 
     bindDropzone("financial");
 
@@ -3490,6 +3785,73 @@
       render();
     });
 
+    dom.reloadFinancialHistory?.addEventListener("click", loadStoredFinancialHistoryIntoPage);
+    dom.clearFinancialHistory?.addEventListener("click", () => {
+      clearFinancialHistoryStore();
+      render();
+    });
+
+    dom.snapshotScopeMode?.addEventListener("change", (event) => {
+      const nextMode = event.target.value || "all";
+      if (nextMode === "custom" && !(state.snapshotScope.selectedEntities || []).length && state.selectedProperty) {
+        state.snapshotScope.selectedEntities = [state.selectedProperty];
+      }
+      state.snapshotScope.mode = nextMode;
+      persistState();
+      render();
+    });
+
+    dom.snapshotEntitySearch?.addEventListener("input", (event) => {
+      state.snapshotScope.search = event.target.value || "";
+      persistState();
+      render();
+    });
+
+    dom.snapshotSelectVisible?.addEventListener("click", () => {
+      const visibleEntities = getVisibleScopeEntityNames(getFinancialEntityNames());
+      state.snapshotScope.mode = "custom";
+      state.snapshotScope.selectedEntities = visibleEntities;
+      persistState();
+      render();
+    });
+
+    dom.snapshotClearSelection?.addEventListener("click", () => {
+      state.snapshotScope.search = "";
+      if (state.snapshotScope.mode === "custom") {
+        state.snapshotScope.selectedEntities = [];
+      } else {
+        state.snapshotScope.mode = "all";
+      }
+      persistState();
+      render();
+    });
+
+    dom.snapshotEntityChips?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-entity-chip]");
+      if (!button) {
+        return;
+      }
+      const entity = button.dataset.entityChip;
+      if (!entity) {
+        return;
+      }
+      const selected = new Set(state.snapshotScope.selectedEntities || []);
+      if (selected.has(entity)) {
+        selected.delete(entity);
+      } else {
+        selected.add(entity);
+      }
+      state.snapshotScope.mode = "custom";
+      state.snapshotScope.selectedEntities = Array.from(selected).sort((left, right) => left.localeCompare(right));
+      persistState();
+      render();
+    });
+
+    document.getElementById("load-sample-pack").addEventListener("click", () => {
+      setDataset("financial", samplePack.financial, "sample-financial.csv", "sample");
+      setDataset("operations", samplePack.operations, "sample-operations.csv", "sample");
+      setDataset("leasing", samplePack.leasing, "sample-leasing.csv", "sample");
+    });
     document.getElementById("clear-all").addEventListener("click", clearState);
     dom.syncDashboardHistory.addEventListener("click", () => {
       syncDashboardDriverDatasets();
@@ -3572,6 +3934,11 @@
   }
   if (!restored) {
     syncDashboardDriverDatasets();
+    const storedHistory = loadFinancialHistoryStore();
+    const storedDataset = normalizeStoredFinancialDataset(storedHistory?.dataset, "Stored financial history");
+    if (storedDataset) {
+      state.datasets.financial = storedDataset;
+    }
     persistState();
   } else if (!state.datasets.operations || !state.datasets.leasing) {
     syncDashboardDriverDatasets();

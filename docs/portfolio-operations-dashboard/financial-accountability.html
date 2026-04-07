@@ -243,7 +243,8 @@
         font-weight: 700;
       }
 
-      select {
+      select,
+      input[type="search"] {
         width: 100%;
         border-radius: 10px;
         border: 1px solid #c6c3bd;
@@ -302,6 +303,73 @@
 
       .helper-list li + li {
         margin-top: 5px;
+      }
+
+      .scope-shell {
+        display: grid;
+        gap: 12px;
+      }
+
+      .scope-grid {
+        display: grid;
+        grid-template-columns: 180px minmax(220px, 1fr) auto;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .scope-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .entity-picker {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid var(--border2);
+        border-radius: 14px;
+        background: #f8f8f5;
+      }
+
+      .entity-picker-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      .entity-chip-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid #d0dbe2;
+        background: #fff;
+        color: var(--accent);
+        cursor: pointer;
+      }
+
+      .filter-chip.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .filter-chip.muted {
+        color: var(--muted);
+        border-style: dashed;
       }
 
       .ingest-card {
@@ -832,6 +900,7 @@
         .workspace,
         .top-grid,
         .import-grid,
+        .scope-grid,
         .layer-grid,
         .summary-columns {
           grid-template-columns: 1fr;
@@ -949,11 +1018,17 @@
               </div>
               <div class="status-line" id="financial-import-summary" style="margin-top: 10px"></div>
               <div class="chip-row" id="financial-import-coverage" style="margin-top: 10px"></div>
+              <div class="button-row" style="margin-top: 10px">
+                <button class="btn btn-soft" id="reload-financial-history">Use Stored History</button>
+                <button class="btn" id="clear-financial-history">Clear Stored History</button>
+              </div>
+              <div class="status-line" id="financial-history-status" style="margin-top: 10px"></div>
               <ul class="helper-list">
                 <li>Leave scope on auto-detect when the CSV already contains a property or community column.</li>
                 <li>Choose a community or RISE Corporate when the file is only for one entity or the source file omits property names.</li>
                 <li>Use replace modes when you want to refresh one entity’s history or reset the full ledger before importing a new baseline.</li>
                 <li><strong>Approved Budget baseline</strong> stores the final budget rows and uses them as the source of truth for “vs budget” comparisons (for the same year/month) until replaced.</li>
+                <li>Imported financial history is stored locally for this dashboard so you can keep building trends over time.</li>
               </ul>
             </section>
 
@@ -1001,6 +1076,35 @@
                 <div>
                   <h2>Portfolio Snapshot</h2>
                   <p>YTD accountability, current-month pace, MoM change, YoY change, and recovery run-rate through the selected month.</p>
+                </div>
+              </div>
+              <div class="scope-shell" style="margin-bottom: 14px">
+                <div class="scope-grid">
+                  <div class="field">
+                    <label for="snapshot-scope-mode">Snapshot Scope</label>
+                    <select id="snapshot-scope-mode">
+                      <option value="all">All loaded entities</option>
+                      <option value="communities">Communities only</option>
+                      <option value="corporate">RISE Corporate only</option>
+                      <option value="custom">Custom selection</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="snapshot-entity-search">Search Entities</label>
+                    <input id="snapshot-entity-search" type="search" placeholder="Search community or corporate name" />
+                  </div>
+                  <div class="scope-actions">
+                    <button class="btn btn-soft" id="snapshot-select-visible">Select Visible</button>
+                    <button class="btn" id="snapshot-clear-selection">Clear Selection</button>
+                  </div>
+                </div>
+                <div class="status-line" id="snapshot-scope-summary"></div>
+                <div class="entity-picker">
+                  <div class="entity-picker-head">
+                    <strong>Entity Filter</strong>
+                    <span id="snapshot-scope-count"></span>
+                  </div>
+                  <div class="entity-chip-grid" id="snapshot-entity-chips"></div>
                 </div>
               </div>
               <div class="snapshot-grid" id="snapshot-grid"></div>
