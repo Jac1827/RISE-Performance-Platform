@@ -296,10 +296,45 @@
     },
   ];
 
+  function defaultManualPeriodSelection() {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    return `${today.getFullYear()}-${month}`;
+  }
+
+  function buildManualPeriodOptions(anchorPeriod) {
+    const normalized = parsePeriod(anchorPeriod) || defaultManualPeriodSelection();
+    const match = /^(\d{4})-(\d{2})$/.exec(normalized);
+    let baseDate = new Date();
+    if (match) {
+      baseDate = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+    }
+    const options = [];
+    for (let delta = -3; delta <= 3; delta += 1) {
+      const candidate = new Date(baseDate.getFullYear(), baseDate.getMonth() + delta, 1);
+      options.push(`${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return Array.from(new Set(options));
+  }
+
+  function setManualPeriodValue(value, syncPeriod = false) {
+    if (!value) return;
+    state.manualPeriod = value;
+    if (dom.manualPeriodInput && dom.manualPeriodInput.value !== value) {
+      dom.manualPeriodInput.value = value;
+    }
+    if (syncPeriod) {
+      state.selectedPeriod = value;
+      syncWorkspaceContextFromCurrentSelection();
+      persistState();
+    }
+  }
+
   const state = {
     layer: "financial",
     selectedPeriod: null,
     selectedProperty: null,
+    manualPeriod: defaultManualPeriodSelection(),
     financialImport: {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
@@ -313,6 +348,7 @@
 
   const dom = {
     periodSelect: document.getElementById("period-select"),
+    manualPeriodInput: document.getElementById("manual-period-input"),
     dataReadiness: document.getElementById("data-readiness"),
     opsWorkspaceChips: document.getElementById("ops-workspace-chips"),
     opsWorkspaceNote: document.getElementById("ops-workspace-note"),
@@ -535,6 +571,7 @@
     }
     if (normalized.period && (forceSelection || !state.selectedPeriod)) {
       state.selectedPeriod = normalized.period;
+      setManualPeriodValue(normalized.period, false);
     }
     if (matchedCommunity && updateImportScope && (forceSelection || !state.financialImport.scope || state.financialImport.scope === AUTO_IMPORT_SCOPE)) {
       state.financialImport.scope = matchedCommunity;
@@ -1280,7 +1317,12 @@
 
         if (type === "financial") {
           const property = matchCommunityName(scopeOverride || getField(row, fieldInfo.detected, "property"));
-          const period = parsePeriod(getField(row, fieldInfo.detected, "period"));
+          const rawPeriod = getField(row, fieldInfo.detected, "period");
+          const period =
+            parsePeriod(rawPeriod) ||
+            parsePeriod(options.period) ||
+            state.selectedPeriod ||
+            state.manualPeriod;
           const section = getField(row, fieldInfo.detected, "section");
           const lineItem = getField(row, fieldInfo.detected, "lineItem");
           const actual = parseAmount(getField(row, fieldInfo.detected, "actual"));
@@ -2372,15 +2414,22 @@
   }
 
   function renderPeriodOptions(view) {
-    if (!view) {
-      dom.periodSelect.innerHTML = `<option value="">Load data first</option>`;
+    const options = view
+      ? view.availablePeriods
+      : buildManualPeriodOptions(state.manualPeriod);
+    if (!options.length) {
+      dom.periodSelect.innerHTML = `<option value="">Select a period</option>`;
       return;
     }
-
-    dom.periodSelect.innerHTML = view.availablePeriods
+    if (!state.selectedPeriod || !options.includes(state.selectedPeriod)) {
+      state.selectedPeriod = options[options.length - 1];
+    }
+    dom.periodSelect.innerHTML = options
       .map(
         (period) =>
-          `<option value="${escapeHtml(period)}" ${period === state.selectedPeriod ? "selected" : ""}>${escapeHtml(period)}</option>`,
+          `<option value="${escapeHtml(period)}" ${
+            period === state.selectedPeriod ? "selected" : ""
+          }>${escapeHtml(formatPeriodLabel(period))}</option>`,
       )
       .join("");
   }
@@ -2898,6 +2947,9 @@
     const view = computeViewModel();
     renderWorkspaceBridge();
     renderPeriodOptions(view);
+    if (dom.manualPeriodInput) {
+      dom.manualPeriodInput.value = state.manualPeriod;
+    }
     renderReadiness(view);
     renderSnapshot(view);
     renderRanking(view);
@@ -3322,6 +3374,7 @@
     const selectedReplaceMode =
       type === "financial" ? dom.financialImportMode?.value || state.financialImport.mode || "merge" : "merge";
     let currentReplaceMode = selectedReplaceMode;
+    const manualPeriodOverride = dom.manualPeriodInput?.value || state.manualPeriod;
 
     for (const file of fileList) {
       const text = await file.text();
@@ -3333,6 +3386,7 @@
         merge: shouldMerge,
         scopeOverride,
         replaceMode: type === "financial" ? currentReplaceMode : "merge",
+        period: manualPeriodOverride,
       });
       currentReplaceMode = "merge";
     }
@@ -3418,6 +3472,13 @@
       syncWorkspaceContextFromCurrentSelection();
       persistState();
       render();
+    });
+    dom.manualPeriodInput?.addEventListener("change", (event) => {
+      const value = event.target.value;
+      if (value) {
+        setManualPeriodValue(value, true);
+        render();
+      }
     });
 
     document.querySelectorAll("[data-sample]").forEach((button) => {

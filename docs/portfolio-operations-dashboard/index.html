@@ -4265,8 +4265,30 @@ function revertToBudget() {
   renderTab();
 }
 
+function carryForwardMonthlyData(fromMonth) {
+  const base = Math.max(0, Math.min(11, Number(fromMonth) || 0));
+  for (let idx = base + 1; idx < 12; idx += 1) {
+    const prevEntry = monthlyData[idx - 1] || {};
+    const targetEntry = monthlyData[idx] || {};
+    const needsOccupied = !Number(targetEntry.occupiedSnapshot);
+    const needsLeased = !Number(targetEntry.leasedSnapshot);
+    const needsBudget = !targetEntry.budgetOcc && prevEntry.budgetOcc;
+    if (!needsOccupied && !needsLeased && !needsBudget) {
+      monthlyData[idx] = { ...targetEntry };
+      continue;
+    }
+    monthlyData[idx] = {
+      ...targetEntry,
+      occupiedSnapshot: needsOccupied ? prevEntry.occupiedSnapshot : targetEntry.occupiedSnapshot,
+      leasedSnapshot: needsLeased ? prevEntry.leasedSnapshot : targetEntry.leasedSnapshot,
+      budgetOcc: needsBudget ? prevEntry.budgetOcc : targetEntry.budgetOcc,
+    };
+  }
+}
+
 function saveCommunityData(silent = false) {
   const key = getProp().name;
+  carryForwardMonthlyData(currentMonth);
   storeCurrentMonthSnapshots(currentMonth, currentOccupied, currentLeased);
   savedData[key] = getCurrentCommunityRecord();
   const savedResult = persistSaved();
