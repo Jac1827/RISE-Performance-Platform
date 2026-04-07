@@ -1,0 +1,3932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VP Monthly Portfolio Snapshot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5efe4;
+    --paper-strong: #fffaf2;
+    --ink: #1e2a24;
+    --muted: #6b756d;
+    --line: rgba(30, 42, 36, 0.12);
+    --shadow: 0 20px 60px rgba(29, 42, 36, 0.12);
+    --green: #1f6a54;
+    --green-soft: rgba(31, 106, 84, 0.12);
+    --orange: #c96e33;
+    --orange-soft: rgba(201, 110, 51, 0.12);
+    --red: #b84d3a;
+    --red-soft: rgba(184, 77, 58, 0.12);
+    --gold: #9d8a31;
+    --teal: #2b7a78;
+    --mono: "IBM Plex Mono", monospace;
+    --serif: "Fraunces", serif;
+    --sans: "Manrope", sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: var(--sans);
+    background:
+      radial-gradient(circle at top left, rgba(201, 110, 51, 0.18), transparent 30%),
+      radial-gradient(circle at top right, rgba(31, 106, 84, 0.15), transparent 28%),
+      linear-gradient(180deg, #f8f3eb 0%, #efe7d8 100%);
+  }
+
+  .shell {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 28px 18px 48px;
+  }
+
+  .hero {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    padding: 28px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: 28px;
+    background:
+      linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(247, 240, 228, 0.92)),
+      linear-gradient(120deg, rgba(31, 106, 84, 0.04), rgba(201, 110, 51, 0.08));
+    box-shadow: var(--shadow);
+  }
+
+  .hero::before,
+  .hero::after {
+    content: "";
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+  }
+
+  .hero::before {
+    width: 240px;
+    height: 240px;
+    right: -80px;
+    top: -100px;
+    background: rgba(31, 106, 84, 0.08);
+  }
+
+  .hero::after {
+    width: 180px;
+    height: 180px;
+    right: 180px;
+    bottom: -90px;
+    background: rgba(201, 110, 51, 0.08);
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--green);
+    background: rgba(31, 106, 84, 0.1);
+  }
+
+  .hero h1 {
+    margin: 14px 0 10px;
+    font-family: var(--serif);
+    font-size: clamp(2.2rem, 4vw, 4rem);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+  }
+
+  .hero p {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  .hero-copy {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-controls {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    padding: 18px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(10px);
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .field,
+  .stacked-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  label {
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  input[type="text"],
+  input[type="date"],
+  input[type="email"],
+  select,
+  textarea {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 13px 14px;
+    color: var(--ink);
+    font: inherit;
+    background: rgba(255, 255, 255, 0.88);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  }
+
+  textarea {
+    min-height: 116px;
+    resize: vertical;
+    line-height: 1.55;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: rgba(31, 106, 84, 0.4);
+    box-shadow: 0 0 0 4px rgba(31, 106, 84, 0.08);
+  }
+
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #1f6a54, #2b7a78);
+    box-shadow: 0 14px 30px rgba(31, 106, 84, 0.22);
+  }
+
+  .btn-secondary {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(30, 42, 36, 0.1);
+  }
+
+  .btn-alert {
+    color: #fff;
+    background: linear-gradient(135deg, #b84d3a, #cf7445);
+    box-shadow: 0 14px 30px rgba(184, 77, 58, 0.2);
+  }
+
+  .btn-muted {
+    color: var(--muted);
+    background: rgba(30, 42, 36, 0.05);
+    border: 1px solid var(--line);
+  }
+
+  .btn input {
+    display: none;
+  }
+
+  .hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.83rem;
+    line-height: 1.55;
+  }
+
+  .action-status {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    border: 1px solid transparent;
+    background: rgba(30, 42, 36, 0.05);
+    color: var(--muted);
+  }
+
+  .action-status.success {
+    background: rgba(70, 128, 91, 0.12);
+    border-color: rgba(70, 128, 91, 0.18);
+    color: #375c42;
+  }
+
+  .action-status.error {
+    background: rgba(184, 77, 58, 0.12);
+    border-color: rgba(184, 77, 58, 0.18);
+    color: #8f3b2d;
+  }
+
+  .mono {
+    font-family: var(--mono);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .card {
+    border-radius: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: rgba(255, 250, 242, 0.88);
+    box-shadow: var(--shadow);
+    padding: 24px;
+  }
+
+  .span-12 { grid-column: span 12; }
+  .span-8 { grid-column: span 8; }
+  .span-7 { grid-column: span 7; }
+  .span-6 { grid-column: span 6; }
+  .span-5 { grid-column: span 5; }
+  .span-4 { grid-column: span 4; }
+
+  .section-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .section-title {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  .section-subtitle {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .status-chip.stable {
+    color: var(--green);
+    background: var(--green-soft);
+  }
+
+  .status-chip.watch {
+    color: var(--orange);
+    background: var(--orange-soft);
+  }
+
+  .status-chip.at-risk,
+  .status-chip.intervention {
+    color: var(--red);
+    background: var(--red-soft);
+  }
+
+  .status-chip::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .source-note {
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: rgba(31, 106, 84, 0.06);
+    border: 1px solid rgba(31, 106, 84, 0.12);
+    color: var(--ink);
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .source-note strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .metric {
+    display: grid;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(30, 42, 36, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.55));
+  }
+
+  .metric-label {
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .metric-value {
+    font-family: var(--serif);
+    font-size: clamp(1.7rem, 3vw, 2.6rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .metric-detail,
+  .metric-subdetail {
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+
+  .metric-subdetail {
+    font-size: 0.8rem;
+  }
+
+  .trend {
+    font-weight: 800;
+  }
+
+  .trend.up { color: var(--green); }
+  .trend.flat { color: var(--gold); }
+  .trend.down { color: var(--red); }
+
+  .story-callout {
+    margin: 0 0 16px;
+    padding: 18px 18px 0;
+    font-family: var(--serif);
+    font-size: clamp(1.35rem, 2.3vw, 2rem);
+    line-height: 1.18;
+    letter-spacing: -0.03em;
+  }
+
+  .story-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 16px;
+  }
+
+  .story-panel,
+  .insight-panel {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(30, 42, 36, 0.08);
+  }
+
+  .insight-list,
+  .rank-list,
+  .risk-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .bullet-row,
+  .rank-row,
+  .risk-row {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(30, 42, 36, 0.07);
+    background: rgba(255, 255, 255, 0.62);
+  }
+
+  .bullet-row strong,
+  .rank-row strong,
+  .risk-row strong {
+    font-size: 0.96rem;
+  }
+
+  .rank-meta,
+  .risk-meta,
+  .bullet-row span {
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  .bar-track {
+    position: relative;
+    overflow: hidden;
+    height: 10px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: rgba(30, 42, 36, 0.08);
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--green), var(--teal));
+  }
+
+  .bar-fill.watch {
+    background: linear-gradient(90deg, #d48a38, #c96e33);
+  }
+
+  .bar-fill.at-risk {
+    background: linear-gradient(90deg, #b84d3a, #cf7445);
+  }
+
+  .traffic-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .traffic-cell {
+    padding: 18px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(30, 42, 36, 0.08);
+  }
+
+  .traffic-value {
+    font-family: var(--serif);
+    font-size: 2rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .small-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .reputation-layout {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .reputation-panel {
+    display: grid;
+    gap: 14px;
+  }
+
+  .reputation-upload-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .reputation-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .reputation-metric {
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(30, 42, 36, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.55));
+  }
+
+  .reputation-metric-value {
+    font-family: var(--serif);
+    font-size: clamp(1.5rem, 2.7vw, 2.3rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .reputation-community-name {
+    display: grid;
+    gap: 4px;
+  }
+
+  .reputation-community-name small {
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+
+  .reputation-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .reputation-edit-card {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(30, 42, 36, 0.08);
+  }
+
+  .reputation-edit-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .reputation-edit-fields input {
+    border-radius: 14px;
+    padding: 11px 12px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 24px;
+    border: 1px solid rgba(30, 42, 36, 0.08);
+    background: rgba(255, 255, 255, 0.64);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1060px;
+  }
+
+  th,
+  td {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(30, 42, 36, 0.07);
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.9rem;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(246, 239, 228, 0.97);
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .community-name {
+    display: grid;
+    gap: 5px;
+  }
+
+  .community-name small {
+    color: var(--muted);
+    font-size: 0.77rem;
+  }
+
+  .delta {
+    font-weight: 800;
+  }
+
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+  .delta.flat { color: var(--gold); }
+
+  .reason-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .reason-list span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .trust-score {
+    display: inline-grid;
+    gap: 4px;
+  }
+
+  .trust-score strong {
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .capture-page {
+    display: grid;
+    gap: 18px;
+    color: #1a261f;
+    box-sizing: border-box;
+    background:
+      linear-gradient(180deg, rgba(247, 241, 232, 0.98), rgba(255, 255, 255, 0.98)),
+      repeating-linear-gradient(90deg, rgba(30, 42, 36, 0.02) 0 1px, transparent 1px 24px);
+  }
+
+  .capture-masthead {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 18px 20px 16px;
+    border-bottom: 3px solid rgba(30, 42, 36, 0.14);
+    align-items: end;
+  }
+
+  .capture-logo {
+    width: 228px;
+    height: 74px;
+    margin-right: 10px;
+  }
+
+  .capture-brand {
+    display: grid;
+    gap: 8px;
+  }
+
+  .capture-kicker {
+    font: 700 0.76rem/1 var(--mono);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .capture-name {
+    font-family: var(--serif);
+    font-size: clamp(2.1rem, 4.2vw, 3.2rem);
+    line-height: 0.95;
+    letter-spacing: -0.06em;
+  }
+
+  .capture-edition {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font: 0.82rem/1.4 var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .capture-page .card,
+  .capture-page .hero {
+    box-shadow: 0 18px 40px rgba(37, 40, 32, 0.08);
+    border-color: rgba(30, 42, 36, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 241, 232, 0.72));
+  }
+
+  .capture-page .hero {
+    position: relative;
+    overflow: hidden;
+    grid-template-columns: 1fr;
+  }
+
+  .capture-page .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 0 58%, rgba(165, 125, 78, 0.08) 58% 100%);
+    pointer-events: none;
+  }
+
+  .capture-page .section-title,
+  .capture-page .hero-title {
+    letter-spacing: -0.05em;
+  }
+
+  .capture-page .hero-copy {
+    max-width: none;
+    gap: 18px;
+  }
+
+  .capture-page #hero-summary {
+    order: -1;
+    max-width: 62ch;
+    font-size: 1.04rem;
+    line-height: 1.7;
+    color: rgba(42, 58, 50, 0.88);
+  }
+
+  .capture-page .hero h1 {
+    max-width: 10ch;
+    font-size: clamp(3rem, 5vw, 4.7rem);
+    line-height: 0.92;
+  }
+
+  .capture-page .metric,
+  .capture-page .reputation-metric,
+  .capture-page .traffic-cell,
+  .capture-page .insight-panel {
+    background: rgba(255, 255, 255, 0.88);
+  }
+
+  .capture-field {
+    display: inline-block;
+    min-width: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    white-space: pre-wrap;
+  }
+
+  .capture-field-long {
+    display: block;
+    width: 100%;
+    min-height: 1.4em;
+    line-height: 1.6;
+  }
+
+  .pdf-stage {
+    position: absolute;
+    left: -20000px;
+    top: 0;
+    display: grid;
+    gap: 16px;
+    z-index: -1;
+  }
+
+  .pdf-page {
+    width: 1056px;
+    height: 816px;
+    padding: 24px 26px 18px;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+    color: #173246;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 250, 0.98)),
+      radial-gradient(circle at top right, rgba(84, 157, 184, 0.08), transparent 32%);
+    border: 1px solid rgba(2, 48, 70, 0.08);
+    font-family: var(--sans);
+  }
+
+  .pdf-page * {
+    box-sizing: border-box;
+  }
+
+  .pdf-page-body {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .pdf-page-footer {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(2, 48, 70, 0.12);
+    font-size: 11px;
+    line-height: 1.45;
+    color: #71808b;
+  }
+
+  .pdf-page .capture-logo {
+    width: 184px;
+    height: 60px;
+    margin-right: 0;
+  }
+
+  .contact-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .contact-row {
+    display: grid;
+    grid-template-columns: 0.7fr 1fr 1.2fr 0.5fr auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(30, 42, 36, 0.08);
+  }
+
+  .contact-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+
+  .contact-toggle input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .contact-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+    margin-top: 14px;
+  }
+
+  .email-preview {
+    width: 100%;
+    min-height: 320px;
+    border-radius: 24px;
+    border: 1px solid rgba(30, 42, 36, 0.08);
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--ink);
+    font: 0.92rem/1.62 var(--mono);
+    white-space: pre-wrap;
+  }
+
+  .gallery-controls {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(240px, 1fr);
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 16px;
+  }
+
+  .upload-panel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .upload-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .upload-status {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .visual-grid,
+  .package-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+
+  .visual-tile,
+  .package-tile {
+    overflow: hidden;
+    border-radius: 20px;
+    border: 1px solid rgba(30, 42, 36, 0.08);
+    background: rgba(255, 255, 255, 0.64);
+  }
+
+  .visual-frame,
+  .package-frame {
+    aspect-ratio: 4 / 3;
+    background: rgba(30, 42, 36, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .visual-frame img,
+  .package-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .visual-meta,
+  .package-meta {
+    padding: 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .visual-placeholder {
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 18px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tag {
+    padding: 8px 11px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    background: rgba(30, 42, 36, 0.06);
+  }
+
+  .empty-state {
+    display: grid;
+    gap: 12px;
+    padding: 30px;
+    text-align: center;
+    border-radius: 26px;
+    border: 1px dashed rgba(30, 42, 36, 0.16);
+    background: rgba(255, 255, 255, 0.48);
+  }
+
+  .empty-state h3 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 1.6rem;
+  }
+
+  .print-hide {
+    display: block;
+  }
+
+  .skip-print-if-empty[data-empty="true"] {
+    display: block;
+  }
+
+  @media (max-width: 1120px) {
+    .hero,
+    .story-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .metric-grid,
+    .small-grid,
+    .traffic-grid,
+    .reputation-summary-grid,
+    .reputation-upload-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .reputation-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .span-8,
+    .span-7,
+    .span-6,
+    .span-5,
+    .span-4 {
+      grid-column: span 12;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .shell {
+      padding: 16px 12px 32px;
+    }
+
+    .hero,
+    .card {
+      padding: 18px;
+      border-radius: 22px;
+    }
+
+    .field-grid,
+    .metric-grid,
+    .small-grid,
+    .traffic-grid,
+    .reputation-summary-grid,
+    .reputation-upload-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .contact-row {
+      grid-template-columns: 1fr;
+    }
+
+    .contact-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .gallery-controls {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media print {
+    body {
+      background: #fff;
+    }
+
+    .shell {
+      max-width: none;
+      padding: 0;
+    }
+
+    .hero,
+    .card {
+      background: #fff;
+      box-shadow: none;
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    .print-hide {
+      display: none !important;
+    }
+
+    .skip-print-if-empty[data-empty="true"] {
+      display: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div class="hero-copy">
+      <span class="eyebrow">C-suite monthly update</span>
+      <p id="hero-summary">This report reads like a monthly portfolio news brief once the leasing dashboard data is loaded: headline metrics, investor view, resident reputation movement, community pressure points, and a ready-to-send leadership email draft.</p>
+      <h1>VP Monthly Portfolio Snapshot</h1>
+    </div>
+    <div class="hero-controls print-hide">
+      <div class="field-grid">
+        <div class="field">
+          <label for="portfolio-label">Portfolio Label</label>
+          <input id="portfolio-label" type="text" placeholder="RISE portfolio">
+        </div>
+        <div class="field">
+          <label for="prepared-by">Prepared By</label>
+          <input id="prepared-by" type="text" placeholder="Vice President of Property Management">
+        </div>
+        <div class="field">
+          <label for="month-ending">Month Ending</label>
+          <input id="month-ending" type="date">
+        </div>
+        <div class="field">
+          <label for="email-subject">Email Subject</label>
+          <input id="email-subject" type="text" placeholder="Monthly subject line">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="button" onclick="loadDirectFromLeasing()">Pull Portfolio Data</button>
+        <label class="btn btn-secondary" for="snapshot-input">Import Snapshot JSON<input id="snapshot-input" type="file" accept=".json"></label>
+        <button class="btn btn-secondary" type="button" onclick="window.print()">Print / Save PDF</button>
+      </div>
+      <div id="source-status" class="source-note">
+        <strong>No portfolio data loaded yet.</strong>
+        Save your communities in the leasing dashboard, then pull them here directly or import a snapshot JSON export.
+      </div>
+      <div id="source-tags" class="tag-row"></div>
+    </div>
+  </header>
+
+  <section class="layout">
+    <article id="portfolio-pulse-card" class="card span-8">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Portfolio Pulse</h2>
+          <p class="section-subtitle">Weighted portfolio rollups for occupancy, leasing, near-term exposure, traffic, and revenue position.</p>
+        </div>
+        <div id="portfolio-status-chip" class="status-chip watch">Waiting on Data</div>
+      </div>
+      <div id="metric-grid" class="metric-grid"></div>
+    </article>
+
+    <aside id="investor-card" class="card span-4">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Investor Breakdown</h2>
+          <p class="section-subtitle">Roll the portfolio up by investor so ownership exposure and wins are visible without reading every community row.</p>
+        </div>
+      </div>
+      <div id="investor-breakdown" class="rank-list"></div>
+    </aside>
+
+    <article id="executive-card" class="card span-7">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Executive Brief</h2>
+          <p class="section-subtitle">Auto-generated story plus room for your voice before it goes upstairs.</p>
+        </div>
+      </div>
+      <p id="story-callout" class="story-callout">Load portfolio data to generate the executive headline.</p>
+      <div class="story-grid">
+        <div class="story-panel">
+          <div>
+            <label for="executive-headline">Your Lead Commentary</label>
+            <textarea id="executive-headline" placeholder="Optional: add your top-line leadership framing here."></textarea>
+          </div>
+          <div>
+            <label for="wins-note">Wins To Highlight</label>
+            <textarea id="wins-note" placeholder="Optional: note the wins you want emphasized."></textarea>
+          </div>
+          <div>
+            <label for="operations-wins">Operations Wins / Rollouts</label>
+            <textarea id="operations-wins" placeholder="Call out successful rollouts, portfolio initiatives, standards launches, maintenance programs, training wins, or operating discipline improvements."></textarea>
+          </div>
+        </div>
+        <div class="story-panel">
+          <div>
+            <label for="watchlist-note">Watch List / Risk Framing</label>
+            <textarea id="watchlist-note" placeholder="Optional: add the pressure points you want the C-suite to hear."></textarea>
+          </div>
+          <div>
+            <label for="upcoming-initiatives">Upcoming Initiatives</label>
+            <textarea id="upcoming-initiatives" placeholder="Preview the next rollouts, investor-facing initiatives, marketing pushes, staffing moves, capital work, or operating priorities."></textarea>
+          </div>
+          <div>
+            <label for="ask-note">Leadership Ask / Support Needed</label>
+            <textarea id="ask-note" placeholder="Optional: call out support needed, pricing approvals, staffing, capital, or marketing moves."></textarea>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article id="insights-card" class="card span-5">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Auto Insights</h2>
+          <p class="section-subtitle">The talking points the report is surfacing from the portfolio data right now.</p>
+        </div>
+      </div>
+      <div class="small-grid">
+        <div class="insight-panel">
+          <label>Wins</label>
+          <div id="wins-list" class="insight-list"></div>
+        </div>
+        <div class="insight-panel">
+          <label>Watchouts</label>
+          <div id="watch-list" class="insight-list"></div>
+        </div>
+      </div>
+    </article>
+
+    <article id="reputation-card" class="card span-12">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">TALi Experience & Resident Voice</h2>
+          <p class="section-subtitle">Upload the current and prior J Turner TALi executive summary PDFs so the monthly report can track portfolio experience movement, benchmark position, and the strongest and weakest communities.</p>
+        </div>
+      </div>
+      <div class="reputation-layout">
+        <div class="reputation-panel">
+          <div class="reputation-upload-grid print-hide">
+            <div class="stacked-field">
+              <label for="jturner-current-input">Current TALi Report</label>
+              <label class="btn btn-secondary" for="jturner-current-input">Upload Current PDF<input id="jturner-current-input" type="file" accept=".pdf"></label>
+              <button class="btn btn-muted" type="button" onclick="clearReputationReport('current')">Clear Current</button>
+            </div>
+            <div class="stacked-field">
+              <label for="jturner-previous-input">Previous TALi Report</label>
+              <label class="btn btn-secondary" for="jturner-previous-input">Upload Previous PDF<input id="jturner-previous-input" type="file" accept=".pdf"></label>
+              <button class="btn btn-muted" type="button" onclick="clearReputationReport('previous')">Clear Previous</button>
+            </div>
+          </div>
+          <div id="reputation-status" class="source-note">Upload the most recent TALi executive summary PDF and the prior TALi report to unlock the full monthly experience snapshot.</div>
+          <div id="reputation-summary-grid" class="reputation-summary-grid"></div>
+        </div>
+        <div class="reputation-panel">
+          <div class="small-grid">
+            <div class="insight-panel">
+              <label>Key Improvements</label>
+              <div id="reputation-improvements" class="insight-list"></div>
+            </div>
+            <div class="insight-panel">
+              <label>Communities To Watch</label>
+              <div id="reputation-watchouts" class="insight-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="reputation-community-table"></div>
+    </article>
+
+    <article id="leaders-card" class="card span-4">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Leaders</h2>
+          <p class="section-subtitle">Communities setting the tone for the portfolio this week.</p>
+        </div>
+      </div>
+      <div id="leaders-list" class="rank-list"></div>
+    </article>
+
+    <article id="risk-card" class="card span-4">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Risk Watch</h2>
+          <p class="section-subtitle">Communities needing the most focused leadership attention.</p>
+        </div>
+      </div>
+      <div id="risk-list" class="risk-list"></div>
+    </article>
+
+    <article id="traffic-card" class="card span-4">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Traffic Snapshot</h2>
+          <p class="section-subtitle">Current-month funnel volume rolled up across the active portfolio.</p>
+        </div>
+      </div>
+      <div id="traffic-grid" class="traffic-grid"></div>
+    </article>
+
+    <article id="visual-card" class="card span-12 skip-print-if-empty" data-empty="true">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Performance in View</h2>
+          <p class="section-subtitle">Use this section when portfolio performance, rollouts, operational issues, resident impact, or site execution need photo context.</p>
+        </div>
+      </div>
+      <div class="gallery-controls print-hide">
+        <div class="upload-panel">
+          <label for="visual-upload">Upload Images</label>
+          <div class="upload-actions">
+            <button class="btn btn-secondary" type="button" onclick="openVisualPicker()">Choose Images</button>
+            <button class="btn btn-muted" type="button" onclick="clearVisualImages()">Clear Images</button>
+          </div>
+          <input id="visual-upload" type="file" accept="image/*" multiple hidden>
+          <div id="visual-upload-status" class="upload-status">Click Choose Images to upload as many report visuals as you need.</div>
+        </div>
+      </div>
+      <div id="visual-gallery"></div>
+    </article>
+
+    <article id="community-card" class="card span-12">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Community Performance Detail</h2>
+          <p class="section-subtitle">A sortable-at-a-glance executive table focused on gap to budget, exposure, revenue position, and short narrative reasons.</p>
+        </div>
+      </div>
+      <div id="community-table-wrap"></div>
+    </article>
+
+    <article id="email-card" class="card span-12 print-hide">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Email Package</h2>
+      <p class="section-subtitle">Store your leadership contacts here, build a branded landscape PDF attachment, then generate an Outlook-ready draft file with that PDF attached.</p>
+        </div>
+      </div>
+      <div class="layout" style="gap:16px;">
+        <div class="span-6" style="grid-column: span 6;">
+          <div class="stacked-field">
+            <label>Recipients</label>
+            <div id="contact-list" class="contact-list"></div>
+          </div>
+          <div class="contact-actions print-hide">
+            <button class="btn btn-secondary" type="button" onclick="addContact()">Add Contact</button>
+            <button class="btn btn-muted" type="button" onclick="resetSubject()">Reset Subject</button>
+          </div>
+        </div>
+        <div class="span-6" style="grid-column: span 6;">
+          <div class="stacked-field">
+            <label for="email-package-preview">PDF Attachment Package</label>
+            <div id="email-package-preview"></div>
+          </div>
+          <div class="contact-actions print-hide">
+            <button class="btn btn-primary" type="button" onclick="preparePdfAttachment()">Prepare PDF Attachment</button>
+            <button class="btn btn-secondary" type="button" onclick="downloadPreparedPdfAttachment()">Download PDF</button>
+            <button class="btn btn-alert" type="button" onclick="createPdfEmailDraft()">Create PDF Draft</button>
+          </div>
+          <div id="email-action-status" class="action-status">Prepare the branded PDF attachment first, then create the Outlook draft file.</div>
+        </div>
+      </div>
+    </article>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const RAW_STORAGE_KEY = "rise_leasing_v5";
+const SNAPSHOT_STORAGE_KEY = "rise_weekly_portfolio_snapshot_v1";
+const REPORT_STATE_KEY = "vp_portfolio_monthly_report_v2";
+const PROPERTY_UNITS = {
+  "Bartram Park": 297,
+  "Baymeadows": 331,
+  "Nocatee": 178,
+  "Doro": 247,
+  "St Augustine": 0,
+  "Sutton House": 0,
+  "Viera": 166,
+  "Florence Villa": 224,
+  "Citrus Ridge": 222,
+  "Sereno": 320,
+  "Glen Kernan Park": 308
+};
+const TALI_METRIC_CONFIG = [
+  {
+    id: "prospect_leasing_agent",
+    audience: "Prospect",
+    category: "Leasing Agent Performance",
+    label: "Leasing Agent Index",
+    questionCount: 2,
+    questions: ["How well did the staff perform?", "How would you rate your leasing experience?"],
+    keywords: ["how well did the staff perform", "staff perform", "leasing experience", "leasing agent"]
+  },
+  {
+    id: "prospect_value",
+    audience: "Prospect",
+    category: "Value",
+    label: "Value Perception Index",
+    questionCount: 2,
+    questions: ["Community value", "Value for the price at this property?"],
+    keywords: ["community value", "value for the price", "value for rent", "value perception"]
+  },
+  {
+    id: "prospect_physical",
+    audience: "Prospect",
+    category: "Physical Marketability",
+    label: "Physical Marketability Index",
+    questionCount: 1,
+    questions: ["Physical Marketability"],
+    keywords: ["physical marketability", "curb appeal", "community appearance", "first impression"]
+  },
+  {
+    id: "resident_facilities",
+    audience: "Current Resident",
+    category: "Facilities",
+    label: "Facilities",
+    questionCount: 7,
+    questions: ["The amenities are well maintained?", "The lighting in the common areas is adequate?", "Maintenance requests are completed in a timely manner?", "The amenities are available at stated times?", "The condition of my apartment meets my expectations?", "The property is clean and well-maintained?", "The landscaping is well maintained?"],
+    keywords: ["amenities are well maintained", "lighting in the common areas", "maintenance requests", "available at stated times", "condition of my apartment", "property is clean", "landscaping is well maintained"]
+  },
+  {
+    id: "resident_staffing",
+    audience: "Current Resident",
+    category: "Staffing",
+    label: "Staffing",
+    questionCount: 5,
+    questions: ["The manager or someone from the staff knows who I am?", "Refer?", "Interactions with community personnel?", "Will you renew your lease?", "Please tell us how we are doing?"],
+    keywords: ["knows who i am", "refer", "interactions with community personnel", "will you renew your lease", "please tell us how we are doing"]
+  },
+  {
+    id: "resident_value",
+    audience: "Current Resident",
+    category: "Value",
+    label: "Value",
+    questionCount: 2,
+    questions: ["Value for the price at this property?", "Sense of community at the property?"],
+    keywords: ["value for the price at this property", "sense of community at the property", "sense of community"]
+  }
+];
+let sourceMeta = {
+  message: "No portfolio data loaded yet.",
+  tags: ["waiting on sync"],
+  status: "watch",
+  loadedAt: null
+};
+
+let reportData = null;
+let reportState = normalizeState(loadStoredState());
+let preparedReportImages = [];
+let preparedPdfAttachment = null;
+
+if (window.pdfjsLib) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function num(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value !== "string" && typeof value.length === "number") return Array.from(value);
+  return [];
+}
+
+function uid(prefix = "item") {
+  return prefix + "-" + Math.random().toString(16).slice(2, 10);
+}
+
+function loadStoredState() {
+  try {
+    const raw = localStorage.getItem(REPORT_STATE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeContact(contact) {
+  return {
+    id: contact?.id || uid("contact"),
+    name: String(contact?.name || ""),
+    role: String(contact?.role || ""),
+    email: String(contact?.email || ""),
+    delivery: contact?.delivery === "cc" ? "cc" : "to",
+    selected: contact?.selected !== false
+  };
+}
+
+function defaultTaliMetric(metric) {
+  return {
+    id: metric.id,
+    audience: metric.audience,
+    category: metric.category,
+    label: metric.label,
+    questionCount: metric.questionCount,
+    questions: [...metric.questions],
+    score: 0,
+    responseCount: 0,
+    jtAverage: 0,
+    topCommunity: "",
+    note: ""
+  };
+}
+
+function normalizeReputationCommunity(input) {
+  return {
+    name: String(input?.name || ""),
+    alertsOpen: num(input?.alertsOpen, 0),
+    resolutions: num(input?.resolutions, 0),
+    metricScores: Object.fromEntries(TALI_METRIC_CONFIG.map(metric => [metric.id, num(input?.metricScores?.[metric.id], 0)]))
+  };
+}
+
+function normalizeReputationReport(input) {
+  if (!input || typeof input !== "object") return null;
+  const metrics = TALI_METRIC_CONFIG.map(metric => {
+    const existing = safeArray(input.metrics).find(item => item?.id === metric.id) || {};
+    return {
+      ...defaultTaliMetric(metric),
+      score: num(existing.score, num(existing.actual, 0)),
+      responseCount: num(existing.responseCount, 0),
+      jtAverage: num(existing.jtAverage, num(existing.benchmark, 0)),
+      topCommunity: String(existing.topCommunity || ""),
+      note: String(existing.note || "")
+    };
+  });
+  const communities = safeArray(input.communities).map(normalizeReputationCommunity).filter(item => item.name);
+  return {
+    reportName: String(input.reportName || ""),
+    periodLabel: String(input.periodLabel || ""),
+    importedAt: String(input.importedAt || ""),
+    rawPreview: String(input.rawPreview || ""),
+    audienceMix: String(input.audienceMix || ""),
+    alertsOpen: num(input.alertsOpen, num(input.portfolio?.alertsOpen, 0)),
+    resolutions: num(input.resolutions, num(input.portfolio?.resolutions, 0)),
+    metrics,
+    communities
+  };
+}
+
+function normalizeState(input) {
+  return {
+    portfolioLabel: input?.portfolioLabel || "RISE portfolio",
+    preparedBy: input?.preparedBy || "Vice President of Property Management",
+    monthEnding: input?.monthEnding || input?.weekEnding || todayIso(),
+    executiveHeadline: input?.executiveHeadline || "",
+    winsNote: input?.winsNote || "",
+    operationsWins: input?.operationsWins || "",
+    watchlistNote: input?.watchlistNote || "",
+    upcomingInitiatives: input?.upcomingInitiatives || "",
+    askNote: input?.askNote || "",
+    emailSubject: input?.emailSubject || "",
+    contacts: safeArray(input?.contacts).map(normalizeContact),
+    visualImages: safeArray(input?.visualImages).map(image => ({
+      id: image?.id || uid("visual"),
+      name: String(image?.name || "Visual"),
+      dataUrl: String(image?.dataUrl || "")
+    })).filter(image => image.dataUrl),
+    reputationReports: {
+      current: normalizeReputationReport(input?.reputationReports?.current),
+      previous: normalizeReputationReport(input?.reputationReports?.previous)
+    }
+  };
+}
+
+function persistState() {
+  try {
+    localStorage.setItem(REPORT_STATE_KEY, JSON.stringify(reportState));
+  } catch {}
+}
+
+function clearPreparedReportImages() {
+  preparedReportImages.forEach(image => {
+    try { URL.revokeObjectURL(image.url); } catch {}
+  });
+  preparedReportImages = [];
+  if (preparedPdfAttachment?.url) {
+    try { URL.revokeObjectURL(preparedPdfAttachment.url); } catch {}
+  }
+  preparedPdfAttachment = null;
+}
+
+function setStateField(field, value) {
+  reportState[field] = value;
+  clearPreparedReportImages();
+  persistState();
+  renderAll();
+}
+
+function syncInputValues() {
+  document.getElementById("portfolio-label").value = reportState.portfolioLabel;
+  document.getElementById("prepared-by").value = reportState.preparedBy;
+  document.getElementById("month-ending").value = reportState.monthEnding;
+  document.getElementById("email-subject").value = getEmailSubject();
+  document.getElementById("executive-headline").value = reportState.executiveHeadline;
+  document.getElementById("wins-note").value = reportState.winsNote;
+  document.getElementById("operations-wins").value = reportState.operationsWins;
+  document.getElementById("watchlist-note").value = reportState.watchlistNote;
+  document.getElementById("upcoming-initiatives").value = reportState.upcomingInitiatives;
+  document.getElementById("ask-note").value = reportState.askNote;
+}
+
+function getQuarterMonths(monthIdx) {
+  const map = {
+    Q1: [0, 1, 2],
+    Q2: [3, 4, 5],
+    Q3: [6, 7, 8],
+    Q4: [9, 10, 11]
+  };
+  if (monthIdx <= 2) return map.Q1;
+  if (monthIdx <= 5) return map.Q2;
+  if (monthIdx <= 8) return map.Q3;
+  return map.Q4;
+}
+
+function getQuarterLabel(monthIdx) {
+  if (monthIdx <= 2) return "Q1";
+  if (monthIdx <= 5) return "Q2";
+  if (monthIdx <= 8) return "Q3";
+  return "Q4";
+}
+
+function formatShortDate(isoString) {
+  if (!isoString) return "No date set";
+  const date = new Date(isoString + "T12:00:00");
+  if (Number.isNaN(date.getTime())) return isoString;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatCurrency(value, digits = 0) {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits
+  }).format(num(value));
+}
+
+function formatPct(value, digits = 1) {
+  return num(value).toFixed(digits) + "%";
+}
+
+function formatSignedPct(value, digits = 1) {
+  const v = num(value);
+  const prefix = v > 0 ? "+" : "";
+  return prefix + v.toFixed(digits) + " pts";
+}
+
+function formatSignedCurrency(value, digits = 0) {
+  const v = num(value);
+  if (v === 0) return formatCurrency(0, digits);
+  return (v > 0 ? "+" : "-") + formatCurrency(Math.abs(v), digits);
+}
+
+function formatWhole(value) {
+  return new Intl.NumberFormat().format(Math.round(num(value)));
+}
+
+function resolveUnits(propertyName, customUnits) {
+  const override = num(customUnits);
+  if (override > 0) return override;
+  return num(PROPERTY_UNITS[propertyName]);
+}
+
+function hasMeaningfulData(propertyName, entry) {
+  const units = resolveUnits(propertyName, entry?.customUnits);
+  const occupied = num(entry?.currentOccupied);
+  const leased = num(entry?.currentLeased);
+  const monthlyData = safeArray(entry?.monthlyData);
+  const hasMonthly = monthlyData.some(row => row && Object.values(row).some(value => num(value) !== 0));
+  const hasBudget = safeArray(entry?.savedBudgetTargets).some(value => num(value) > 0);
+  return units > 0 && (occupied > 0 || leased > 0 || hasMonthly || hasBudget);
+}
+
+function getRawPortfolioFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.portfolioData && typeof payload.portfolioData === "object") return payload.portfolioData;
+  const values = Object.values(payload);
+  const rawLike = values.some(value => value && typeof value === "object" && ("currentOccupied" in value || "monthlyData" in value));
+  return rawLike ? payload : null;
+}
+
+function parseSourcePayload(payload, meta = {}) {
+  const rawPortfolio = getRawPortfolioFromPayload(payload);
+  if (rawPortfolio) {
+    const communities = Object.entries(rawPortfolio)
+      .filter(([propertyName, entry]) => hasMeaningfulData(propertyName, entry))
+      .map(([propertyName, entry]) => buildCommunitySnapshot(propertyName, entry))
+      .filter(Boolean)
+      .sort((a, b) => b.severity - a.severity || a.name.localeCompare(b.name));
+
+    if (communities.length === 0) return null;
+
+    const portfolio = buildPortfolioSummary(communities);
+    return {
+      communities,
+      portfolio,
+      meta: {
+        source: meta.source || "leasing dashboard",
+        exportedAt: payload.exportedAt || meta.exportedAt || null,
+        loadedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  if (Array.isArray(payload?.communities) && payload.communities.length > 0) {
+    const communities = payload.communities
+      .map(normalizeImportedCommunity)
+      .filter(Boolean)
+      .sort((a, b) => b.severity - a.severity || a.name.localeCompare(b.name));
+
+    if (communities.length === 0) return null;
+
+    const portfolio = buildPortfolioSummary(communities);
+    return {
+      communities,
+      portfolio,
+      meta: {
+        source: meta.source || "snapshot import",
+        exportedAt: payload.exportedAt || meta.exportedAt || null,
+        loadedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  return null;
+}
+
+function normalizeImportedCommunity(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const community = { ...entry };
+  community.investor = String(entry.investor || "").trim() || "Unassigned";
+  community.reasons = Array.isArray(entry.reasons) ? entry.reasons : [];
+  community.status = entry.status || "watch";
+  community.severity = num(entry.severity);
+  community.performanceScore = num(entry.performanceScore, 50);
+  return community.units > 0 ? community : null;
+}
+
+function buildCommunitySnapshot(propertyName, entry) {
+  const units = resolveUnits(propertyName, entry?.customUnits);
+  if (units <= 0) return null;
+
+  const currentMonth = clamp(num(entry?.currentMonth, new Date().getMonth()), 0, 11);
+  const nextMonth = Math.min(currentMonth + 1, 11);
+  const occupancyGoal = num(entry?.occupancyGoal, 95);
+  const leasedGoal = num(entry?.leasedGoal, Math.max(occupancyGoal, 97));
+  const monthlyData = safeArray(entry?.monthlyData);
+  const currentRow = monthlyData[currentMonth] || {};
+  const nextRow = monthlyData[nextMonth] || {};
+  const savedBudgetTargets = safeArray(entry?.savedBudgetTargets);
+
+  const occupied = num(entry?.currentOccupied);
+  const leased = num(entry?.currentLeased);
+  const occupancyPct = units > 0 ? occupied / units * 100 : 0;
+  const leasedPct = units > 0 ? leased / units * 100 : 0;
+  const budgetOccPct = num(savedBudgetTargets[currentMonth] || currentRow.budgetOcc);
+  const nextBudgetOccPct = num(savedBudgetTargets[nextMonth] || nextRow.budgetOcc || budgetOccPct);
+  const leasedLead = Math.max(leasedGoal - occupancyGoal, 0);
+  const budgetLeasedPct = nextBudgetOccPct > 0 ? Math.min(nextBudgetOccPct + leasedLead, leasedGoal) : 0;
+  const moveOuts30 = num(currentRow.moveOuts);
+  const moveOuts60 = moveOuts30 + num(nextRow.moveOuts);
+  const moveIns30 = num(currentRow.moveIns);
+  const projectedOccupied30 = Math.max(occupied - moveOuts30 + moveIns30, 0);
+  const projectedOcc30Pct = units > 0 ? projectedOccupied30 / units * 100 : 0;
+  const guestCards = num(currentRow.guestCards);
+  const tours = num(currentRow.tours);
+  const applications = num(currentRow.applications);
+  const leasesSigned = num(currentRow.leasesSignedActual);
+  const marketRent = num(currentRow.marketRent);
+  const concessions = num(currentRow.concessions);
+  const budgetNER = num(currentRow.proformaNER);
+  const budgetRent = num(currentRow.proformaRent);
+  const rentRollTotal = num(currentRow.rentRollTotal);
+  const actualNER = rentRollTotal > 0 && occupied > 0 ? rentRollTotal / occupied : num(currentRow.nerActual);
+  const investor = String(entry?.investorName || entry?.investor || "").trim() || "Unassigned";
+  const overallConversion = guestCards > 0 ? leasesSigned / guestCards * 100 : null;
+  const tourToApp = tours > 0 ? applications / tours * 100 : null;
+  const appToLease = applications > 0 ? leasesSigned / applications * 100 : null;
+  const monthAbsorption = moveIns30 - moveOuts30;
+  const quarterMonths = getQuarterMonths(currentMonth);
+  const quarterAbsorption = quarterMonths.reduce((total, monthIdx) => {
+    const row = monthlyData[monthIdx] || {};
+    return total + num(row.moveIns) - num(row.moveOuts);
+  }, 0);
+  const occupancyGap = budgetOccPct > 0 ? occupancyPct - budgetOccPct : null;
+  const leasedGap = budgetLeasedPct > 0 ? leasedPct - budgetLeasedPct : null;
+  const revenueDelta = actualNER > 0 && budgetNER > 0 ? actualNER - budgetNER : null;
+  const unitsToGoal = Math.max(Math.ceil(units * occupancyGoal / 100) - occupied, 0);
+  const leasesToGoal = Math.max(Math.ceil(units * leasedGoal / 100) - leased, 0);
+
+  const severity = computeCommunitySeverity({
+    occupancyGap,
+    leasedGap,
+    moveOuts30,
+    moveIns30,
+    revenueDelta,
+    monthAbsorption
+  });
+
+  const performanceScore = computeCommunityPerformance({
+    occupancyGap,
+    leasedGap,
+    revenueDelta,
+    monthAbsorption,
+    projectedOcc30Pct,
+    occupancyPct
+  });
+
+  const status = severity >= 7 ? "at-risk" : severity >= 3.5 ? "watch" : "stable";
+
+  const reasons = [];
+  if (occupancyGap !== null && occupancyGap < -1) reasons.push(formatPct(Math.abs(occupancyGap)) + " below current budget occupancy");
+  if (leasedGap !== null && leasedGap < -1) reasons.push(formatPct(Math.abs(leasedGap)) + " below near-term leased target");
+  if (moveOuts30 > moveIns30) reasons.push(formatWhole(moveOuts30 - moveIns30) + " net exposure units across the next 30 days");
+  if (revenueDelta !== null && revenueDelta < -20) reasons.push("NER is " + formatSignedCurrency(revenueDelta, 0) + " to budget");
+  if (monthAbsorption < 0) reasons.push(formatWhole(Math.abs(monthAbsorption)) + " units of negative absorption this month");
+  if (reasons.length === 0) reasons.push("Operating with controlled exposure and steady pace into the next 30 days");
+
+  return {
+    name: propertyName,
+    investor,
+    units,
+    occupied,
+    leased,
+    occupancyPct,
+    leasedPct,
+    occupancyGoal,
+    leasedGoal,
+    budgetOccPct,
+    budgetLeasedPct,
+    occupancyGap,
+    leasedGap,
+    moveOuts30,
+    moveOuts60,
+    moveIns30,
+    projectedOccupied30,
+    projectedOcc30Pct,
+    guestCards,
+    tours,
+    applications,
+    leasesSigned,
+    overallConversion,
+    tourToApp,
+    appToLease,
+    marketRent,
+    concessions,
+    budgetRent,
+    budgetNER,
+    actualNER,
+    rentRollTotal,
+    revenueDelta,
+    monthAbsorption,
+    quarterAbsorption,
+    quarterLabel: getQuarterLabel(currentMonth),
+    unitsToGoal,
+    leasesToGoal,
+    severity,
+    performanceScore,
+    status,
+    reasons,
+    currentMonthLabel: MONTHS[currentMonth]
+  };
+}
+
+function computeCommunitySeverity(input) {
+  let score = 0;
+  if (input.occupancyGap !== null && input.occupancyGap < 0) score += Math.abs(input.occupancyGap) * 2.4;
+  if (input.leasedGap !== null && input.leasedGap < 0) score += Math.abs(input.leasedGap) * 1.9;
+  if (input.moveOuts30 > input.moveIns30) score += (input.moveOuts30 - input.moveIns30) / 3;
+  if (input.revenueDelta !== null && input.revenueDelta < 0) score += Math.abs(input.revenueDelta) / 35;
+  if (input.monthAbsorption < 0) score += Math.abs(input.monthAbsorption) / 2;
+  return Math.round(score * 10) / 10;
+}
+
+function computeCommunityPerformance(input) {
+  let score = 58;
+  if (input.occupancyGap !== null) score += input.occupancyGap * 6.5;
+  if (input.leasedGap !== null) score += input.leasedGap * 4.5;
+  if (input.revenueDelta !== null) score += input.revenueDelta / 7;
+  score += input.monthAbsorption * 1.1;
+  score += (input.projectedOcc30Pct - input.occupancyPct) * 1.6;
+  return Math.round(clamp(score, 0, 100));
+}
+
+function weightedAverage(entries, valueKey, weightKey) {
+  const weighted = entries.reduce((sum, entry) => sum + num(entry[valueKey]) * num(entry[weightKey]), 0);
+  const weights = entries.reduce((sum, entry) => sum + num(entry[weightKey]), 0);
+  return weights > 0 ? weighted / weights : 0;
+}
+
+function buildPortfolioSummary(communities) {
+  const totalUnits = communities.reduce((sum, community) => sum + community.units, 0);
+  const totalOccupied = communities.reduce((sum, community) => sum + community.occupied, 0);
+  const totalLeased = communities.reduce((sum, community) => sum + community.leased, 0);
+  const occupancyPct = totalUnits > 0 ? totalOccupied / totalUnits * 100 : 0;
+  const leasedPct = totalUnits > 0 ? totalLeased / totalUnits * 100 : 0;
+  const budgetOccScope = communities.filter(community => community.budgetOccPct > 0);
+  const budgetOccUnits = budgetOccScope.reduce((sum, community) => sum + community.units, 0);
+  const budgetOccPct = budgetOccUnits > 0 ? weightedAverage(budgetOccScope, "budgetOccPct", "units") : 0;
+  const occupancyPctAgainstBudget = budgetOccUnits > 0 ? budgetOccScope.reduce((sum, community) => sum + community.occupied, 0) / budgetOccUnits * 100 : 0;
+  const occupancyGap = budgetOccUnits > 0 ? occupancyPctAgainstBudget - budgetOccPct : null;
+  const budgetLeasedScope = communities.filter(community => community.budgetLeasedPct > 0);
+  const budgetLeasedUnits = budgetLeasedScope.reduce((sum, community) => sum + community.units, 0);
+  const budgetLeasedPct = budgetLeasedUnits > 0 ? weightedAverage(budgetLeasedScope, "budgetLeasedPct", "units") : 0;
+  const leasedPctAgainstBudget = budgetLeasedUnits > 0 ? budgetLeasedScope.reduce((sum, community) => sum + community.leased, 0) / budgetLeasedUnits * 100 : 0;
+  const leasedGap = budgetLeasedUnits > 0 ? leasedPctAgainstBudget - budgetLeasedPct : null;
+  const moveOuts30 = communities.reduce((sum, community) => sum + community.moveOuts30, 0);
+  const moveOuts60 = communities.reduce((sum, community) => sum + community.moveOuts60, 0);
+  const moveIns30 = communities.reduce((sum, community) => sum + community.moveIns30, 0);
+  const projectedOccupied30 = Math.max(totalOccupied - moveOuts30 + moveIns30, 0);
+  const projectedOcc30Pct = totalUnits > 0 ? projectedOccupied30 / totalUnits * 100 : 0;
+  const guestCards = communities.reduce((sum, community) => sum + community.guestCards, 0);
+  const tours = communities.reduce((sum, community) => sum + community.tours, 0);
+  const applications = communities.reduce((sum, community) => sum + community.applications, 0);
+  const leasesSigned = communities.reduce((sum, community) => sum + community.leasesSigned, 0);
+  const monthAbsorption = communities.reduce((sum, community) => sum + community.monthAbsorption, 0);
+  const quarterAbsorption = communities.reduce((sum, community) => sum + community.quarterAbsorption, 0);
+  const actualRentRoll = communities.reduce((sum, community) => sum + community.rentRollTotal, 0);
+  const actualNERScope = communities.filter(community => community.actualNER > 0 && community.occupied > 0);
+  const actualNER = actualRentRoll > 0 && totalOccupied > 0
+    ? actualRentRoll / totalOccupied
+    : weightedAverage(actualNERScope, "actualNER", "occupied");
+  const budgetNERScope = communities.filter(community => community.budgetNER > 0 && community.occupied > 0);
+  const budgetNER = weightedAverage(budgetNERScope, "budgetNER", "occupied");
+  const revenueDelta = actualNER > 0 && budgetNER > 0 ? actualNER - budgetNER : null;
+  const topPerformers = [...communities].sort((a, b) => b.performanceScore - a.performanceScore).slice(0, 3);
+  const watchList = [...communities].filter(community => community.status !== "stable").sort((a, b) => b.severity - a.severity);
+  const investorSummaries = buildInvestorSummaries(communities);
+  const reputationScore = getReputationHealthScore();
+  const healthScore = computeHealthScore({
+    occupancyGap,
+    leasedGap,
+    totalUnits,
+    moveOuts30,
+    moveIns30,
+    revenueDelta,
+    budgetNER,
+    monthAbsorption,
+    reputationScore
+  });
+  const healthStatus = healthScore >= 85 ? "stable" : healthScore >= 70 ? "watch" : "intervention";
+  const headline = buildAutoHeadline({ communities, occupancyGap, leasedGap, moveOuts30, moveIns30, revenueDelta, topPerformers, watchList });
+  const wins = buildWinsList({ communities, topPerformers, revenueDelta, quarterAbsorption, applications, leasesSigned });
+  const watchouts = buildWatchList({ watchList, moveOuts30, moveIns30, revenueDelta, occupancyGap, leasedGap });
+
+  return {
+    communities,
+    totalUnits,
+    totalOccupied,
+    totalLeased,
+    occupancyPct,
+    leasedPct,
+    budgetOccPct,
+    budgetLeasedPct,
+    occupancyGap,
+    leasedGap,
+    moveOuts30,
+    moveOuts60,
+    moveIns30,
+    projectedOccupied30,
+    projectedOcc30Pct,
+    guestCards,
+    tours,
+    applications,
+    leasesSigned,
+    monthAbsorption,
+    quarterAbsorption,
+    actualRentRoll,
+    actualNER,
+    budgetNER,
+    revenueDelta,
+    reputationScore,
+    investorSummaries,
+    topPerformers,
+    watchList,
+    healthScore,
+    healthStatus,
+    headline,
+    wins,
+    watchouts
+  };
+}
+
+function buildInvestorSummaries(communities) {
+  const groups = communities.reduce((map, community) => {
+    const key = community.investor || "Unassigned";
+    if (!map[key]) map[key] = [];
+    map[key].push(community);
+    return map;
+  }, {});
+
+  return Object.entries(groups).map(([investor, entries]) => {
+    const units = entries.reduce((sum, entry) => sum + entry.units, 0);
+    const occupied = entries.reduce((sum, entry) => sum + entry.occupied, 0);
+    const leased = entries.reduce((sum, entry) => sum + entry.leased, 0);
+    const occupancyPct = units > 0 ? occupied / units * 100 : 0;
+    const leasedPct = units > 0 ? leased / units * 100 : 0;
+    const moveOuts30 = entries.reduce((sum, entry) => sum + entry.moveOuts30, 0);
+    const moveIns30 = entries.reduce((sum, entry) => sum + entry.moveIns30, 0);
+    const monthAbsorption = entries.reduce((sum, entry) => sum + entry.monthAbsorption, 0);
+    const quarterAbsorption = entries.reduce((sum, entry) => sum + entry.quarterAbsorption, 0);
+    const projectedOcc30Pct = units > 0 ? Math.max(occupied - moveOuts30 + moveIns30, 0) / units * 100 : 0;
+    const revenueScope = entries.filter(entry => entry.actualNER > 0 && entry.occupied > 0);
+    const budgetScope = entries.filter(entry => entry.budgetNER > 0 && entry.occupied > 0);
+    const actualNER = weightedAverage(revenueScope, "actualNER", "occupied");
+    const budgetNER = weightedAverage(budgetScope, "budgetNER", "occupied");
+    const revenueDelta = actualNER > 0 && budgetNER > 0 ? actualNER - budgetNER : null;
+    const watchCount = entries.filter(entry => entry.status !== "stable").length;
+    return {
+      investor,
+      communityCount: entries.length,
+      units,
+      occupancyPct,
+      leasedPct,
+      moveOuts30,
+      moveIns30,
+      monthAbsorption,
+      quarterAbsorption,
+      monthAbsorptionRate: units > 0 ? monthAbsorption / units * 100 : 0,
+      quarterAbsorptionRate: units > 0 ? quarterAbsorption / units * 100 : 0,
+      projectedOcc30Pct,
+      revenueDelta,
+      watchCount,
+      communities: entries.map(entry => entry.name)
+    };
+  }).sort((a, b) => b.units - a.units || a.investor.localeCompare(b.investor));
+}
+
+function computeHealthScore(input) {
+  const occScore = input.occupancyGap === null ? 72 : clamp(100 + input.occupancyGap * 18, 0, 100);
+  const leasedScore = input.leasedGap === null ? 72 : clamp(100 + input.leasedGap * 15, 0, 100);
+  const exposureGapUnits = Math.max(input.moveOuts30 - input.moveIns30, 0);
+  const exposureScore = input.totalUnits > 0 ? clamp(100 - (exposureGapUnits / input.totalUnits) * 520, 0, 100) : 70;
+  const revenueScore = input.revenueDelta === null || input.budgetNER <= 0
+    ? 72
+    : clamp(100 + (input.revenueDelta / input.budgetNER) * 280, 0, 100);
+  const absorptionRate = input.totalUnits > 0 ? input.monthAbsorption / input.totalUnits * 100 : 0;
+  const absorptionScore = clamp(74 + absorptionRate * 22, 0, 100);
+  const reputationScore = input.reputationScore === null || input.reputationScore === undefined ? 72 : clamp(input.reputationScore, 0, 100);
+  return Math.round((occScore * 0.27) + (leasedScore * 0.21) + (exposureScore * 0.14) + (revenueScore * 0.14) + (absorptionScore * 0.10) + (reputationScore * 0.14));
+}
+
+function refreshPortfolioHealth() {
+  if (!reportData?.portfolio) return;
+  const portfolio = reportData.portfolio;
+  portfolio.reputationScore = getReputationHealthScore();
+  portfolio.healthScore = computeHealthScore({
+    occupancyGap: portfolio.occupancyGap,
+    leasedGap: portfolio.leasedGap,
+    totalUnits: portfolio.totalUnits,
+    moveOuts30: portfolio.moveOuts30,
+    moveIns30: portfolio.moveIns30,
+    revenueDelta: portfolio.revenueDelta,
+    budgetNER: portfolio.budgetNER,
+    monthAbsorption: portfolio.monthAbsorption,
+    reputationScore: portfolio.reputationScore
+  });
+  portfolio.healthStatus = portfolio.healthScore >= 85 ? "stable" : portfolio.healthScore >= 70 ? "watch" : "intervention";
+}
+
+function buildAutoHeadline(input) {
+  if (input.topPerformers.length === 0) return "Load portfolio data to generate the monthly executive story.";
+  if (input.occupancyGap !== null && input.occupancyGap >= 0.5 && (input.leasedGap === null || input.leasedGap >= 0)) {
+    return input.topPerformers[0].name + " is helping the portfolio hold ahead of budget, with the main leadership task now centered on managing " + formatWhole(input.moveOuts30) + " upcoming move-outs.";
+  }
+  if (input.occupancyGap !== null && input.occupancyGap < -1.2) {
+    const names = input.watchList.slice(0, 2).map(community => community.name).join(" and ");
+    return "Portfolio occupancy is running " + formatPct(Math.abs(input.occupancyGap)) + " below budget, with pressure most visible at " + (names || "the watch-list communities") + ".";
+  }
+  if (input.moveOuts30 > input.moveIns30) {
+    return "Near-term exposure is the headline this week: " + formatWhole(input.moveOuts30) + " move-outs scheduled against " + formatWhole(input.moveIns30) + " move-ins, which puts backfill pace at the center of execution.";
+  }
+  if (input.revenueDelta !== null && input.revenueDelta < 0) {
+    return "Operational pressure is manageable, but revenue position is trailing plan, so concessions and rent discipline need to stay tight in the communities below budget NER.";
+  }
+  return "Portfolio performance is mixed but manageable, with strength led by " + input.topPerformers[0].name + " and the primary watch list centered on leasing execution in the lowest-ranked communities.";
+}
+
+function buildWinsList(input) {
+  const wins = [];
+  if (input.topPerformers[0]) {
+    const leader = input.topPerformers[0];
+    wins.push(leader.name + " is the strongest community this week at " + formatPct(leader.occupancyPct) + " occupied" + (leader.occupancyGap !== null ? " and " + formatSignedPct(leader.occupancyGap) + " to budget." : "."));
+  }
+  if (input.revenueDelta !== null && input.revenueDelta >= 0) {
+    wins.push("Portfolio NER is " + formatSignedCurrency(input.revenueDelta, 0) + " to budget, indicating pricing and concession discipline is holding.");
+  }
+  if (input.quarterAbsorption > 0) {
+    wins.push("Current quarter absorption is positive at " + formatWhole(input.quarterAbsorption) + " units across the portfolio.");
+  }
+  if (input.applications > 0 || input.leasesSigned > 0) {
+    wins.push("Current-month pipeline stands at " + formatWhole(input.applications) + " applications and " + formatWhole(input.leasesSigned) + " leases signed.");
+  }
+  return wins.slice(0, 4);
+}
+
+function buildWatchList(input) {
+  const watchouts = [];
+  if (input.watchList[0]) {
+    watchouts.push(input.watchList[0].name + " is the most exposed community, driven by " + input.watchList[0].reasons[0] + ".");
+  }
+  if (input.watchList[1]) {
+    watchouts.push(input.watchList[1].name + " also needs attention, with " + input.watchList[1].reasons[0] + ".");
+  }
+  if (input.moveOuts30 > input.moveIns30) {
+    watchouts.push("Portfolio-wide 30-day exposure is negative by " + formatWhole(input.moveOuts30 - input.moveIns30) + " units unless backfill pace improves.");
+  }
+  if (input.revenueDelta !== null && input.revenueDelta < 0) {
+    watchouts.push("Actual NER is running " + formatSignedCurrency(input.revenueDelta, 0) + " to budget and should stay in the leadership discussion.");
+  }
+  if (input.occupancyGap !== null && input.occupancyGap < 0) {
+    watchouts.push("Physical occupancy is currently " + formatSignedPct(input.occupancyGap) + " to budget on the communities with active targets.");
+  }
+  return watchouts.slice(0, 4);
+}
+
+function formatSignedValue(value, digits = 1, suffix = "") {
+  const amount = num(value);
+  const prefix = amount > 0 ? "+" : "";
+  return prefix + amount.toFixed(digits) + suffix;
+}
+
+function normalizeNameKey(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractPeriodLabelFromName(name) {
+  const match = String(name || "").match(/(0?[1-9]|1[0-2])[-_ ](20\d{2})/);
+  if (!match) return "";
+  const monthIndex = clamp(num(match[1], 1) - 1, 0, 11);
+  return MONTHS[monthIndex] + " " + match[2];
+}
+
+function findMetricValue(segment, regexList, fallback = 0) {
+  for (const regex of regexList) {
+    const match = segment.match(regex);
+    if (match && match[1] !== undefined) return num(String(match[1]).replace(/,/g, ""), fallback);
+  }
+  return fallback;
+}
+
+function averageTaliScore(metrics, key = "score") {
+  const valid = metrics.filter(metric => num(metric[key]) > 0);
+  if (valid.length === 0) return 0;
+  return valid.reduce((sum, metric) => sum + num(metric[key]), 0) / valid.length;
+}
+
+function weightedMetricAverage(metrics, scoreKey = "score", weightKey = "responseCount") {
+  const valid = safeArray(metrics).filter(metric => num(metric[scoreKey]) > 0);
+  if (valid.length === 0) return 0;
+  const weightedTotal = valid.reduce((sum, metric) => {
+    const weight = Math.max(num(metric[weightKey]), 1);
+    return sum + num(metric[scoreKey]) * weight;
+  }, 0);
+  const totalWeight = valid.reduce((sum, metric) => sum + Math.max(num(metric[weightKey]), 1), 0);
+  return totalWeight > 0 ? weightedTotal / totalWeight : 0;
+}
+
+function findNearbyKeywordChunk(text, keywords) {
+  const lines = String(text || "").split(/\n+/);
+  const lineIndex = lines.findIndex(line => keywords.some(keyword => line.toLowerCase().includes(keyword)));
+  if (lineIndex === -1) return "";
+  return lines.slice(Math.max(0, lineIndex - 1), Math.min(lines.length, lineIndex + 2)).join(" ");
+}
+
+function pickTaliScoreCandidates(segment) {
+  return safeArray(String(segment || "").match(/\d+(?:\.\d+)?%?/g)).map(token => ({
+    raw: token,
+    value: num(token.replace("%", "")),
+    isPercent: token.includes("%")
+  })).filter(token => token.value > 0);
+}
+
+function detectTopCommunity(segment) {
+  const normalized = normalizeNameKey(segment);
+  return Object.keys(PROPERTY_UNITS).find(name => normalized.includes(normalizeNameKey(name))) || "";
+}
+
+function parseTaliMetric(segment, metric) {
+  const tokens = pickTaliScoreCandidates(segment);
+  const score = findMetricValue(segment, [
+    /(?:rise|company|score|satisfaction|favorable|positive)[^\d]{0,18}(\d{1,3}(?:\.\d+)?)/i
+  ], tokens.find(token => token.value >= 1 && token.value <= 100)?.value || 0);
+  const responseCount = findMetricValue(segment, [
+    /(?:responses|response count|number of responses|no\. of responses|respondents)[^\d]{0,20}(\d{1,5})/i
+  ], tokens.filter(token => !token.isPercent && token.value > 0 && token.value <= 5000 && token.value !== score).sort((a, b) => b.value - a.value)[0]?.value || 0);
+  const jtAverage = findMetricValue(segment, [
+    /(?:j[\s-]?turner average|j[\s-]?turner avg|benchmark|average)[^\d]{0,18}(\d{1,3}(?:\.\d+)?)/i
+  ], tokens.filter(token => token.value !== score).find(token => token.value >= 1 && token.value <= 100)?.value || 0);
+  return {
+    ...defaultTaliMetric(metric),
+    score,
+    responseCount,
+    jtAverage,
+    topCommunity: detectTopCommunity(segment)
+  };
+}
+
+function parseTaliCommunities(text) {
+  const lines = String(text || "").split(/\n+/);
+  const communities = Object.keys(PROPERTY_UNITS).map(name => {
+    const relevant = lines.filter(line => normalizeNameKey(line).includes(normalizeNameKey(name)));
+    if (relevant.length === 0) return null;
+    const block = relevant.join(" ");
+    const metricScores = {};
+    TALI_METRIC_CONFIG.forEach(metric => {
+      const segment = block + " " + findNearbyKeywordChunk(text, metric.keywords);
+      metricScores[metric.id] = parseTaliMetric(segment, metric).score;
+    });
+    return normalizeReputationCommunity({
+      name,
+      alertsOpen: findMetricValue(block, [/(?:alerts?|issues?)[^\d]{0,12}(\d{1,3})/i], 0),
+      resolutions: findMetricValue(block, [/(?:resolutions?|resolved)[^\d]{0,12}(\d{1,3})/i], 0),
+      metricScores
+    });
+  }).filter(Boolean);
+  return communities;
+}
+
+function parseJTurnerReportText(text, reportName) {
+  const cleanText = String(text || "").replace(/\u00a0/g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+  const metrics = TALI_METRIC_CONFIG.map(metric => {
+    const segment = findNearbyKeywordChunk(cleanText, metric.keywords);
+    return parseTaliMetric(segment, metric);
+  });
+  const communities = parseTaliCommunities(cleanText);
+  const alertsOpen = findMetricValue(cleanText, [/(?:total alerts|open alerts|alerts open|alerts)[^\d]{0,20}(\d{1,4})/i], communities.reduce((sum, community) => sum + community.alertsOpen, 0));
+  const resolutions = findMetricValue(cleanText, [/(?:resolutions|resolved|closed alerts)[^\d]{0,20}(\d{1,4})/i], communities.reduce((sum, community) => sum + community.resolutions, 0));
+  const hasData = metrics.some(metric => metric.score > 0 || metric.jtAverage > 0) || alertsOpen > 0 || resolutions > 0 || communities.length > 0;
+  if (!hasData) {
+    throw new Error("The uploaded TALi executive summary did not expose recognizable benchmark-question text. You can still upload it, then enter the TALi scores manually in the section below.");
+  }
+
+  return {
+    reportName,
+    periodLabel: extractPeriodLabelFromName(reportName),
+    importedAt: new Date().toISOString(),
+    rawPreview: cleanText.slice(0, 2000),
+    audienceMix: /prospect/i.test(cleanText) && /resident/i.test(cleanText) ? "Prospects and Current Residents" : "TALi audience mix",
+    alertsOpen,
+    resolutions,
+    metrics,
+    communities
+  };
+}
+
+function ensureReputationMetrics(kind) {
+  const report = reportState.reputationReports[kind];
+  if (!report) return [];
+  const existing = new Map(safeArray(report.metrics).map(metric => [metric.id, metric]));
+  report.metrics = TALI_METRIC_CONFIG.map(metric => {
+    const saved = existing.get(metric.id) || {};
+    return {
+      ...defaultTaliMetric(metric),
+      score: num(saved.score, 0),
+      responseCount: num(saved.responseCount, 0),
+      jtAverage: num(saved.jtAverage, 0),
+      topCommunity: String(saved.topCommunity || ""),
+      note: String(saved.note || "")
+    };
+  });
+  return report.metrics;
+}
+
+function ensureReputationCommunities(kind) {
+  const report = reportState.reputationReports[kind];
+  if (!report) return [];
+  const names = Object.keys(PROPERTY_UNITS);
+  const existing = new Map(report.communities.map(community => [community.name, community]));
+  report.communities = names.map(name => normalizeReputationCommunity(existing.get(name) || { name }));
+  return report.communities;
+}
+
+function updateReputationPortfolioField(kind, field, value) {
+  if (!reportState.reputationReports[kind]) return;
+  reportState.reputationReports[kind][field] = num(value);
+  persistState();
+  renderAll();
+}
+
+function updateReputationMetricField(kind, metricId, field, value) {
+  const metrics = ensureReputationMetrics(kind);
+  const metric = metrics.find(item => item.id === metricId);
+  if (!metric) return;
+  metric[field] = field === "topCommunity" || field === "note" ? String(value) : num(value);
+  persistState();
+  renderAll();
+}
+
+function updateReputationCommunityField(kind, propertyName, metricId, value) {
+  const communities = ensureReputationCommunities(kind);
+  const community = communities.find(item => item.name === propertyName);
+  if (!community) return;
+  community.metricScores[metricId] = num(value);
+  persistState();
+  renderAll();
+}
+
+async function extractPdfText(file) {
+  if (!window.pdfjsLib?.getDocument) {
+    throw new Error("PDF parsing is not available right now. Refresh the report while connected to the internet so the built-in PDF reader can load.");
+  }
+  const data = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    let pageText = "";
+    let lastY = null;
+    content.items.forEach(item => {
+      const currentY = item.transform?.[5] || 0;
+      pageText += lastY !== null && Math.abs(currentY - lastY) > 4 ? "\n" : " ";
+      pageText += item.str;
+      lastY = currentY;
+    });
+    pages.push(pageText);
+  }
+  return pages.join("\n\n");
+}
+
+async function importReputationReport(kind, file) {
+  try {
+    document.getElementById("reputation-status").innerHTML = "<strong>Parsing " + escapeHtml(file.name) + ".</strong> Pulling text and mapping TALi benchmark questions now.";
+    const text = await extractPdfText(file);
+    const parsed = parseJTurnerReportText(text, file.name);
+    reportState.reputationReports[kind] = parsed;
+    persistState();
+    renderAll();
+    document.getElementById("reputation-status").innerHTML = "<strong>" + escapeHtml(parsed.reportName) + " loaded.</strong> " +
+      (parsed.periodLabel ? "Mapped as " + escapeHtml(parsed.periodLabel) + "." : "Mapped to the monthly reputation comparison.") +
+      " Parsed " + formatWhole(parsed.communities.length) + " communities.";
+  } catch (error) {
+    reportState.reputationReports[kind] = normalizeReputationReport({
+      reportName: file.name,
+      periodLabel: extractPeriodLabelFromName(file.name),
+      importedAt: new Date().toISOString(),
+      audienceMix: "Prospects and Current Residents",
+      alertsOpen: 0,
+      resolutions: 0,
+      metrics: [],
+      communities: []
+    });
+    persistState();
+    renderAll();
+    document.getElementById("reputation-status").innerHTML = "<strong>TALi upload needs review.</strong> " + escapeHtml(error.message) + " A blank editable TALi template has been loaded so you can enter the scores manually.";
+  }
+}
+
+function clearReputationReport(kind) {
+  reportState.reputationReports[kind] = null;
+  persistState();
+  renderAll();
+}
+
+function getMetricTopCommunity(metricId) {
+  const currentCommunities = ensureReputationCommunities("current");
+  if (currentCommunities.length === 0) return { name: "", delta: null, score: 0 };
+  const previousReport = reportState.reputationReports.previous;
+  const previousMap = new Map((previousReport ? ensureReputationCommunities("previous") : []).map(community => [community.name, community]));
+  const ranked = currentCommunities.map(community => {
+    const score = num(community.metricScores?.[metricId], 0);
+    const previousScore = num(previousMap.get(community.name)?.metricScores?.[metricId], 0);
+    const delta = previousReport ? score - previousScore : null;
+    return {
+      name: community.name,
+      score,
+      previousScore,
+      delta
+    };
+  }).filter(entry => entry.score > 0);
+  if (ranked.length === 0) return { name: "", delta: null, score: 0 };
+  ranked.sort((a, b) => {
+    const aDelta = a.delta === null ? -9999 : a.delta;
+    const bDelta = b.delta === null ? -9999 : b.delta;
+    if (bDelta !== aDelta) return bDelta - aDelta;
+    if (b.score !== a.score) return b.score - a.score;
+    return a.name.localeCompare(b.name);
+  });
+  return ranked[0];
+}
+
+function getReputationComparison() {
+  const current = reportState.reputationReports.current;
+  const previous = reportState.reputationReports.previous;
+  if (!current) return null;
+  const currentMetrics = ensureReputationMetrics("current");
+  const previousMetrics = previous ? ensureReputationMetrics("previous") : [];
+  const previousMetricMap = new Map(previousMetrics.map(metric => [metric.id, metric]));
+  const currentWeightedAverage = weightedMetricAverage(currentMetrics);
+  const previousWeightedAverage = previous ? weightedMetricAverage(previousMetrics) : null;
+  const benchmarkWeightedAverage = weightedMetricAverage(currentMetrics, "jtAverage");
+  const metricComparisons = currentMetrics.map(metric => {
+    const baseline = previousMetricMap.get(metric.id);
+    const topCommunity = getMetricTopCommunity(metric.id);
+    return {
+      ...metric,
+      previousScore: baseline ? baseline.score : null,
+      previousResponseCount: baseline ? baseline.responseCount : 0,
+      delta: baseline ? metric.score - baseline.score : null,
+      jtGap: metric.jtAverage > 0 ? metric.score - metric.jtAverage : null,
+      topCommunity: topCommunity.name,
+      topCommunityDelta: topCommunity.delta
+    };
+  });
+
+  const portfolioDelta = {
+    overallScore: previous ? currentWeightedAverage - previousWeightedAverage : null,
+    alertsOpen: previous ? current.alertsOpen - previous.alertsOpen : null,
+    resolutions: previous ? current.resolutions - previous.resolutions : null,
+    benchmarkGap: benchmarkWeightedAverage > 0 ? currentWeightedAverage - benchmarkWeightedAverage : null
+  };
+
+  return {
+    current,
+    previous,
+    portfolioDelta,
+    metricComparisons,
+    currentWeightedAverage,
+    previousWeightedAverage,
+    benchmarkWeightedAverage
+  };
+}
+
+function getCommunityTaliSummary(kind = "current") {
+  const report = reportState.reputationReports[kind];
+  if (!report) return [];
+  const communities = ensureReputationCommunities(kind);
+  return communities.map(community => {
+    const scores = TALI_METRIC_CONFIG.map(metric => num(community.metricScores?.[metric.id], 0)).filter(score => score > 0);
+    const combinedScore = scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+    return {
+      name: community.name,
+      combinedScore,
+      alertsOpen: num(community.alertsOpen),
+      resolutions: num(community.resolutions)
+    };
+  }).sort((a, b) => b.combinedScore - a.combinedScore || a.name.localeCompare(b.name));
+}
+
+function getAudienceMetricSnapshot(metricComparisons, audience) {
+  const scoped = metricComparisons.filter(metric => metric.audience === audience);
+  const currentScores = weightedMetricAverage(scoped, "score", "responseCount");
+  const previousScores = weightedMetricAverage(scoped.map(metric => ({ score: metric.previousScore, responseCount: metric.previousResponseCount })), "score", "responseCount");
+  const benchmarkScores = weightedMetricAverage(scoped, "jtAverage", "responseCount");
+  return {
+    average: currentScores,
+    previousAverage: previousScores,
+    benchmarkAverage: benchmarkScores,
+    responses: scoped.reduce((sum, metric) => sum + num(metric.responseCount), 0)
+  };
+}
+
+function getReputationHealthScore() {
+  const reputation = getReputationComparison();
+  if (!reputation) return null;
+  const unresolvedAlerts = Math.max(num(reputation.current.alertsOpen) - num(reputation.current.resolutions), 0);
+  return clamp(
+    num(reputation.currentWeightedAverage) +
+    (num(reputation.portfolioDelta.benchmarkGap) * 1.25) +
+    (num(reputation.portfolioDelta.overallScore) * 0.9) -
+    (unresolvedAlerts * 1.5),
+    0,
+    100
+  );
+}
+
+function renderReputationSection() {
+  const summaryTarget = document.getElementById("reputation-summary-grid");
+  const improvementsTarget = document.getElementById("reputation-improvements");
+  const watchoutsTarget = document.getElementById("reputation-watchouts");
+  const tableTarget = document.getElementById("reputation-community-table");
+  const statusTarget = document.getElementById("reputation-status");
+  const comparison = getReputationComparison();
+
+  if (!comparison) {
+    summaryTarget.innerHTML = renderEmptyState("No TALi report loaded yet", "Upload the current month’s TALi executive summary PDF to populate benchmark-question metrics.");
+    improvementsTarget.innerHTML = renderEmptyState("No TALi improvements yet", "Current-vs-prior-month TALi improvement callouts will appear here once both reports are uploaded.");
+    watchoutsTarget.innerHTML = renderEmptyState("No TALi watchouts yet", "Upload current and prior TALi reports to flag question areas that slipped or fell below the J Turner average.");
+    tableTarget.innerHTML = "";
+    statusTarget.innerHTML = "Upload the most recent TALi executive summary PDF and the prior TALi report to unlock experience comparisons.";
+    return;
+  }
+
+  const current = comparison.current;
+  const previous = comparison.previous;
+  const currentMetrics = ensureReputationMetrics("current");
+  ensureReputationCommunities("current");
+  if (previous) {
+    ensureReputationMetrics("previous");
+    ensureReputationCommunities("previous");
+  }
+  const prospectSnapshot = getAudienceMetricSnapshot(comparison.metricComparisons, "Prospect");
+  const residentSnapshot = getAudienceMetricSnapshot(comparison.metricComparisons, "Current Resident");
+  const overallAverage = comparison.currentWeightedAverage;
+  const overallBenchmark = comparison.benchmarkWeightedAverage;
+  const cards = [
+    {
+      label: "Portfolio TALi Snapshot",
+      value: overallAverage > 0 ? overallAverage.toFixed(1) : "N/A",
+      detail: comparison.portfolioDelta.overallScore !== null ? formatSignedValue(comparison.portfolioDelta.overallScore, 1, "%") + " vs previous report" : "Current report loaded",
+      sub: overallBenchmark > 0 ? "Portfolio vs Turner: " + formatSignedValue(overallAverage - overallBenchmark, 1, "%") : (current.periodLabel || "Current report")
+    },
+    {
+      label: "Prospect Snapshot",
+      value: prospectSnapshot.average > 0 ? prospectSnapshot.average.toFixed(1) : "N/A",
+      detail: prospectSnapshot.previousAverage > 0 ? formatSignedValue(prospectSnapshot.average - prospectSnapshot.previousAverage, 1, "%") + " vs previous report" : "Previous report pending",
+      sub: prospectSnapshot.benchmarkAverage > 0 ? "Portfolio vs Turner: " + formatSignedValue(prospectSnapshot.average - prospectSnapshot.benchmarkAverage, 1, "%") + " | " + formatWhole(prospectSnapshot.responses) + " responses" : formatWhole(prospectSnapshot.responses) + " responses"
+    },
+    {
+      label: "Resident Snapshot",
+      value: residentSnapshot.average > 0 ? residentSnapshot.average.toFixed(1) : "N/A",
+      detail: residentSnapshot.previousAverage > 0 ? formatSignedValue(residentSnapshot.average - residentSnapshot.previousAverage, 1, "%") + " vs previous report" : "Previous report pending",
+      sub: residentSnapshot.benchmarkAverage > 0 ? "Portfolio vs Turner: " + formatSignedValue(residentSnapshot.average - residentSnapshot.benchmarkAverage, 1, "%") + " | " + formatWhole(residentSnapshot.responses) + " responses" : formatWhole(residentSnapshot.responses) + " responses"
+    },
+    {
+      label: "Alerts / Resolutions",
+      value: formatWhole(current.alertsOpen) + " / " + formatWhole(current.resolutions),
+      detail: comparison.portfolioDelta.alertsOpen !== null || comparison.portfolioDelta.resolutions !== null
+        ? "Alerts " + formatSignedValue(comparison.portfolioDelta.alertsOpen, 0) + " | Resolutions " + formatSignedValue(comparison.portfolioDelta.resolutions, 0)
+        : "Current report loaded",
+      sub: "Open alerts compared with documented resolutions"
+    }
+  ];
+
+  summaryTarget.innerHTML = cards.map(card =>
+    "<div class=\"reputation-metric\">" +
+      "<div class=\"metric-label\">" + card.label + "</div>" +
+      "<div class=\"reputation-metric-value\">" + card.value + "</div>" +
+      "<div class=\"metric-detail\">" + card.detail + "</div>" +
+      "<div class=\"metric-subdetail\">" + card.sub + "</div>" +
+    "</div>"
+  ).join("");
+
+  const improvements = [];
+  if (comparison.portfolioDelta.overallScore !== null && comparison.portfolioDelta.overallScore > 0) {
+    improvements.push("Overall TALi score improved " + formatSignedValue(comparison.portfolioDelta.overallScore, 1, "%") + " versus the previous report.");
+  }
+  const bestGrowth = [...comparison.metricComparisons].filter(metric => metric.delta !== null).sort((a, b) => num(b.delta) - num(a.delta))[0];
+  if (bestGrowth && num(bestGrowth.delta) > 0) {
+    improvements.push(bestGrowth.label + " improved " + formatSignedValue(bestGrowth.delta, 1, "%") + " versus the previous report.");
+  }
+  const bestVsAvg = [...comparison.metricComparisons].filter(metric => metric.jtGap !== null).sort((a, b) => num(b.jtGap) - num(a.jtGap))[0];
+  if (bestVsAvg && num(bestVsAvg.jtGap) > 0) {
+    improvements.push(bestVsAvg.label + " is running " + formatSignedValue(bestVsAvg.jtGap, 1, "%") + " above the J Turner average.");
+  }
+  const strongestLeader = [...comparison.metricComparisons].find(metric => metric.topCommunity);
+  if (strongestLeader) {
+    improvements.push(strongestLeader.topCommunity + " is leading the portfolio in " + strongestLeader.label + ".");
+  }
+
+  const watchouts = [];
+  const biggestDrop = [...comparison.metricComparisons].filter(metric => metric.delta !== null).sort((a, b) => num(a.delta) - num(b.delta))[0];
+  if (biggestDrop && num(biggestDrop.delta) < 0) {
+    watchouts.push(biggestDrop.label + " declined " + formatSignedValue(biggestDrop.delta, 1, "%") + " versus the previous report.");
+  }
+  const belowAvg = [...comparison.metricComparisons].filter(metric => metric.jtGap !== null).sort((a, b) => num(a.jtGap) - num(b.jtGap))[0];
+  if (belowAvg && num(belowAvg.jtGap) < 0) {
+    watchouts.push(belowAvg.label + " is running " + formatSignedValue(belowAvg.jtGap, 1, "%") + " below the J Turner average.");
+  }
+  if (current.alertsOpen > current.resolutions) {
+    watchouts.push("Alerts exceed documented resolutions this month by " + formatWhole(current.alertsOpen - current.resolutions) + ".");
+  }
+  if (comparison.portfolioDelta.alertsOpen !== null && comparison.portfolioDelta.alertsOpen > 0) {
+    watchouts.push("Open TALi alerts increased " + formatSignedValue(comparison.portfolioDelta.alertsOpen, 0) + " versus the prior report.");
+  }
+
+  improvementsTarget.innerHTML = (improvements.length > 0 ? improvements : ["Current month loaded. Upload the prior report to unlock improvement callouts."])
+    .map(item => "<div class=\"bullet-row\"><strong>Improve</strong><span>" + escapeHtml(item) + "</span></div>").join("");
+  const performers = getCommunityTaliSummary("current");
+  const topPerformers = performers.filter(item => item.combinedScore > 0).slice(0, 3);
+  const bottomPerformers = [...performers].filter(item => item.combinedScore > 0).reverse().slice(0, 3);
+  watchoutsTarget.innerHTML =
+    "<div class=\"small-grid\">" +
+      "<div class=\"insight-panel\"><label>Top 3 TALi Performers</label>" +
+        (topPerformers.length > 0 ? topPerformers.map(item => "<div class=\"bullet-row\"><strong>" + escapeHtml(item.name) + "</strong><span>TALi " + item.combinedScore.toFixed(1) + " | Alerts " + formatWhole(item.alertsOpen) + " | Resolutions " + formatWhole(item.resolutions) + "</span></div>").join("") : renderEmptyState("No leaders yet", "Enter or upload community TALi scores to rank the top performers.")) +
+      "</div>" +
+      "<div class=\"insight-panel\"><label>Bottom 3 TALi Performers</label>" +
+        (bottomPerformers.length > 0 ? bottomPerformers.map(item => "<div class=\"bullet-row\"><strong>" + escapeHtml(item.name) + "</strong><span>TALi " + item.combinedScore.toFixed(1) + " | Alerts " + formatWhole(item.alertsOpen) + " | Resolutions " + formatWhole(item.resolutions) + "</span></div>").join("") : renderEmptyState("No laggards yet", "Enter or upload community TALi scores to rank the lowest performers.")) +
+      "</div>" +
+    "</div>" +
+    (watchouts.length > 0 ? "<div style=\"margin-top:14px\">" + watchouts.map(item => "<div class=\"bullet-row\"><strong>Watch</strong><span>" + escapeHtml(item) + "</span></div>").join("") + "</div>" : "");
+  const grouped = comparison.metricComparisons.reduce((map, metric) => {
+    const key = metric.audience;
+    if (!map[key]) map[key] = {};
+    if (!map[key][metric.category]) map[key][metric.category] = [];
+    map[key][metric.category].push(metric);
+    return map;
+  }, {});
+  const tables = Object.entries(grouped).map(([audience, categories]) => {
+    const categoryBlocks = Object.entries(categories).map(([category, metrics]) => {
+      const rows = metrics.map(metric => {
+        const previousMetric = previous ? ensureReputationMetrics("previous").find(item => item.id === metric.id) : null;
+        return "<tr>" +
+          "<td>" + escapeHtml(metric.label) + "</td>" +
+          "<td><input type=\"number\" value=\"" + num(metric.score) + "\" step=\"0.1\" onchange=\"updateReputationMetricField('current', '" + metric.id + "', 'score', this.value)\"></td>" +
+          "<td><input type=\"number\" value=\"" + num(metric.responseCount) + "\" step=\"1\" onchange=\"updateReputationMetricField('current', '" + metric.id + "', 'responseCount', this.value)\"></td>" +
+          "<td>" + (previous
+            ? "<input type=\"number\" value=\"" + num(previousMetric?.score) + "\" step=\"0.1\" onchange=\"updateReputationMetricField('previous', '" + metric.id + "', 'score', this.value)\">"
+            : "<span class=\"delta flat\">No prior</span>") + "</td>" +
+          "<td>" + (metric.delta !== null ? "<span class=\"delta " + buildTrendClass(metric.delta) + "\">" + formatSignedValue(metric.delta, 1, "%") + "</span>" : "<span class=\"delta flat\">No prior</span>") + "</td>" +
+          "<td><input type=\"number\" value=\"" + num(metric.jtAverage) + "\" step=\"0.1\" onchange=\"updateReputationMetricField('current', '" + metric.id + "', 'jtAverage', this.value)\"></td>" +
+          "<td>" + (metric.jtGap !== null ? "<span class=\"delta " + buildTrendClass(metric.jtGap) + "\">" + formatSignedValue(metric.jtGap, 1, "%") + "</span>" : "<span class=\"delta flat\">N/A</span>") + "</td>" +
+          "<td>" + (metric.topCommunity ? "<strong>" + escapeHtml(metric.topCommunity) + "</strong>" + (metric.topCommunityDelta !== null ? "<br><span class=\"metric-subdetail\">" + formatSignedValue(metric.topCommunityDelta, 1, "%") + " vs prior</span>" : "") : "<span class=\"delta flat\">Pending</span>") + "</td>" +
+        "</tr>";
+      }).join("");
+      return "<div style=\"margin-bottom:16px\"><div class=\"metric-label\" style=\"margin-bottom:8px\">" + escapeHtml(category) + "</div><div class=\"metric-subdetail\" style=\"margin-bottom:6px\">Grouped questions: " + escapeHtml(metrics[0].questions.join(" | ")) + "</div><div class=\"table-wrap\"><table><thead><tr><th>Index</th><th>Portfolio</th><th>No. Responses</th><th>Previous Report</th><th>Growth / Decline</th><th>J Turner Avg</th><th>Portfolio vs Turner</th><th>Top Community</th></tr></thead><tbody>" + rows + "</tbody></table></div></div>";
+    }).join("");
+    return "<div class=\"reputation-edit-card\"><div><strong>" + escapeHtml(audience) + " TALi Snapshot</strong></div>" + categoryBlocks + "</div>";
+  }).join("");
+  tableTarget.innerHTML = tables;
+
+  statusTarget.innerHTML = "<strong>Current TALi report:</strong> " + escapeHtml(current.reportName) +
+    (current.periodLabel ? " (" + escapeHtml(current.periodLabel) + ")" : "") +
+    (previous ? "<br><strong>Compared against:</strong> " + escapeHtml(previous.reportName) + (previous.periodLabel ? " (" + escapeHtml(previous.periodLabel) + ")" : "") : "<br>Upload the previous TALi report to unlock growth and decline deltas.");
+}
+
+function buildHeroSummary() {
+  if (!reportData) {
+    return "This report reads like a monthly portfolio news brief once the leasing dashboard data is loaded: headline metrics, investor view, resident reputation movement, community pressure points, and a ready-to-send leadership email draft.";
+  }
+
+  const portfolio = reportData.portfolio;
+  const lead = portfolio.topPerformers[0]?.name || "the top-performing community";
+  const risk = portfolio.watchList[0]?.name || "no community";
+  const investorCount = portfolio.investorSummaries.length;
+  const investorText = investorCount === 1 ? "1 investor group" : formatWhole(investorCount) + " investor groups";
+  const riskText = portfolio.watchList.length > 0
+    ? risk + " currently carrying the heaviest watch-list burden"
+    : "no communities currently sitting in intervention status";
+  const revenueText = portfolio.revenueDelta !== null
+    ? "revenue running " + formatSignedCurrency(portfolio.revenueDelta, 0) + " to budget NER"
+    : "revenue detail still building as rent roll data comes in";
+
+  const reputation = getReputationComparison();
+  const reputationText = reputation
+    ? " TALi benchmark questions averaged " + reputation.currentWeightedAverage.toFixed(1) +
+      (reputation.portfolioDelta.overallScore !== null ? ", " + (reputation.portfolioDelta.overallScore >= 0 ? "up " : "down ") + Math.abs(reputation.portfolioDelta.overallScore).toFixed(1) + " versus the prior report," : ",") +
+      (reputation.portfolioDelta.benchmarkGap !== null ? " and are running " + formatSignedValue(reputation.portfolioDelta.benchmarkGap, 1) + " versus the J Turner average." : "")
+    : "";
+
+  return "For the month ending " + formatShortDate(reportState.monthEnding) + ", " + reportState.portfolioLabel +
+    " is operating at " + formatPct(portfolio.occupancyPct) + " physical occupancy and " + formatPct(portfolio.leasedPct) +
+    " leased across " + formatWhole(portfolio.totalUnits) + " units and " + investorText + ", with " +
+    formatWhole(portfolio.moveOuts30) + " move-outs scheduled, " + formatWhole(portfolio.leasesSigned) +
+    " leases signed month to date, " + lead + " leading performance, " + riskText + ", and " + revenueText + "." + reputationText;
+}
+
+function openVisualPicker() {
+  const input = document.getElementById("visual-upload");
+  if (input) input.click();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Unable to read image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromUrl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = async () => {
+      if (typeof img.decode === "function") {
+        try {
+          await img.decode();
+        } catch {}
+      }
+      resolve(img);
+    };
+    img.onerror = () => reject(new Error("Image failed to load."));
+    img.src = src;
+  });
+}
+
+async function shrinkImageDataUrl(dataUrl, maxEdge = 1600, quality = 0.82) {
+  const image = await loadImageFromUrl(dataUrl);
+  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+async function handleVisualUpload(event) {
+  const files = safeArray(event.target.files);
+  if (files.length === 0) return;
+  const processed = [];
+  for (const file of files) {
+    const dataUrl = await readFileAsDataUrl(file);
+    processed.push({
+      id: uid("visual"),
+      name: file.name,
+      dataUrl: await shrinkImageDataUrl(dataUrl, 1500, 0.8)
+    });
+  }
+  reportState.visualImages = reportState.visualImages.concat(processed);
+  clearPreparedReportImages();
+  persistState();
+  event.target.value = "";
+  renderAll();
+}
+
+function removeVisualImage(imageId) {
+  reportState.visualImages = reportState.visualImages.filter(image => image.id !== imageId);
+  clearPreparedReportImages();
+  persistState();
+  renderAll();
+}
+
+function clearVisualImages() {
+  reportState.visualImages = [];
+  const input = document.getElementById("visual-upload");
+  if (input) input.value = "";
+  clearPreparedReportImages();
+  persistState();
+  renderAll();
+}
+
+function renderVisualUploadStatus() {
+  const status = document.getElementById("visual-upload-status");
+  if (!status) return;
+  if (reportState.visualImages.length === 0) {
+    status.textContent = "Click Choose Images to upload as many report visuals as you need.";
+    return;
+  }
+  status.textContent = reportState.visualImages.length + " image" + (reportState.visualImages.length === 1 ? "" : "s") + " loaded. Click Choose Images to add more.";
+}
+
+function renderVisualGallery() {
+  const card = document.getElementById("visual-card");
+  const target = document.getElementById("visual-gallery");
+  if (reportState.visualImages.length === 0) {
+    if (card) card.dataset.empty = "true";
+    target.innerHTML = renderEmptyState("No visuals added yet", "Upload any number of report visuals whenever the monthly story needs photo support.");
+    return;
+  }
+  if (card) card.dataset.empty = "false";
+
+  const slots = reportState.visualImages.map((image, index) => {
+    return "<div class=\"visual-tile\">" +
+      "<div class=\"visual-frame\"><img src=\"" + image.dataUrl + "\" alt=\"" + escapeHtml(image.name) + "\"></div>" +
+      "<div class=\"visual-meta\">" +
+        "<strong>" + escapeHtml(image.name) + "</strong><br>" +
+        "<span>" + (index + 1) + " of " + reportState.visualImages.length + "</span>" +
+        "<div class=\"print-hide\" style=\"margin-top:10px\"><button class=\"btn btn-muted\" type=\"button\" onclick=\"removeVisualImage('" + image.id + "')\">Remove</button></div>" +
+      "</div>" +
+    "</div>";
+  });
+
+  target.innerHTML = "<div class=\"visual-grid\">" + slots.join("") + "</div>";
+}
+
+function formatFieldForCapture(field) {
+  if (!field) return "";
+  if (field.tagName === "SELECT") {
+    return field.options[field.selectedIndex]?.textContent?.trim() || "";
+  }
+  if (field.tagName === "TEXTAREA") {
+    return field.value.trim();
+  }
+  if (field.type === "checkbox" || field.type === "radio") {
+    return field.checked ? "Yes" : "No";
+  }
+  if (field.type === "date") {
+    return field.value ? formatShortDate(field.value) : "";
+  }
+  return String(field.value || "").trim();
+}
+
+function convertInteractiveFieldsForCapture(root) {
+  root.querySelectorAll("input, textarea, select").forEach(field => {
+    const value = formatFieldForCapture(field);
+    const replacement = document.createElement(field.tagName === "TEXTAREA" ? "div" : "span");
+    replacement.className = "capture-field" + (field.tagName === "TEXTAREA" ? " capture-field-long" : "");
+    replacement.textContent = value || "\u2014";
+    field.replaceWith(replacement);
+  });
+}
+
+function syncFormValuesToClone(sourceRoot, cloneRoot) {
+  const sourceFields = sourceRoot.querySelectorAll("input, textarea, select");
+  const cloneFields = cloneRoot.querySelectorAll("input, textarea, select");
+  sourceFields.forEach((field, index) => {
+    const cloneField = cloneFields[index];
+    if (!cloneField) return;
+    if (field.tagName === "TEXTAREA") {
+      cloneField.textContent = field.value;
+    } else if (field.tagName === "SELECT") {
+      safeArray(cloneField.options).forEach((option, optionIndex) => {
+        option.selected = optionIndex === field.selectedIndex;
+      });
+    } else {
+      cloneField.setAttribute("value", field.value);
+    }
+  });
+}
+
+function cloneForCapture(selector) {
+  const source = document.querySelector(selector);
+  if (!source) return null;
+  const clone = source.cloneNode(true);
+  clone.style.width = "100%";
+  clone.style.boxSizing = "border-box";
+  syncFormValuesToClone(source, clone);
+  clone.querySelectorAll(".print-hide").forEach(node => node.remove());
+  if (selector === "#reputation-card") {
+    const status = clone.querySelector("#reputation-status");
+    if (status) status.remove();
+  }
+  convertInteractiveFieldsForCapture(clone);
+  return clone;
+}
+
+function buildCapturePages() {
+  const pages = [];
+  const pageOne = [cloneForCapture(".hero"), cloneForCapture("#portfolio-pulse-card"), cloneForCapture("#investor-card")].filter(Boolean);
+  const pageTwo = [cloneForCapture("#executive-card"), cloneForCapture("#insights-card")].filter(Boolean);
+  const pageThree = [cloneForCapture("#leaders-card"), cloneForCapture("#risk-card"), cloneForCapture("#traffic-card")].filter(Boolean);
+  const pageFour = [cloneForCapture("#reputation-card")].filter(Boolean);
+  const pageFive = [cloneForCapture("#community-card")].filter(Boolean);
+  const pageSix = reportState.visualImages.length > 0 ? [cloneForCapture("#visual-card")].filter(Boolean) : [];
+
+  if (pageOne.length > 0) pages.push({ name: "report-page-1", nodes: pageOne });
+  if (pageTwo.length > 0) pages.push({ name: "report-page-2", nodes: pageTwo });
+  if (pageThree.length > 0) pages.push({ name: "report-page-3", nodes: pageThree });
+  if (pageFour.length > 0) pages.push({ name: "report-page-4", nodes: pageFour });
+  if (pageFive.length > 0) pages.push({ name: "report-page-5", nodes: pageFive });
+  if (pageSix.length > 0) pages.push({ name: "report-page-6", nodes: pageSix });
+  return pages;
+}
+
+function waitForNextFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
+async function waitForImages(root) {
+  const images = safeArray(root.querySelectorAll("img"));
+  await Promise.all(images.map(image => {
+    if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+    return new Promise(resolve => {
+      const finish = () => resolve();
+      image.addEventListener("load", finish, { once: true });
+      image.addEventListener("error", finish, { once: true });
+    });
+  }));
+}
+
+function getInlineStyles() {
+  return safeArray(document.querySelectorAll("style")).map(style => style.textContent).join("\n");
+}
+
+function buildSvgDataUrl(svgMarkup) {
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgMarkup);
+}
+
+function buildRiseLogoMarkup() {
+  return `
+    <svg class="capture-logo" viewBox="0 0 520 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RISE A Real Estate Company">
+      <rect width="520" height="170" fill="none"/>
+      <g fill="#023046">
+        <path d="M16 122V34h74c26 0 45 6 57 18 10 10 15 23 15 40 0 27-13 45-38 56l43 0-53-22H72v-4h31c14 0 25-3 33-10 8-7 12-16 12-28 0-13-4-23-13-30-9-7-22-11-39-11H30v79H16zm56-44V61h26c9 0 16 4 16 9 0 4-2 8-6 11-4 3-10 5-17 5H72z"/>
+        <path d="M214 123c-20 0-37-3-51-10-14-7-25-16-33-28l22-17c7 9 16 16 26 21 10 4 22 7 36 7 14 0 24-2 31-6 7-4 10-9 10-15 0-7-3-12-9-15-6-3-17-6-33-9-24-4-41-10-51-19-10-8-15-20-15-35 0-16 7-29 22-39 14-10 33-15 56-15 18 0 34 2 47 8 13 5 24 12 33 22l-21 17c-7-7-15-12-25-16-9-4-20-6-32-6-12 0-21 2-28 6-7 4-10 9-10 15 0 6 3 10 9 13 6 3 17 6 33 9 17 3 30 6 40 10 10 4 18 8 24 14 8 9 12 20 12 34 0 17-7 31-22 41-15 9-35 14-61 14z"/>
+        <path d="M406 123V34h92v24h-63v12h58v23h-58v14h67v24h-96z"/>
+      </g>
+      <g>
+        <path d="M183 30h42v96h-42z" fill="#549db8"/>
+        <path d="M186 29l40 0-17-15h-25z" fill="#023046"/>
+        <rect x="189" y="34" width="30" height="7" fill="#ffffff"/>
+        <rect x="189" y="48" width="30" height="7" fill="#ffffff"/>
+        <rect x="189" y="62" width="30" height="7" fill="#ffffff"/>
+        <rect x="189" y="76" width="30" height="7" fill="#ffffff"/>
+        <rect x="189" y="90" width="30" height="7" fill="#ffffff"/>
+        <rect x="189" y="104" width="30" height="7" fill="#ffffff"/>
+      </g>
+      <text x="16" y="156" fill="#023046" font-family="'IBM Plex Mono', 'Courier New', monospace" font-size="22" letter-spacing="8">A REAL ESTATE COMPANY</text>
+    </svg>`;
+}
+
+function setEmailActionStatus(message, tone = "info") {
+  const status = document.getElementById("email-action-status");
+  if (!status) return;
+  status.textContent = message;
+  status.className = "action-status" + (tone === "success" ? " success" : tone === "error" ? " error" : "");
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+async function renderNodesToImageFile(nodes, name) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "capture-page";
+  wrapper.style.position = "absolute";
+  wrapper.style.left = "-20000px";
+  wrapper.style.top = "0";
+  wrapper.style.width = "1120px";
+  wrapper.style.padding = "0";
+  wrapper.style.boxSizing = "border-box";
+  wrapper.style.background = "#ffffff";
+  wrapper.style.display = "grid";
+  wrapper.style.gap = "18px";
+  wrapper.style.zIndex = "-1";
+  nodes.forEach(node => wrapper.appendChild(node));
+  document.body.appendChild(wrapper);
+  await waitForNextFrame();
+  await waitForImages(wrapper);
+  await waitForNextFrame();
+
+  try {
+    const width = Math.max(1, Math.ceil(wrapper.scrollWidth));
+    const height = Math.max(1, Math.ceil(wrapper.scrollHeight));
+    if (window.html2canvas) {
+      const canvas = await window.html2canvas(wrapper, {
+        backgroundColor: "#ffffff",
+        scale: Math.min(window.devicePixelRatio || 2, 2),
+        useCORS: true,
+        logging: false
+      });
+      const pngBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error("Browser could not convert the report page into an image."));
+        }, "image/png");
+      });
+      if (typeof File === "function") {
+        return new File([pngBlob], name + ".png", { type: "image/png" });
+      }
+      pngBlob.name = name + ".png";
+      return pngBlob;
+    }
+    const styleMarkup = getInlineStyles();
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        <foreignObject width="100%" height="100%">
+          <div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;background:#ffffff;">
+            <style>${styleMarkup}</style>
+            ${wrapper.innerHTML}
+          </div>
+        </foreignObject>
+      </svg>`;
+
+    let image;
+    try {
+      image = await loadImageFromUrl(buildSvgDataUrl(svg));
+    } catch {
+      const fallbackUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      try {
+        image = await loadImageFromUrl(fallbackUrl);
+      } finally {
+        URL.revokeObjectURL(fallbackUrl);
+      }
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Browser could not create a drawing context.");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error("Browser could not convert the report page into an image."));
+      }, "image/png");
+    });
+    if (typeof File === "function") {
+      return new File([pngBlob], name + ".png", { type: "image/png" });
+    }
+    pngBlob.name = name + ".png";
+    return pngBlob;
+  } finally {
+    if (wrapper.parentNode) document.body.removeChild(wrapper);
+  }
+}
+
+async function prepareReportImages() {
+  if (!reportData) {
+    alert("Load portfolio data first so the report can generate image pages.");
+    setEmailActionStatus("Load portfolio data first so the report can generate image pages.", "error");
+    return [];
+  }
+  try {
+    setEmailActionStatus("Preparing report images. This can take a moment on larger reports.");
+    const pages = buildCapturePages();
+    const files = [];
+    for (const page of pages) {
+      files.push(await renderNodesToImageFile(page.nodes, page.name));
+    }
+    clearPreparedReportImages();
+    preparedReportImages = await Promise.all(files.map(async (file, index) => ({
+      id: uid("page"),
+      name: file.name,
+      file,
+      url: URL.createObjectURL(file),
+      label: "Report page " + (index + 1)
+    })));
+    renderEmailPackagePreview();
+    setEmailActionStatus("Prepared " + preparedReportImages.length + " report image pages for the draft file.", "success");
+    return preparedReportImages;
+  } catch (error) {
+    clearPreparedReportImages();
+    renderEmailPackagePreview();
+    setEmailActionStatus("Report image preparation failed: " + error.message, "error");
+    alert("Report image preparation failed: " + error.message);
+    return [];
+  }
+}
+
+function buildPdfMetricCardsHtml(portfolio) {
+  const cards = [
+    { label: "Portfolio Health", value: portfolio.healthScore + "/100", detail: getStatusCopy(portfolio.healthStatus), sub: "Portfolio pulse score" },
+    { label: "Physical Occupancy", value: formatPct(portfolio.occupancyPct), detail: portfolio.occupancyGap !== null ? formatSignedPct(portfolio.occupancyGap) + " to budget" : "Budget pending", sub: formatWhole(portfolio.totalOccupied) + " occupied units" },
+    { label: "Leased Position", value: formatPct(portfolio.leasedPct), detail: portfolio.leasedGap !== null ? formatSignedPct(portfolio.leasedGap) + " to target" : "Target pending", sub: formatWhole(portfolio.totalLeased) + " leased units" },
+    { label: "30-Day Exposure", value: formatWhole(portfolio.moveOuts30) + " outs", detail: formatWhole(portfolio.moveIns30) + " move-ins scheduled", sub: "Projected occ " + formatPct(portfolio.projectedOcc30Pct) },
+    { label: "Revenue Position", value: portfolio.actualNER > 0 ? formatCurrency(portfolio.actualNER, 0) : "N/A", detail: portfolio.revenueDelta !== null ? formatSignedCurrency(portfolio.revenueDelta, 0) + " to budget NER" : "NER detail pending", sub: portfolio.actualRentRoll > 0 ? "Rent roll " + formatCurrency(portfolio.actualRentRoll, 0) : "Rent roll pending" },
+    { label: "Traffic Snapshot", value: formatWhole(portfolio.guestCards) + " leads", detail: formatWhole(portfolio.tours) + " tours | " + formatWhole(portfolio.applications) + " apps | " + formatWhole(portfolio.leasesSigned) + " leases", sub: portfolio.monthAbsorption >= 0 ? "+" + formatWhole(portfolio.monthAbsorption) + " net absorption MTD" : "-" + formatWhole(Math.abs(portfolio.monthAbsorption)) + " net absorption MTD" }
+  ];
+  return cards.map(card => {
+    return "<div style=\"display:grid;gap:8px;padding:16px 18px;border:1px solid rgba(2,48,70,0.10);border-radius:18px;background:#ffffff;min-height:132px;\">" +
+      "<div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">" + escapeHtml(card.label) + "</div>" +
+      "<div style=\"font-family:var(--serif);font-size:34px;line-height:0.96;letter-spacing:-0.05em;color:#102a3b;\">" + escapeHtml(card.value) + "</div>" +
+      "<div style=\"font-size:13px;line-height:1.5;color:#214055;font-weight:700;\">" + escapeHtml(card.detail) + "</div>" +
+      "<div style=\"font-size:12px;line-height:1.45;color:#6b7a86;\">" + escapeHtml(card.sub) + "</div>" +
+    "</div>";
+  }).join("");
+}
+
+function buildPdfInvestorCardsHtml(investors) {
+  return investors.slice(0, 4).map(investor => {
+    const revenueCopy = investor.revenueDelta !== null ? formatSignedCurrency(investor.revenueDelta, 0) + " NER to budget" : "NER detail pending";
+    return "<div style=\"display:grid;gap:6px;padding:14px 16px;border:1px solid rgba(2,48,70,0.10);border-radius:16px;background:#ffffff;\">" +
+      "<div style=\"display:flex;justify-content:space-between;gap:10px;align-items:flex-start;\">" +
+        "<strong style=\"font-size:18px;line-height:1.1;color:#102a3b;\">" + escapeHtml(investor.investor) + "</strong>" +
+        "<span style=\"font:700 10px/1 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:" + (investor.watchCount > 0 ? "#c96e33" : "#1f6a54") + ";\">" + (investor.watchCount > 0 ? "Watch" : "Stable") + "</span>" +
+      "</div>" +
+      "<div style=\"font-size:12px;line-height:1.45;color:#4f6270;\">" + formatWhole(investor.communityCount) + " communities | " + formatWhole(investor.units) + " units</div>" +
+      "<div style=\"font-size:13px;line-height:1.45;color:#173246;\"><strong>" + formatPct(investor.occupancyPct) + "</strong> occ | <strong>" + formatPct(investor.leasedPct) + "</strong> leased</div>" +
+      "<div style=\"font-size:12px;line-height:1.45;color:#6b7a86;\">" + escapeHtml(revenueCopy) + "</div>" +
+    "</div>";
+  }).join("");
+}
+
+function buildPdfListRows(items, tone = "neutral") {
+  if (!items.length) {
+    return "<div style=\"font-size:12px;line-height:1.5;color:#6b7a86;\">No material items surfaced in this section for the latest load.</div>";
+  }
+  const color = tone === "watch" ? "#b84d3a" : tone === "win" ? "#1f6a54" : "#173246";
+  return items.slice(0, 4).map(item => {
+    return "<div style=\"display:grid;grid-template-columns:10px 1fr;gap:10px;align-items:start;\">" +
+      "<span style=\"width:10px;height:10px;border-radius:50%;background:" + color + ";margin-top:5px;\"></span>" +
+      "<span style=\"font-size:12px;line-height:1.45;color:#334b5c;\">" + escapeHtml(item) + "</span>" +
+    "</div>";
+  }).join("");
+}
+
+function buildPdfCommunityRowsHtml(communityList = reportData.communities) {
+  const taliByCommunity = new Map(getCommunityTaliSummary("current").map(item => [item.name, item]));
+  const investorByName = new Map(reportData.portfolio.investorSummaries.map(item => [item.investor, item]));
+  return communityList.map(community => {
+    const tali = taliByCommunity.get(community.name);
+    const investorSummary = investorByName.get(community.investor);
+    const trust = computeInvestorTrustScore(community, tali, investorSummary);
+    const occDelta = community.occupancyGap !== null ? formatSignedPct(community.occupancyGap) : "N/A";
+    const leasedDelta = community.leasedGap !== null ? formatSignedPct(community.leasedGap) : "N/A";
+    const ner = community.revenueDelta !== null ? formatSignedCurrency(community.revenueDelta, 0) : "N/A";
+    const status = getStatusCopy(community.status === "at-risk" ? "intervention" : community.status);
+    return "<tr>" +
+      "<td style=\"padding:8px 8px 8px 0;font-size:11px;line-height:1.35;color:#173246;font-weight:700;\">" + escapeHtml(community.name) + "</td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + trust + "</td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + formatPct(community.occupancyPct) + "<div style=\"color:#71808b;\">" + escapeHtml(occDelta) + "</div></td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + formatPct(community.leasedPct) + "<div style=\"color:#71808b;\">" + escapeHtml(leasedDelta) + "</div></td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + escapeHtml(ner) + "</td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + formatWhole(community.moveOuts30) + " / " + formatWhole(community.moveIns30) + "<div style=\"color:#71808b;\">Proj " + formatPct(community.projectedOcc30Pct) + "</div></td>" +
+      "<td style=\"padding:8px;font-size:11px;line-height:1.35;color:#173246;\">" + formatWhole(community.leasesSigned) + "<div style=\"color:#71808b;\">" + formatWhole(community.guestCards) + " leads</div></td>" +
+      "<td style=\"padding:8px 0 8px 8px;font-size:11px;line-height:1.35;color:#173246;\">" + escapeHtml(status) + "<div style=\"color:#71808b;\">" + escapeHtml((community.reasons[0] || "").slice(0, 58)) + "</div></td>" +
+    "</tr>";
+  }).join("");
+}
+
+function buildPdfVisualStripHtml() {
+  if (!reportState.visualImages.length) {
+    return "<div style=\"padding:12px 14px;border:1px dashed rgba(2,48,70,0.18);border-radius:16px;font-size:12px;line-height:1.45;color:#71808b;\">No photos added for this month.</div>";
+  }
+  return "<div style=\"display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;\">" + reportState.visualImages.slice(0, 3).map(image => {
+    return "<div style=\"display:grid;gap:6px;\">" +
+      "<div style=\"aspect-ratio:1.3 / 1;border-radius:14px;overflow:hidden;border:1px solid rgba(2,48,70,0.08);background:#eef4f7;\"><img src=\"" + image.dataUrl + "\" alt=\"" + escapeHtml(image.name) + "\" style=\"width:100%;height:100%;object-fit:cover;display:block;\"></div>" +
+      "<div style=\"font-size:11px;line-height:1.35;color:#5f7280;\">" + escapeHtml(image.name) + "</div>" +
+    "</div>";
+  }).join("") + "</div>";
+}
+
+function chunkArray(items, chunkSize) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+function createPdfPageShell() {
+  const page = document.createElement("div");
+  page.className = "pdf-page";
+  page.innerHTML = "<div class=\"pdf-page-body\"></div><div class=\"pdf-page-footer\"></div>";
+  return page;
+}
+
+function createPdfSection(innerHtml, extraStyles = "") {
+  const section = document.createElement("section");
+  section.style.cssText =
+    "display:grid;gap:10px;padding-top:12px;border-top:2px solid rgba(2,48,70,0.10);" +
+    "break-inside:avoid;" + extraStyles;
+  section.innerHTML = innerHtml;
+  return section;
+}
+
+function buildPdfTaliSummaryHtml() {
+  const reputation = getReputationComparison();
+  return reputation
+    ? "<div style=\"display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;\">" +
+        "<div style=\"padding:10px 12px;border-radius:14px;background:#ffffff;border:1px solid rgba(2,48,70,0.10);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Portfolio TALi</div><div style=\"font-family:var(--serif);font-size:24px;line-height:1;color:#102a3b;\">" + reputation.currentWeightedAverage.toFixed(1) + "</div></div>" +
+        "<div style=\"padding:10px 12px;border-radius:14px;background:#ffffff;border:1px solid rgba(2,48,70,0.10);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Vs Prior</div><div style=\"font-family:var(--serif);font-size:24px;line-height:1;color:#102a3b;\">" + (reputation.portfolioDelta.overallScore !== null ? formatSignedValue(reputation.portfolioDelta.overallScore, 1) : "N/A") + "</div></div>" +
+        "<div style=\"padding:10px 12px;border-radius:14px;background:#ffffff;border:1px solid rgba(2,48,70,0.10);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Vs J Turner</div><div style=\"font-family:var(--serif);font-size:24px;line-height:1;color:#102a3b;\">" + (reputation.portfolioDelta.benchmarkGap !== null ? formatSignedValue(reputation.portfolioDelta.benchmarkGap, 1) : "N/A") + "</div></div>" +
+      "</div>"
+    : "<div style=\"padding:12px 14px;border:1px dashed rgba(2,48,70,0.18);border-radius:14px;font-size:12px;line-height:1.45;color:#71808b;\">No TALi comparison loaded for this month.</div>";
+}
+
+function buildPdfCommunityChunkSection(communities, chunkIndex, chunkCount) {
+  return createPdfSection(
+    "<div style=\"display:flex;justify-content:space-between;gap:12px;align-items:end;\">" +
+      "<div><div style=\"font-family:var(--serif);font-size:28px;line-height:1;color:#023046;\">Community Performance Detail</div><div style=\"font-size:12px;line-height:1.45;color:#71808b;\">Trust, leasing, revenue, exposure, and status context.</div></div>" +
+      "<div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.10em;text-transform:uppercase;color:#549db8;\">Section " + (chunkIndex + 1) + " of " + chunkCount + "</div>" +
+    "</div>" +
+    "<table style=\"width:100%;border-collapse:collapse;table-layout:fixed;\">" +
+      "<thead><tr>" +
+        "<th style=\"text-align:left;padding:8px 8px 8px 0;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Community</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Trust</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Occ</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Leased</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">NER</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">30-Day</th>" +
+        "<th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Leases</th>" +
+        "<th style=\"text-align:left;padding:8px 0 8px 8px;border-bottom:1px solid rgba(2,48,70,0.12);font:700 9px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Status</th>" +
+      "</tr></thead>" +
+      "<tbody>" + buildPdfCommunityRowsHtml(communities) + "</tbody>" +
+    "</table>"
+  );
+}
+
+function buildPdfPageElements(stage) {
+  if (!reportData) return [];
+  const portfolio = reportData.portfolio;
+  const sections = [];
+  sections.push(createPdfSection(
+    "<div style=\"display:grid;grid-template-columns:190px 1fr auto;gap:18px;align-items:center;\">" +
+      buildRiseLogoMarkup() +
+      "<div style=\"display:grid;gap:6px;\">" +
+        "<div style=\"font:700 11px/1 var(--mono);letter-spacing:0.18em;text-transform:uppercase;color:#549db8;\">Executive Summary</div>" +
+        "<div style=\"font-family:var(--serif);font-size:36px;line-height:0.96;letter-spacing:-0.05em;color:#023046;\">VP Monthly Portfolio Snapshot</div>" +
+        "<div style=\"font-size:13px;line-height:1.45;color:#5f7280;\">Month ending " + escapeHtml(formatShortDate(reportState.monthEnding)) + " | RISE branded landscape print package</div>" +
+      "</div>" +
+      "<div style=\"justify-self:end;padding:12px 14px;border-radius:16px;background:#023046;color:#ffffff;min-width:124px;text-align:center;\">" +
+        "<div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.76);\">Pulse Score</div>" +
+        "<div style=\"font-family:var(--serif);font-size:34px;line-height:1;\">" + portfolio.healthScore + "</div>" +
+      "</div>" +
+    "</div>" +
+    "<div style=\"padding:14px 16px;border-radius:18px;background:linear-gradient(135deg, rgba(2,48,70,0.06), rgba(84,157,184,0.12));border:1px solid rgba(2,48,70,0.08);font-size:15px;line-height:1.58;color:#173246;\">" + escapeHtml(buildHeroSummary()) + "</div>",
+    "padding-top:0;border-top:0;"
+  ));
+  sections.push(createPdfSection(
+    "<div><div style=\"font-family:var(--serif);font-size:28px;line-height:1;color:#023046;\">Portfolio Pulse</div><div style=\"font-size:12px;line-height:1.45;color:#71808b;\">Weighted occupancy, leasing, exposure, traffic, and revenue position.</div></div>" +
+    "<div style=\"display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;\">" + buildPdfMetricCardsHtml(portfolio) + "</div>"
+  ));
+  sections.push(createPdfSection(
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:16px;\">" +
+      "<div style=\"display:grid;gap:10px;align-content:start;\"><div style=\"font-family:var(--serif);font-size:26px;line-height:1;color:#023046;\">Investor Portfolio View</div><div style=\"font-size:12px;line-height:1.45;color:#71808b;\">Ownership rollups by occupancy, leased position, and revenue posture.</div><div style=\"display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;\">" + buildPdfInvestorCardsHtml(portfolio.investorSummaries) + "</div></div>" +
+      "<div style=\"display:grid;gap:10px;align-content:start;\"><div style=\"font-family:var(--serif);font-size:26px;line-height:1;color:#023046;\">Leadership Brief</div><div style=\"font-size:12px;line-height:1.55;color:#334b5c;\">" + escapeHtml((reportState.executiveHeadline || reportData.portfolio.headline || "").trim() || "No additional headline entered.") + "</div><div style=\"font-size:12px;line-height:1.55;color:#334b5c;\">" + escapeHtml((reportState.operationsWins || reportState.winsNote || "No rollouts or operations wins entered.").trim()) + "</div><div style=\"font-size:12px;line-height:1.55;color:#334b5c;\">" + escapeHtml((reportState.upcomingInitiatives || reportState.askNote || "No upcoming initiatives entered.").trim()) + "</div><div style=\"font-size:12px;line-height:1.45;color:#5f7280;\">Prepared by " + escapeHtml(reportState.preparedBy) + "</div></div>" +
+    "</div>"
+  ));
+  sections.push(createPdfSection(
+    "<div><div style=\"font-family:var(--serif);font-size:28px;line-height:1;color:#023046;\">TALi Experience Snapshot</div><div style=\"font-size:12px;line-height:1.45;color:#71808b;\">Portfolio sentiment and benchmark movement.</div></div>" +
+    buildPdfTaliSummaryHtml()
+  ));
+  sections.push(createPdfSection(
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:14px;\">" +
+      "<div style=\"display:grid;gap:8px;\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#1f6a54;\">Wins to Highlight</div>" + buildPdfListRows(reportData.portfolio.wins.slice(0, 4), "win") + "</div>" +
+      "<div style=\"display:grid;gap:8px;\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#c96e33;\">Watchouts</div>" + buildPdfListRows(reportData.portfolio.watchouts.slice(0, 4), "watch") + "</div>" +
+    "</div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:14px;\">" +
+      "<div style=\"display:grid;gap:8px;\"><div style=\"font-family:var(--serif);font-size:22px;line-height:1;color:#023046;\">Top Performers</div>" + buildPdfListRows(reportData.portfolio.topPerformers.map(item => item.name + " | " + formatPct(item.occupancyPct) + " occ | " + formatPct(item.leasedPct) + " leased").slice(0, 4), "win") + "</div>" +
+      "<div style=\"display:grid;gap:8px;\"><div style=\"font-family:var(--serif);font-size:22px;line-height:1;color:#023046;\">Watch List</div>" + buildPdfListRows(reportData.portfolio.watchList.map(item => item.name + " | " + (item.reasons[0] || "Needs intervention")).slice(0, 4), "watch") + "</div>" +
+    "</div>"
+  ));
+  if (reportState.visualImages.length > 0) {
+    sections.push(createPdfSection(
+      "<div><div style=\"font-family:var(--serif);font-size:26px;line-height:1;color:#023046;\">Performance in View</div><div style=\"font-size:12px;line-height:1.45;color:#71808b;\">Photo context for operational issues, wins, and site conditions.</div></div>" +
+      buildPdfVisualStripHtml()
+    ));
+  }
+  const communityChunks = chunkArray(reportData.communities, 5);
+  communityChunks.forEach((chunk, index) => {
+    sections.push(buildPdfCommunityChunkSection(chunk, index, communityChunks.length));
+  });
+
+  const pages = [];
+  let currentPage = createPdfPageShell();
+  stage.appendChild(currentPage);
+  pages.push(currentPage);
+  let body = currentPage.querySelector(".pdf-page-body");
+
+  sections.forEach(section => {
+    body.appendChild(section);
+    if (body.scrollHeight > body.clientHeight + 1) {
+      body.removeChild(section);
+      if (pages.length < 7) {
+        currentPage = createPdfPageShell();
+        stage.appendChild(currentPage);
+        pages.push(currentPage);
+        body = currentPage.querySelector(".pdf-page-body");
+        body.appendChild(section);
+      } else {
+        body.appendChild(section);
+      }
+    }
+  });
+
+  pages.forEach((page, index) => {
+    const footer = page.querySelector(".pdf-page-footer");
+    footer.innerHTML =
+      "<span>VP Monthly Portfolio Snapshot | RISE branded landscape print package</span>" +
+      "<span style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:#549db8;\">Page " + (index + 1) + " of " + pages.length + "</span>";
+  });
+
+  return pages;
+}
+
+function renderEmailPackagePreview() {
+  const target = document.getElementById("email-package-preview");
+  if (!target) return;
+  if (!preparedPdfAttachment) {
+    target.innerHTML = renderEmptyState("No PDF attachment prepared yet", "Build the branded landscape PDF first so the Outlook draft can attach it.");
+    return;
+  }
+  target.innerHTML = "<div style=\"display:grid;gap:14px;padding:18px;border-radius:22px;border:1px solid rgba(2,48,70,0.08);background:rgba(255,255,255,0.82);\">" +
+    "<div style=\"display:flex;justify-content:space-between;gap:12px;align-items:flex-start;\">" +
+      "<div><strong style=\"display:block;font-size:1rem;color:#102a3b;\">" + escapeHtml(preparedPdfAttachment.name) + "</strong><span class=\"hint\">Landscape RISE-branded executive PDF with section-based pagination and a seven-page cap.</span></div>" +
+      "<span style=\"display:inline-flex;padding:8px 10px;border-radius:999px;background:rgba(84,157,184,0.12);color:#023046;font:700 0.72rem/1 var(--mono);letter-spacing:0.08em;text-transform:uppercase;\">Ready</span>" +
+    "</div>" +
+    "<div style=\"display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;\">" +
+      "<div style=\"padding:12px 14px;border-radius:16px;background:#fff;border:1px solid rgba(2,48,70,0.08);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Pages</div><div style=\"font-family:var(--serif);font-size:28px;line-height:1;color:#023046;\">Up to 7</div></div>" +
+      "<div style=\"padding:12px 14px;border-radius:16px;background:#fff;border:1px solid rgba(2,48,70,0.08);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Layout</div><div style=\"font-family:var(--serif);font-size:24px;line-height:1;color:#023046;\">Letter</div></div>" +
+      "<div style=\"padding:12px 14px;border-radius:16px;background:#fff;border:1px solid rgba(2,48,70,0.08);\"><div style=\"font:700 10px/1.4 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:#5f7280;\">Orientation</div><div style=\"font-family:var(--serif);font-size:24px;line-height:1;color:#023046;\">Landscape</div></div>" +
+    "</div>" +
+  "</div>";
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(new Error("Unable to encode attachment."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function preparePdfAttachment() {
+  if (!reportData) {
+    alert("Load portfolio data first so the PDF can be prepared.");
+    setEmailActionStatus("Load portfolio data first so the PDF can be prepared.", "error");
+    return null;
+  }
+  if (!window.jspdf?.jsPDF) {
+    const message = "The PDF library is not available yet. Refresh the page and try again.";
+    setEmailActionStatus(message, "error");
+    alert(message);
+    return null;
+  }
+  const { jsPDF } = window.jspdf;
+  const stage = document.createElement("div");
+  stage.className = "pdf-stage";
+  document.body.appendChild(stage);
+  const pages = buildPdfPageElements(stage);
+  if (!pages.length) return null;
+  try {
+    setEmailActionStatus("Preparing the landscape PDF attachment. This may take a moment.", "info");
+    await waitForNextFrame();
+    await waitForImages(stage);
+    await waitForNextFrame();
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter", compress: true });
+    for (let index = 0; index < pages.length; index++) {
+      const page = pages[index];
+      const canvas = await window.html2canvas(page, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false
+      });
+      const imageData = canvas.toDataURL("image/png");
+      if (index > 0) pdf.addPage("letter", "landscape");
+      pdf.addImage(imageData, "PNG", 0, 0, 792, 612, undefined, "FAST");
+    }
+    const blob = pdf.output("blob");
+    const monthToken = reportState.monthEnding ? reportState.monthEnding.slice(0, 7) : todayIso().slice(0, 7);
+    const filename = "VP_Monthly_Portfolio_Snapshot_" + monthToken + ".pdf";
+    clearPreparedReportImages();
+    preparedPdfAttachment = {
+      name: filename,
+      file: typeof File === "function" ? new File([blob], filename, { type: "application/pdf" }) : new Blob([blob], { type: "application/pdf" }),
+      url: URL.createObjectURL(blob)
+    };
+    renderEmailPackagePreview();
+    setEmailActionStatus("Prepared the branded landscape PDF attachment successfully.", "success");
+    return preparedPdfAttachment;
+  } catch (error) {
+    if (preparedPdfAttachment?.url) {
+      try { URL.revokeObjectURL(preparedPdfAttachment.url); } catch {}
+    }
+    preparedPdfAttachment = null;
+    renderEmailPackagePreview();
+    setEmailActionStatus("PDF attachment preparation failed: " + error.message, "error");
+    alert("PDF attachment preparation failed: " + error.message);
+    return null;
+  } finally {
+    if (stage.parentNode) stage.parentNode.removeChild(stage);
+  }
+}
+
+function downloadPreparedPdfAttachment() {
+  if (!preparedPdfAttachment) {
+    setEmailActionStatus("Prepare the PDF attachment first, then download it.", "error");
+    return;
+  }
+  triggerBlobDownload(preparedPdfAttachment.file, preparedPdfAttachment.name);
+  setEmailActionStatus("Downloaded the prepared PDF attachment.", "success");
+}
+
+async function createPdfEmailDraft() {
+  if (!reportData) {
+    alert("Load portfolio data first so the email draft has something to attach.");
+    setEmailActionStatus("Load portfolio data first so the email draft has something to attach.", "error");
+    return;
+  }
+  const recipients = getSelectedContacts();
+  if (recipients.to.length === 0 && recipients.cc.length === 0) {
+    alert("Add at least one selected contact before generating the draft file.");
+    setEmailActionStatus("Add at least one selected contact before generating the draft file.", "error");
+    return;
+  }
+  try {
+    setEmailActionStatus("Building the Outlook draft with the PDF attachment.");
+    const pdfAttachment = preparedPdfAttachment || await preparePdfAttachment();
+    if (!pdfAttachment) {
+      setEmailActionStatus("The PDF attachment could not be generated.", "error");
+      return;
+    }
+
+    const boundary = "----=_RISE_" + Date.now();
+    const htmlBody = "<html><body style=\"margin:0;padding:24px;background:#ffffff;color:#173246;font-family:Arial,sans-serif;\">" +
+      "<p style=\"margin:0 0 12px 0;font-size:15px;line-height:1.6;\">Attached is the VP Monthly Portfolio Snapshot for the month ending " + escapeHtml(formatShortDate(reportState.monthEnding)) + ".</p>" +
+      "<p style=\"margin:0;font-size:15px;line-height:1.6;\">" + escapeHtml(buildHeroSummary()) + "</p>" +
+    "</body></html>";
+
+    let eml = "";
+    if (recipients.to.length > 0) eml += "To: " + recipients.to.join(", ") + "\r\n";
+    if (recipients.cc.length > 0) eml += "Cc: " + recipients.cc.join(", ") + "\r\n";
+    eml += "Subject: " + getEmailSubject() + "\r\n";
+    eml += "MIME-Version: 1.0\r\n";
+    eml += "Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\r\n\r\n";
+    eml += "--" + boundary + "\r\n";
+    eml += "Content-Type: text/html; charset=UTF-8\r\n";
+    eml += "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    eml += htmlBody + "\r\n";
+    const base64 = await fileToBase64(pdfAttachment.file);
+    eml += "--" + boundary + "\r\n";
+    eml += "Content-Type: application/pdf; name=\"" + pdfAttachment.name + "\"\r\n";
+    eml += "Content-Transfer-Encoding: base64\r\n";
+    eml += "Content-Disposition: attachment; filename=\"" + pdfAttachment.name + "\"\r\n\r\n";
+    eml += base64.replace(/(.{76})/g, "$1\r\n") + "\r\n";
+    eml += "--" + boundary + "--";
+    triggerBlobDownload(new Blob([eml], { type: "message/rfc822" }), "rise-monthly-pdf-draft.eml");
+    setEmailActionStatus("The Outlook-ready draft downloaded with the PDF attached. Open the .eml file in Outlook to review and send.", "success");
+  } catch (error) {
+    setEmailActionStatus("PDF draft creation failed: " + error.message, "error");
+    alert("PDF draft creation failed: " + error.message);
+  }
+}
+
+function readLocalStorageValue(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadDirectFromLeasing() {
+  const snapshotPayload = readLocalStorageValue(SNAPSHOT_STORAGE_KEY);
+  const rawPayload = readLocalStorageValue(RAW_STORAGE_KEY);
+  const payload = snapshotPayload || rawPayload;
+  const parsed = parseSourcePayload(payload, {
+    source: snapshotPayload ? "published VP snapshot" : rawPayload ? "raw leasing dashboard storage" : "none"
+  });
+
+  if (!parsed) {
+    reportData = null;
+    clearPreparedReportImages();
+    sourceMeta = {
+      message: "No shareable portfolio data was found in this browser context.",
+      tags: ["pull failed", "use json fallback"],
+      status: "at-risk",
+      loadedAt: null
+    };
+    renderAll();
+    return;
+  }
+
+  reportData = parsed;
+  clearPreparedReportImages();
+  sourceMeta = {
+    message: "Loaded " + parsed.communities.length + " communities from " + parsed.meta.source + ".",
+    tags: [parsed.meta.source, parsed.meta.exportedAt ? "exported " + formatShortDate(parsed.meta.exportedAt.slice(0, 10)) : "live browser data"],
+    status: parsed.portfolio.healthStatus === "intervention" ? "at-risk" : parsed.portfolio.healthStatus,
+    loadedAt: parsed.meta.loadedAt
+  };
+  renderAll();
+}
+
+async function importSnapshotFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const parsed = parseSourcePayload(payload, { source: "snapshot json" });
+    if (!parsed) throw new Error("Snapshot did not include recognizable portfolio data.");
+    reportData = parsed;
+    clearPreparedReportImages();
+    sourceMeta = {
+      message: "Imported " + parsed.communities.length + " communities from snapshot JSON.",
+      tags: ["snapshot json", parsed.meta.exportedAt ? "exported " + formatShortDate(parsed.meta.exportedAt.slice(0, 10)) : "manual import"],
+      status: parsed.portfolio.healthStatus === "intervention" ? "at-risk" : parsed.portfolio.healthStatus,
+      loadedAt: parsed.meta.loadedAt
+    };
+    event.target.value = "";
+    renderAll();
+  } catch (error) {
+    sourceMeta = {
+      message: "Snapshot import failed: " + error.message,
+      tags: ["import failed"],
+      status: "at-risk",
+      loadedAt: null
+    };
+    renderAll();
+  }
+}
+
+function getEmailSubject() {
+  return reportState.emailSubject || (reportState.portfolioLabel + " monthly update | Month ending " + formatShortDate(reportState.monthEnding));
+}
+
+function resetSubject() {
+  reportState.emailSubject = "";
+  persistState();
+  renderAll();
+}
+
+function getStatusCopy(status) {
+  if (status === "stable") return "Stable";
+  if (status === "intervention" || status === "at-risk") return "Intervention";
+  return "Watch";
+}
+
+function buildTrendClass(value) {
+  if (value === null || Math.abs(value) < 0.1) return "flat";
+  return value > 0 ? "up" : "down";
+}
+
+function computeInvestorTrustScore(community, taliSummary, investorSummary) {
+  const leasedScore = community.leasedGap === null ? 72 : clamp(100 + community.leasedGap * 16, 0, 100);
+  const revenueScore = community.revenueDelta === null || community.budgetNER <= 0
+    ? 72
+    : clamp(100 + (community.revenueDelta / community.budgetNER) * 300, 0, 100);
+  const occScore = community.occupancyGap === null ? 72 : clamp(100 + community.occupancyGap * 18, 0, 100);
+  const communityAbsorptionRate = community.units > 0 ? community.quarterAbsorption / community.units * 100 : 0;
+  const investorAbsorptionRate = num(investorSummary?.quarterAbsorptionRate, 0);
+  const absorptionScore = clamp(78 + ((communityAbsorptionRate - investorAbsorptionRate) * 34) + (investorAbsorptionRate * 8), 0, 100);
+  const components = [];
+  if (taliSummary && taliSummary.combinedScore > 0) {
+    components.push({ score: clamp(taliSummary.combinedScore, 0, 100), weight: 0.24 });
+  }
+  components.push({ score: leasedScore, weight: 0.20 });
+  components.push({ score: revenueScore, weight: 0.20 });
+  components.push({ score: occScore, weight: 0.20 });
+  components.push({ score: absorptionScore, weight: 0.16 });
+  const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+  const weightedScore = components.reduce((sum, component) => sum + (component.score * component.weight), 0);
+  return Math.round(totalWeight > 0 ? weightedScore / totalWeight : 72);
+}
+
+function renderSourceStatus() {
+  const statusEl = document.getElementById("source-status");
+  statusEl.innerHTML = "<strong>" + escapeHtml(sourceMeta.message) + "</strong>" +
+    (sourceMeta.loadedAt ? "Loaded " + escapeHtml(new Date(sourceMeta.loadedAt).toLocaleString()) + "." : "Use direct pull or import to start.");
+  document.getElementById("source-tags").innerHTML = safeArray(sourceMeta.tags)
+    .map(tag => "<span class=\"tag\">" + escapeHtml(tag) + "</span>")
+    .join("");
+}
+
+function renderHeroSummary() {
+  document.getElementById("hero-summary").textContent = buildHeroSummary();
+}
+
+function renderStatusChip() {
+  const chip = document.getElementById("portfolio-status-chip");
+  const status = reportData?.portfolio?.healthStatus === "intervention" ? "at-risk" : (reportData?.portfolio?.healthStatus || sourceMeta.status || "watch");
+  chip.className = "status-chip " + status;
+  chip.textContent = reportData ? getStatusCopy(reportData.portfolio.healthStatus) + " | " + reportData.portfolio.healthScore + "/100" : "Waiting on Data";
+}
+
+function renderMetrics() {
+  const target = document.getElementById("metric-grid");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No portfolio metrics yet", "Pull from the leasing dashboard or import a snapshot to populate the monthly scorecard.");
+    return;
+  }
+
+  const portfolio = reportData.portfolio;
+  const occTrendClass = buildTrendClass(portfolio.occupancyGap);
+  const leasedTrendClass = buildTrendClass(portfolio.leasedGap);
+  const revenueTrendClass = buildTrendClass(portfolio.revenueDelta);
+  const exposureGap = portfolio.moveOuts30 - portfolio.moveIns30;
+
+  const cards = [
+    {
+      label: "Portfolio Health",
+      value: portfolio.healthScore + "/100",
+      detail: getStatusCopy(portfolio.healthStatus),
+      sub: "Blend of budget gap, exposure, revenue, and current absorption."
+    },
+    {
+      label: "Physical Occupancy",
+      value: formatPct(portfolio.occupancyPct),
+      detail: portfolio.budgetOccPct > 0
+        ? "<span class=\"trend " + occTrendClass + "\">" + formatSignedPct(portfolio.occupancyGap) + "</span> to budget"
+        : "No weighted budget target loaded",
+      sub: formatWhole(portfolio.totalOccupied) + " occupied of " + formatWhole(portfolio.totalUnits) + " units"
+    },
+    {
+      label: "Leased Position",
+      value: formatPct(portfolio.leasedPct),
+      detail: portfolio.budgetLeasedPct > 0
+        ? "<span class=\"trend " + leasedTrendClass + "\">" + formatSignedPct(portfolio.leasedGap) + "</span> to near-term leased target"
+        : "No near-term leased target loaded",
+      sub: formatWhole(portfolio.totalLeased) + " leased units"
+    },
+    {
+      label: "30-Day Exposure",
+      value: formatWhole(portfolio.moveOuts30) + " move-outs",
+      detail: exposureGap > 0
+        ? "<span class=\"trend down\">-" + formatWhole(exposureGap) + " units net</span> over next 30 days"
+        : "<span class=\"trend up\">+" + formatWhole(Math.abs(exposureGap)) + " units net</span> over next 30 days",
+      sub: "Projected occupied after scheduled move-ins: " + formatPct(portfolio.projectedOcc30Pct)
+    },
+    {
+      label: "Revenue Position",
+      value: portfolio.actualNER > 0 ? formatCurrency(portfolio.actualNER, 0) : "N/A",
+      detail: portfolio.revenueDelta !== null
+        ? "<span class=\"trend " + revenueTrendClass + "\">" + formatSignedCurrency(portfolio.revenueDelta, 0) + "</span> to budget NER"
+        : "Budget or actual NER not loaded across the portfolio",
+      sub: portfolio.actualRentRoll > 0 ? "Current rent roll: " + formatCurrency(portfolio.actualRentRoll, 0) : "Rent roll totals not yet populated"
+    },
+    {
+      label: "Current-Month Traffic",
+      value: formatWhole(portfolio.guestCards) + " leads",
+      detail: formatWhole(portfolio.tours) + " tours | " + formatWhole(portfolio.applications) + " apps | " + formatWhole(portfolio.leasesSigned) + " leases",
+      sub: portfolio.monthAbsorption >= 0
+        ? "MTD absorption is +" + formatWhole(portfolio.monthAbsorption) + " units"
+        : "MTD absorption is -" + formatWhole(Math.abs(portfolio.monthAbsorption)) + " units"
+    }
+  ];
+
+  target.innerHTML = cards.map(card => {
+    return "<div class=\"metric\">" +
+      "<div class=\"metric-label\">" + card.label + "</div>" +
+      "<div class=\"metric-value\">" + card.value + "</div>" +
+      "<div class=\"metric-detail\">" + card.detail + "</div>" +
+      "<div class=\"metric-subdetail\">" + card.sub + "</div>" +
+    "</div>";
+  }).join("");
+}
+
+function renderExecutiveStory() {
+  const callout = document.getElementById("story-callout");
+  if (!reportData) {
+    callout.textContent = "Load portfolio data to generate the executive headline.";
+    return;
+  }
+  const custom = reportState.executiveHeadline.trim();
+  const auto = reportData.portfolio.headline;
+  callout.textContent = custom || auto;
+}
+
+function renderInsightLists() {
+  if (!reportData) {
+    document.getElementById("wins-list").innerHTML = renderEmptyState("No wins yet", "The wins list will populate once the portfolio data is loaded.");
+    document.getElementById("watch-list").innerHTML = renderEmptyState("No watchouts yet", "The watch list will populate once the portfolio data is loaded.");
+    return;
+  }
+
+  const wins = [...reportData.portfolio.wins];
+  const reputation = getReputationComparison();
+  if (reputation?.portfolioDelta?.overallScore !== null && reputation.portfolioDelta.overallScore > 0) {
+    wins.unshift("TALi benchmark-question scores improved " + formatSignedValue(reputation.portfolioDelta.overallScore, 1) + " versus the prior month.");
+  }
+  if (reportState.winsNote.trim()) wins.unshift(reportState.winsNote.trim());
+  const watchouts = [...reportData.portfolio.watchouts];
+  if (reputation?.portfolioDelta?.benchmarkGap !== null && reputation.portfolioDelta.benchmarkGap < 0) {
+    watchouts.unshift("TALi benchmark questions are running " + formatSignedValue(reputation.portfolioDelta.benchmarkGap, 1) + " below the J Turner average.");
+  }
+  if (reportState.watchlistNote.trim()) watchouts.unshift(reportState.watchlistNote.trim());
+
+  document.getElementById("wins-list").innerHTML = wins.map(item =>
+    "<div class=\"bullet-row\"><strong>Win</strong><span>" + escapeHtml(item) + "</span></div>"
+  ).join("");
+
+  document.getElementById("watch-list").innerHTML = watchouts.map(item =>
+    "<div class=\"bullet-row\"><strong>Watch</strong><span>" + escapeHtml(item) + "</span></div>"
+  ).join("");
+}
+
+function renderLeaders() {
+  const target = document.getElementById("leaders-list");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No leaders ranked yet", "Leader rankings appear once communities are loaded.");
+    return;
+  }
+
+  target.innerHTML = reportData.portfolio.topPerformers.map((community, index) => {
+    const statusClass = community.status === "stable" ? "stable" : community.status;
+    return "<div class=\"rank-row\">" +
+      "<strong>" + (index + 1) + ". " + escapeHtml(community.name) + "</strong>" +
+      "<span class=\"rank-meta\">" + formatPct(community.occupancyPct) + " occupied | " +
+        (community.occupancyGap !== null ? formatSignedPct(community.occupancyGap) + " to budget | " : "") +
+        (community.revenueDelta !== null ? formatSignedCurrency(community.revenueDelta, 0) + " NER to budget" : "revenue detail pending") +
+      "</span>" +
+      "<div class=\"bar-track\"><div class=\"bar-fill " + statusClass + "\" style=\"width:" + clamp(community.performanceScore, 8, 100) + "%\"></div></div>" +
+    "</div>";
+  }).join("");
+}
+
+function renderInvestorBreakdown() {
+  const target = document.getElementById("investor-breakdown");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No investor breakdown yet", "Add investor names in the leasing dashboard and load the portfolio data here to see investor rollups.");
+    return;
+  }
+
+  target.innerHTML = reportData.portfolio.investorSummaries.map(investor => {
+    const watchCopy = investor.watchCount > 0 ? investor.watchCount + " watch-listed" : "all communities stable";
+    const revenueCopy = investor.revenueDelta !== null ? formatSignedCurrency(investor.revenueDelta, 0) + " NER to budget" : "NER detail pending";
+    return "<div class=\"rank-row\">" +
+      "<strong>" + escapeHtml(investor.investor) + "</strong>" +
+      "<span class=\"rank-meta\">" + formatWhole(investor.communityCount) + " communities | " + formatWhole(investor.units) + " units | " +
+        formatPct(investor.occupancyPct) + " occ | " + formatPct(investor.leasedPct) + " leased</span>" +
+      "<span class=\"rank-meta\">" + watchCopy + " | " + revenueCopy + "</span>" +
+      "<div class=\"bar-track\"><div class=\"bar-fill " + (investor.watchCount > 0 ? "watch" : "stable") + "\" style=\"width:" + clamp(investor.occupancyPct, 10, 100) + "%\"></div></div>" +
+    "</div>";
+  }).join("");
+}
+
+function renderRisks() {
+  const target = document.getElementById("risk-list");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No risks ranked yet", "Risk-ranked communities appear once the report has data.");
+    return;
+  }
+
+  const watchList = reportData.portfolio.watchList.slice(0, 4);
+  if (watchList.length === 0) {
+    target.innerHTML = "<div class=\"risk-row\"><strong>No communities are currently flagged.</strong><span class=\"risk-meta\">The portfolio is running with a stable scorecard based on the data currently loaded.</span></div>";
+    return;
+  }
+
+  target.innerHTML = watchList.map(community => {
+    return "<div class=\"risk-row\">" +
+      "<strong>" + escapeHtml(community.name) + "</strong>" +
+      "<span class=\"risk-meta\">" + escapeHtml(community.reasons[0] || "Needs attention") + "</span>" +
+      "<div class=\"bar-track\"><div class=\"bar-fill at-risk\" style=\"width:" + clamp(community.severity * 10, 12, 100) + "%\"></div></div>" +
+    "</div>";
+  }).join("");
+}
+
+function renderTraffic() {
+  const target = document.getElementById("traffic-grid");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No traffic snapshot yet", "Traffic volume will roll up once the portfolio data is loaded.");
+    return;
+  }
+
+  const portfolio = reportData.portfolio;
+  const gcToTour = portfolio.guestCards > 0 ? portfolio.tours / portfolio.guestCards * 100 : null;
+  const tourToApp = portfolio.tours > 0 ? portfolio.applications / portfolio.tours * 100 : null;
+  const appToLease = portfolio.applications > 0 ? portfolio.leasesSigned / portfolio.applications * 100 : null;
+  const overall = portfolio.guestCards > 0 ? portfolio.leasesSigned / portfolio.guestCards * 100 : null;
+
+  const cells = [
+    { label: "Guest Cards", value: formatWhole(portfolio.guestCards), detail: "Current-month lead volume" },
+    { label: "Tours", value: formatWhole(portfolio.tours), detail: gcToTour !== null ? formatPct(gcToTour) + " from lead to tour" : "Tour conversion pending" },
+    { label: "Applications", value: formatWhole(portfolio.applications), detail: tourToApp !== null ? formatPct(tourToApp) + " from tour to app" : "Application conversion pending" },
+    { label: "Leases", value: formatWhole(portfolio.leasesSigned), detail: appToLease !== null ? formatPct(appToLease) + " from app to lease | overall " + formatPct(overall || 0) : "Lease conversion pending" }
+  ];
+
+  target.innerHTML = cells.map(cell => {
+    return "<div class=\"traffic-cell\">" +
+      "<div class=\"metric-label\">" + cell.label + "</div>" +
+      "<div class=\"traffic-value\">" + cell.value + "</div>" +
+      "<div class=\"metric-subdetail\">" + cell.detail + "</div>" +
+    "</div>";
+  }).join("");
+}
+
+function renderCommunityTable() {
+  const target = document.getElementById("community-table-wrap");
+  if (!reportData) {
+    target.innerHTML = renderEmptyState("No community detail yet", "This table will populate once the monthly report sees the leasing dashboard data.");
+    return;
+  }
+
+  const taliByCommunity = new Map(getCommunityTaliSummary("current").map(item => [item.name, item]));
+  const investorByName = new Map(reportData.portfolio.investorSummaries.map(item => [item.investor, item]));
+  const rows = reportData.communities.map(community => {
+    const statusClass = community.status === "stable" ? "stable" : community.status;
+    const occDeltaClass = buildTrendClass(community.occupancyGap);
+    const leasedDeltaClass = buildTrendClass(community.leasedGap);
+    const revenueClass = buildTrendClass(community.revenueDelta);
+    const tali = taliByCommunity.get(community.name);
+    const investorSummary = investorByName.get(community.investor);
+    const investorTrustScore = computeInvestorTrustScore(community, tali, investorSummary);
+    return "<tr>" +
+      "<td><div class=\"community-name\"><strong>" + escapeHtml(community.name) + "</strong><small>" + formatWhole(community.units) + " units | " + escapeHtml(community.currentMonthLabel) + " active month</small></div></td>" +
+      "<td>" + escapeHtml(community.investor) + "</td>" +
+      "<td><span class=\"trust-score\"><strong>" + investorTrustScore + "</strong><span class=\"metric-subdetail\">Investor Trust Score</span></span></td>" +
+      "<td>" + formatPct(community.occupancyPct) + "</td>" +
+      "<td>" + (community.occupancyGap !== null ? "<span class=\"delta " + occDeltaClass + "\">" + formatSignedPct(community.occupancyGap) + "</span>" : "<span class=\"delta flat\">N/A</span>") + "</td>" +
+      "<td>" + formatPct(community.leasedPct) + "</td>" +
+      "<td>" + (community.leasedGap !== null ? "<span class=\"delta " + leasedDeltaClass + "\">" + formatSignedPct(community.leasedGap) + "</span>" : "<span class=\"delta flat\">N/A</span>") + "</td>" +
+      "<td>" + formatWhole(community.moveOuts30) + " outs / " + formatWhole(community.moveIns30) + " ins<br><span class=\"metric-subdetail\">Projected: " + formatPct(community.projectedOcc30Pct) + "</span></td>" +
+      "<td>" + (community.revenueDelta !== null ? "<span class=\"delta " + revenueClass + "\">" + formatSignedCurrency(community.revenueDelta, 0) + "</span>" : "<span class=\"delta flat\">N/A</span>") + "</td>" +
+      "<td>" + (tali && tali.combinedScore > 0 ? tali.combinedScore.toFixed(1) + "<br><span class=\"metric-subdetail\">Alerts " + formatWhole(tali.alertsOpen) + " | Resolved " + formatWhole(tali.resolutions) + "</span>" : "<span class=\"delta flat\">Pending</span>") + "</td>" +
+      "<td>" + formatWhole(community.guestCards) + " / " + formatWhole(community.tours) + " / " + formatWhole(community.applications) + " / " + formatWhole(community.leasesSigned) + "<br><span class=\"metric-subdetail\">Leads / tours / apps / leases</span></td>" +
+      "<td><span class=\"status-chip " + statusClass + "\">" + getStatusCopy(community.status === "at-risk" ? "intervention" : community.status) + "</span></td>" +
+      "<td><div class=\"reason-list\">" + community.reasons.slice(0, 3).map(reason => "<span>" + escapeHtml(reason) + "</span>").join("") + "</div></td>" +
+    "</tr>";
+  }).join("");
+
+  target.innerHTML = "<div class=\"table-wrap\"><table>" +
+    "<thead><tr>" +
+      "<th>Community</th>" +
+      "<th>Investor</th>" +
+      "<th>Investor Trust Score</th>" +
+      "<th>Occ</th>" +
+      "<th>Occ vs Budget</th>" +
+      "<th>Leased</th>" +
+      "<th>Leased vs Target</th>" +
+      "<th>30-Day Exposure</th>" +
+      "<th>NER vs Budget</th>" +
+      "<th>TALi Experience</th>" +
+      "<th>Traffic</th>" +
+      "<th>Status</th>" +
+      "<th>Why It Matters</th>" +
+    "</tr></thead>" +
+    "<tbody>" + rows + "</tbody>" +
+  "</table></div>";
+}
+
+function getSelectedContacts() {
+  const to = [];
+  const cc = [];
+  reportState.contacts.forEach(contact => {
+    if (!contact.selected || !contact.email.trim()) return;
+    if (contact.delivery === "cc") cc.push(contact.email.trim());
+    else to.push(contact.email.trim());
+  });
+  return { to, cc };
+}
+
+function renderContacts() {
+  const target = document.getElementById("contact-list");
+  if (reportState.contacts.length === 0) {
+    target.innerHTML = "<div class=\"empty-state\"><h3>Add your leadership contacts</h3><p class=\"hint\">Save the people you want to email from this report. You can mark them as To or Cc and keep the list here for future weeks.</p></div>";
+    return;
+  }
+
+  target.innerHTML = reportState.contacts.map(contact => {
+    return "<div class=\"contact-row\">" +
+      "<input type=\"text\" value=\"" + escapeHtml(contact.name) + "\" placeholder=\"Name\" onchange=\"updateContact('" + contact.id + "', 'name', this.value)\">" +
+      "<input type=\"text\" value=\"" + escapeHtml(contact.role) + "\" placeholder=\"Role\" onchange=\"updateContact('" + contact.id + "', 'role', this.value)\">" +
+      "<input type=\"email\" value=\"" + escapeHtml(contact.email) + "\" placeholder=\"email@company.com\" onchange=\"updateContact('" + contact.id + "', 'email', this.value)\">" +
+      "<select onchange=\"updateContact('" + contact.id + "', 'delivery', this.value)\">" +
+        "<option value=\"to\"" + (contact.delivery === "to" ? " selected" : "") + ">To</option>" +
+        "<option value=\"cc\"" + (contact.delivery === "cc" ? " selected" : "") + ">Cc</option>" +
+      "</select>" +
+      "<label class=\"contact-toggle\"><input type=\"checkbox\"" + (contact.selected ? " checked" : "") + " onchange=\"updateContact('" + contact.id + "', 'selected', this.checked)\">Send</label>" +
+      "<button class=\"btn btn-muted\" type=\"button\" onclick=\"removeContact('" + contact.id + "')\">Remove</button>" +
+    "</div>";
+  }).join("");
+}
+
+function renderEmptyState(title, detail) {
+  return "<div class=\"empty-state\"><h3>" + escapeHtml(title) + "</h3><p class=\"hint\">" + escapeHtml(detail) + "</p></div>";
+}
+
+function renderAll() {
+  syncInputValues();
+  refreshPortfolioHealth();
+  renderHeroSummary();
+  renderSourceStatus();
+  renderStatusChip();
+  renderMetrics();
+  renderExecutiveStory();
+  renderInsightLists();
+  renderLeaders();
+  renderInvestorBreakdown();
+  renderRisks();
+  renderTraffic();
+  renderReputationSection();
+  renderVisualUploadStatus();
+  renderVisualGallery();
+  renderCommunityTable();
+  renderContacts();
+  renderEmailPackagePreview();
+}
+
+function addContact() {
+  reportState.contacts.push(normalizeContact({}));
+  persistState();
+  renderAll();
+}
+
+function updateContact(contactId, field, value) {
+  reportState.contacts = reportState.contacts.map(contact =>
+    contact.id === contactId ? { ...contact, [field]: value } : contact
+  );
+  persistState();
+  renderAll();
+}
+
+function removeContact(contactId) {
+  reportState.contacts = reportState.contacts.filter(contact => contact.id !== contactId);
+  persistState();
+  renderAll();
+}
+
+function bindStaticInputs() {
+  document.getElementById("portfolio-label").addEventListener("change", event => setStateField("portfolioLabel", event.target.value));
+  document.getElementById("prepared-by").addEventListener("change", event => setStateField("preparedBy", event.target.value));
+  document.getElementById("month-ending").addEventListener("change", event => setStateField("monthEnding", event.target.value));
+  document.getElementById("email-subject").addEventListener("change", event => setStateField("emailSubject", event.target.value));
+  document.getElementById("executive-headline").addEventListener("change", event => setStateField("executiveHeadline", event.target.value));
+  document.getElementById("wins-note").addEventListener("change", event => setStateField("winsNote", event.target.value));
+  document.getElementById("operations-wins").addEventListener("change", event => setStateField("operationsWins", event.target.value));
+  document.getElementById("watchlist-note").addEventListener("change", event => setStateField("watchlistNote", event.target.value));
+  document.getElementById("upcoming-initiatives").addEventListener("change", event => setStateField("upcomingInitiatives", event.target.value));
+  document.getElementById("ask-note").addEventListener("change", event => setStateField("askNote", event.target.value));
+  document.getElementById("visual-upload").addEventListener("change", handleVisualUpload);
+  document.getElementById("snapshot-input").addEventListener("change", importSnapshotFile);
+  document.getElementById("jturner-current-input").addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (file) importReputationReport("current", file);
+    event.target.value = "";
+  });
+  document.getElementById("jturner-previous-input").addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (file) importReputationReport("previous", file);
+    event.target.value = "";
+  });
+}
+
+function init() {
+  bindStaticInputs();
+  renderAll();
+  loadDirectFromLeasing();
+}
+
+init();
+</script>
+</body>
+</html>

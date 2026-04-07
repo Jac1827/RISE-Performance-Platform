@@ -1,0 +1,294 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980">
+  <rect width="1400" height="980" fill="#ffffff" />
+  <text x="64" y="64" font-size="30" font-weight="700" fill="#183247">First-Year Lease Velocity Comparison</text>
+  <text x="64" y="92" font-size="14" fill="#617180">Reconstructed from the screenshot labels provided. Fair comparison uses the first 44 observed weeks for both communities.</text>
+  <text x="64" y="116" font-size="13" fill="#617180">Start points used: RISE Viera 7/22/2024 and Parasol Melbourne 4/24/2023.</text>
+
+  
+    <g>
+      <rect x="64" y="144" width="300" height="92" rx="12" fill="#f7f9fb" stroke="#d9e0e7" />
+      <text x="80" y="168" font-size="12" fill="#617180">Leases Across First 44 Observed Weeks</text>
+      <text x="80" y="196" font-size="24" font-weight="700" fill="#4f5bd5">81</text>
+      <text x="80" y="214" font-size="11" fill="#617180">RISE Viera</text>
+      <text x="348" y="196" text-anchor="end" font-size="24" font-weight="700" fill="#5ecfa4">55</text>
+      <text x="348" y="214" text-anchor="end" font-size="11" fill="#617180">Parasol</text>
+    </g>
+    
+  
+    <g>
+      <rect x="384" y="144" width="300" height="92" rx="12" fill="#f7f9fb" stroke="#d9e0e7" />
+      <text x="400" y="168" font-size="12" fill="#617180">Peak Weekly Leases</text>
+      <text x="400" y="196" font-size="24" font-weight="700" fill="#4f5bd5">9</text>
+      <text x="400" y="214" font-size="11" fill="#617180">RISE Viera</text>
+      <text x="668" y="196" text-anchor="end" font-size="24" font-weight="700" fill="#5ecfa4">5</text>
+      <text x="668" y="214" text-anchor="end" font-size="11" fill="#617180">Parasol</text>
+    </g>
+    
+  
+    <g>
+      <rect x="704" y="144" width="300" height="92" rx="12" fill="#f7f9fb" stroke="#d9e0e7" />
+      <text x="720" y="168" font-size="12" fill="#617180">Weeks With 3+ Leases</text>
+      <text x="720" y="196" font-size="24" font-weight="700" fill="#4f5bd5">13</text>
+      <text x="720" y="214" font-size="11" fill="#617180">RISE Viera</text>
+      <text x="988" y="196" text-anchor="end" font-size="24" font-weight="700" fill="#5ecfa4">4</text>
+      <text x="988" y="214" text-anchor="end" font-size="11" fill="#617180">Parasol</text>
+    </g>
+    
+  
+    <g>
+      <rect x="1024" y="144" width="300" height="92" rx="12" fill="#f7f9fb" stroke="#d9e0e7" />
+      <text x="1040" y="168" font-size="12" fill="#617180">Weeks With 4+ Leases</text>
+      <text x="1040" y="196" font-size="24" font-weight="700" fill="#4f5bd5">7</text>
+      <text x="1040" y="214" font-size="11" fill="#617180">RISE Viera</text>
+      <text x="1308" y="196" text-anchor="end" font-size="24" font-weight="700" fill="#5ecfa4">2</text>
+      <text x="1308" y="214" text-anchor="end" font-size="11" fill="#617180">Parasol</text>
+    </g>
+    
+
+  <text x="64" y="286" font-size="18" font-weight="700" fill="#183247">Weekly Leases Since Opening</text>
+  <text x="64" y="306" font-size="12" fill="#617180">Weekly bars show the relative intensity of leasing activity in the comparable first-year window.</text>
+  <line x1="84" y1="550.00" x2="1314" y2="550.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="554.00" text-anchor="end" font-size="11" fill="#617180">0</text>
+<line x1="84" y1="506.00" x2="1314" y2="506.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="510.00" text-anchor="end" font-size="11" fill="#617180">2</text>
+<line x1="84" y1="462.00" x2="1314" y2="462.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="466.00" text-anchor="end" font-size="11" fill="#617180">4</text>
+<line x1="84" y1="418.00" x2="1314" y2="418.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="422.00" text-anchor="end" font-size="11" fill="#617180">6</text>
+<line x1="84" y1="374.00" x2="1314" y2="374.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="378.00" text-anchor="end" font-size="11" fill="#617180">8</text>
+<line x1="84" y1="330.00" x2="1314" y2="330.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="334.00" text-anchor="end" font-size="11" fill="#617180">10</text>
+<line x1="84.00" y1="330" x2="84.00" y2="550" stroke="#eef2f6" />
+<text x="84.00" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 1</text>
+<line x1="284.23" y1="330" x2="284.23" y2="550" stroke="#eef2f6" />
+<text x="284.23" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 8</text>
+<line x1="513.07" y1="330" x2="513.07" y2="550" stroke="#eef2f6" />
+<text x="513.07" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 16</text>
+<line x1="741.91" y1="330" x2="741.91" y2="550" stroke="#eef2f6" />
+<text x="741.91" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 24</text>
+<line x1="970.74" y1="330" x2="970.74" y2="550" stroke="#eef2f6" />
+<text x="970.74" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 32</text>
+<line x1="1199.58" y1="330" x2="1199.58" y2="550" stroke="#eef2f6" />
+<text x="1199.58" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 40</text>
+<line x1="1314.00" y1="330" x2="1314.00" y2="550" stroke="#eef2f6" />
+<text x="1314.00" y="572" text-anchor="middle" font-size="11" fill="#617180">Wk 44</text>
+  <rect x="90.00" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="117.73" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="145.45" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="173.18" y="462.00" width="10.54" height="88.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="200.91" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="228.64" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="256.36" y="462.00" width="10.54" height="88.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="284.09" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="311.82" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="339.55" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="367.27" y="418.00" width="10.54" height="132.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="395.00" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="422.73" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="450.45" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="478.18" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="505.91" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="533.64" y="462.00" width="10.54" height="88.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="561.36" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="589.09" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="616.82" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="644.55" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="672.27" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="700.00" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="727.73" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="755.45" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="783.18" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="810.91" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="838.64" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="866.36" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="894.09" y="506.00" width="10.54" height="44.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="921.82" y="352.00" width="10.54" height="198.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="949.55" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="977.27" y="462.00" width="10.54" height="88.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1005.00" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1032.73" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1060.45" y="462.00" width="10.54" height="88.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1088.18" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1115.91" y="484.00" width="10.54" height="66.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1143.64" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1171.36" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1199.09" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1226.82" y="528.00" width="10.54" height="22.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1254.55" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+<rect x="1282.27" y="550.00" width="10.54" height="0.00" rx="2" fill="#4f5bd5" opacity="0.8" />
+  <rect x="101.00" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="128.73" y="484.00" width="10.54" height="66.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="156.45" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="184.18" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="211.91" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="239.64" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="267.36" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="295.09" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="322.82" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="350.55" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="378.27" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="406.00" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="433.73" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="461.45" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="489.18" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="516.91" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="544.64" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="572.36" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="600.09" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="627.82" y="462.00" width="10.54" height="88.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="655.55" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="683.27" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="711.00" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="738.73" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="766.45" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="794.18" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="821.91" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="849.64" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="877.36" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="905.09" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="932.82" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="960.55" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="988.27" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1016.00" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1043.73" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1071.45" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1099.18" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1126.91" y="484.00" width="10.54" height="66.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1154.64" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1182.36" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1210.09" y="506.00" width="10.54" height="44.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1237.82" y="528.00" width="10.54" height="22.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1265.55" y="550.00" width="10.54" height="0.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+<rect x="1293.27" y="440.00" width="10.54" height="110.00" rx="2" fill="#5ecfa4" opacity="0.8" />
+
+  <rect x="970" y="290" width="14" height="14" rx="3" fill="#4f5bd5" />
+  <text x="992" y="302" font-size="12" fill="#617180">RISE Viera</text>
+  <rect x="1088" y="290" width="14" height="14" rx="3" fill="#5ecfa4" />
+  <text x="1110" y="302" font-size="12" fill="#617180">Parasol Melbourne</text>
+
+  <text x="64" y="612" font-size="18" font-weight="700" fill="#183247">Cumulative Leases Since Opening</text>
+  <text x="64" y="632" font-size="12" fill="#617180">This view makes the pace difference easier to see: Viera separates from Parasol early and stays ahead.</text>
+  <line x1="84" y1="876.00" x2="1314" y2="876.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="880.00" text-anchor="end" font-size="11" fill="#617180">0</text>
+<line x1="84" y1="832.00" x2="1314" y2="832.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="836.00" text-anchor="end" font-size="11" fill="#617180">20</text>
+<line x1="84" y1="788.00" x2="1314" y2="788.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="792.00" text-anchor="end" font-size="11" fill="#617180">40</text>
+<line x1="84" y1="744.00" x2="1314" y2="744.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="748.00" text-anchor="end" font-size="11" fill="#617180">60</text>
+<line x1="84" y1="700.00" x2="1314" y2="700.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="704.00" text-anchor="end" font-size="11" fill="#617180">80</text>
+<line x1="84" y1="656.00" x2="1314" y2="656.00" stroke="#d7dee6" stroke-dasharray="4 6" />
+<text x="74" y="660.00" text-anchor="end" font-size="11" fill="#617180">100</text>
+<line x1="84.00" y1="656" x2="84.00" y2="876" stroke="#eef2f6" />
+<text x="84.00" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 1</text>
+<line x1="284.23" y1="656" x2="284.23" y2="876" stroke="#eef2f6" />
+<text x="284.23" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 8</text>
+<line x1="513.07" y1="656" x2="513.07" y2="876" stroke="#eef2f6" />
+<text x="513.07" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 16</text>
+<line x1="741.91" y1="656" x2="741.91" y2="876" stroke="#eef2f6" />
+<text x="741.91" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 24</text>
+<line x1="970.74" y1="656" x2="970.74" y2="876" stroke="#eef2f6" />
+<text x="970.74" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 32</text>
+<line x1="1199.58" y1="656" x2="1199.58" y2="876" stroke="#eef2f6" />
+<text x="1199.58" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 40</text>
+<line x1="1314.00" y1="656" x2="1314.00" y2="876" stroke="#eef2f6" />
+<text x="1314.00" y="898" text-anchor="middle" font-size="11" fill="#617180">Wk 44</text>
+  <path d="M 84.00 873.80 L 112.60 873.80 L 141.21 867.20 L 169.81 858.40 L 198.42 856.20 L 227.02 854.00 L 255.63 845.20 L 284.23 838.60 L 312.84 834.20 L 341.44 832.00 L 370.05 818.80 L 398.65 816.60 L 427.26 814.40 L 455.86 810.00 L 484.47 805.60 L 513.07 801.20 L 541.67 792.40 L 570.28 785.80 L 598.88 783.60 L 627.49 777.00 L 656.09 774.80 L 684.70 774.80 L 713.30 774.80 L 741.91 774.80 L 770.51 774.80 L 799.12 774.80 L 827.72 772.60 L 856.33 770.40 L 884.93 766.00 L 913.53 761.60 L 942.14 741.80 L 970.74 739.60 L 999.35 730.80 L 1027.95 724.20 L 1056.56 722.00 L 1085.16 713.20 L 1113.77 711.00 L 1142.37 704.40 L 1170.98 702.20 L 1199.58 702.20 L 1228.19 700.00 L 1256.79 697.80 L 1285.40 697.80 L 1314.00 697.80" fill="none" stroke="#4f5bd5" stroke-width="4" />
+  <path d="M 84.00 876.00 L 112.60 869.40 L 141.21 865.00 L 169.81 860.60 L 198.42 860.60 L 227.02 856.20 L 255.63 854.00 L 284.23 849.60 L 312.84 847.40 L 341.44 845.20 L 370.05 843.00 L 398.65 840.80 L 427.26 840.80 L 455.86 836.40 L 484.47 836.40 L 513.07 836.40 L 541.67 834.20 L 570.28 834.20 L 598.88 832.00 L 627.49 823.20 L 656.09 821.00 L 684.70 818.80 L 713.30 818.80 L 741.91 816.60 L 770.51 812.20 L 799.12 810.00 L 827.72 810.00 L 856.33 805.60 L 884.93 805.60 L 913.53 805.60 L 942.14 803.40 L 970.74 803.40 L 999.35 801.20 L 1027.95 796.80 L 1056.56 792.40 L 1085.16 790.20 L 1113.77 788.00 L 1142.37 781.40 L 1170.98 777.00 L 1199.58 772.60 L 1228.19 768.20 L 1256.79 766.00 L 1285.40 766.00 L 1314.00 755.00" fill="none" stroke="#5ecfa4" stroke-width="4" />
+  <circle cx="84.00" cy="873.80" r="2.5" fill="#4f5bd5" />
+<circle cx="112.60" cy="873.80" r="2.5" fill="#4f5bd5" />
+<circle cx="141.21" cy="867.20" r="2.5" fill="#4f5bd5" />
+<circle cx="169.81" cy="858.40" r="2.5" fill="#4f5bd5" />
+<circle cx="198.42" cy="856.20" r="2.5" fill="#4f5bd5" />
+<circle cx="227.02" cy="854.00" r="2.5" fill="#4f5bd5" />
+<circle cx="255.63" cy="845.20" r="2.5" fill="#4f5bd5" />
+<circle cx="284.23" cy="838.60" r="2.5" fill="#4f5bd5" />
+<circle cx="312.84" cy="834.20" r="2.5" fill="#4f5bd5" />
+<circle cx="341.44" cy="832.00" r="2.5" fill="#4f5bd5" />
+<circle cx="370.05" cy="818.80" r="2.5" fill="#4f5bd5" />
+<circle cx="398.65" cy="816.60" r="2.5" fill="#4f5bd5" />
+<circle cx="427.26" cy="814.40" r="2.5" fill="#4f5bd5" />
+<circle cx="455.86" cy="810.00" r="2.5" fill="#4f5bd5" />
+<circle cx="484.47" cy="805.60" r="2.5" fill="#4f5bd5" />
+<circle cx="513.07" cy="801.20" r="2.5" fill="#4f5bd5" />
+<circle cx="541.67" cy="792.40" r="2.5" fill="#4f5bd5" />
+<circle cx="570.28" cy="785.80" r="2.5" fill="#4f5bd5" />
+<circle cx="598.88" cy="783.60" r="2.5" fill="#4f5bd5" />
+<circle cx="627.49" cy="777.00" r="2.5" fill="#4f5bd5" />
+<circle cx="656.09" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="684.70" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="713.30" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="741.91" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="770.51" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="799.12" cy="774.80" r="2.5" fill="#4f5bd5" />
+<circle cx="827.72" cy="772.60" r="2.5" fill="#4f5bd5" />
+<circle cx="856.33" cy="770.40" r="2.5" fill="#4f5bd5" />
+<circle cx="884.93" cy="766.00" r="2.5" fill="#4f5bd5" />
+<circle cx="913.53" cy="761.60" r="2.5" fill="#4f5bd5" />
+<circle cx="942.14" cy="741.80" r="2.5" fill="#4f5bd5" />
+<circle cx="970.74" cy="739.60" r="2.5" fill="#4f5bd5" />
+<circle cx="999.35" cy="730.80" r="2.5" fill="#4f5bd5" />
+<circle cx="1027.95" cy="724.20" r="2.5" fill="#4f5bd5" />
+<circle cx="1056.56" cy="722.00" r="2.5" fill="#4f5bd5" />
+<circle cx="1085.16" cy="713.20" r="2.5" fill="#4f5bd5" />
+<circle cx="1113.77" cy="711.00" r="2.5" fill="#4f5bd5" />
+<circle cx="1142.37" cy="704.40" r="2.5" fill="#4f5bd5" />
+<circle cx="1170.98" cy="702.20" r="2.5" fill="#4f5bd5" />
+<circle cx="1199.58" cy="702.20" r="2.5" fill="#4f5bd5" />
+<circle cx="1228.19" cy="700.00" r="2.5" fill="#4f5bd5" />
+<circle cx="1256.79" cy="697.80" r="2.5" fill="#4f5bd5" />
+<circle cx="1285.40" cy="697.80" r="2.5" fill="#4f5bd5" />
+<circle cx="1314.00" cy="697.80" r="2.5" fill="#4f5bd5" />
+  <circle cx="84.00" cy="876.00" r="2.5" fill="#5ecfa4" />
+<circle cx="112.60" cy="869.40" r="2.5" fill="#5ecfa4" />
+<circle cx="141.21" cy="865.00" r="2.5" fill="#5ecfa4" />
+<circle cx="169.81" cy="860.60" r="2.5" fill="#5ecfa4" />
+<circle cx="198.42" cy="860.60" r="2.5" fill="#5ecfa4" />
+<circle cx="227.02" cy="856.20" r="2.5" fill="#5ecfa4" />
+<circle cx="255.63" cy="854.00" r="2.5" fill="#5ecfa4" />
+<circle cx="284.23" cy="849.60" r="2.5" fill="#5ecfa4" />
+<circle cx="312.84" cy="847.40" r="2.5" fill="#5ecfa4" />
+<circle cx="341.44" cy="845.20" r="2.5" fill="#5ecfa4" />
+<circle cx="370.05" cy="843.00" r="2.5" fill="#5ecfa4" />
+<circle cx="398.65" cy="840.80" r="2.5" fill="#5ecfa4" />
+<circle cx="427.26" cy="840.80" r="2.5" fill="#5ecfa4" />
+<circle cx="455.86" cy="836.40" r="2.5" fill="#5ecfa4" />
+<circle cx="484.47" cy="836.40" r="2.5" fill="#5ecfa4" />
+<circle cx="513.07" cy="836.40" r="2.5" fill="#5ecfa4" />
+<circle cx="541.67" cy="834.20" r="2.5" fill="#5ecfa4" />
+<circle cx="570.28" cy="834.20" r="2.5" fill="#5ecfa4" />
+<circle cx="598.88" cy="832.00" r="2.5" fill="#5ecfa4" />
+<circle cx="627.49" cy="823.20" r="2.5" fill="#5ecfa4" />
+<circle cx="656.09" cy="821.00" r="2.5" fill="#5ecfa4" />
+<circle cx="684.70" cy="818.80" r="2.5" fill="#5ecfa4" />
+<circle cx="713.30" cy="818.80" r="2.5" fill="#5ecfa4" />
+<circle cx="741.91" cy="816.60" r="2.5" fill="#5ecfa4" />
+<circle cx="770.51" cy="812.20" r="2.5" fill="#5ecfa4" />
+<circle cx="799.12" cy="810.00" r="2.5" fill="#5ecfa4" />
+<circle cx="827.72" cy="810.00" r="2.5" fill="#5ecfa4" />
+<circle cx="856.33" cy="805.60" r="2.5" fill="#5ecfa4" />
+<circle cx="884.93" cy="805.60" r="2.5" fill="#5ecfa4" />
+<circle cx="913.53" cy="805.60" r="2.5" fill="#5ecfa4" />
+<circle cx="942.14" cy="803.40" r="2.5" fill="#5ecfa4" />
+<circle cx="970.74" cy="803.40" r="2.5" fill="#5ecfa4" />
+<circle cx="999.35" cy="801.20" r="2.5" fill="#5ecfa4" />
+<circle cx="1027.95" cy="796.80" r="2.5" fill="#5ecfa4" />
+<circle cx="1056.56" cy="792.40" r="2.5" fill="#5ecfa4" />
+<circle cx="1085.16" cy="790.20" r="2.5" fill="#5ecfa4" />
+<circle cx="1113.77" cy="788.00" r="2.5" fill="#5ecfa4" />
+<circle cx="1142.37" cy="781.40" r="2.5" fill="#5ecfa4" />
+<circle cx="1170.98" cy="777.00" r="2.5" fill="#5ecfa4" />
+<circle cx="1199.58" cy="772.60" r="2.5" fill="#5ecfa4" />
+<circle cx="1228.19" cy="768.20" r="2.5" fill="#5ecfa4" />
+<circle cx="1256.79" cy="766.00" r="2.5" fill="#5ecfa4" />
+<circle cx="1285.40" cy="766.00" r="2.5" fill="#5ecfa4" />
+<circle cx="1314.00" cy="755.00" r="2.5" fill="#5ecfa4" />
+
+  <text x="1318" y="701.80" font-size="12" fill="#4f5bd5" text-anchor="end">81</text>
+  <text x="1318" y="747.00" font-size="12" fill="#5ecfa4" text-anchor="end">55</text>
+
+  <rect x="64" y="912" width="1270" height="36" rx="10" fill="#f7f9fb" stroke="#d9e0e7" />
+  <text x="82" y="935" font-size="12" fill="#617180">Use this as a directional call visual, not as a system-export exhibit. If you can pull the raw first-year lease export for both communities, I can replace the reconstruction with an exact chart.</text>
+</svg>

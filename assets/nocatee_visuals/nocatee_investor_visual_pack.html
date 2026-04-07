@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nocatee Investor Visual Pack</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --text: #163047;
+      --muted: #5f7080;
+      --border: #dfe6ee;
+      --blue: #2f6bff;
+      --teal: #22b8b3;
+      --green: #2fa26b;
+      --orange: #f08a24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #ffffff 0%, var(--bg) 55%, #ecf1f8 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #183047 0%, #274967 58%, #2f6bff 100%);
+      color: #fff;
+      border-radius: 28px;
+      padding: 28px 30px;
+      box-shadow: 0 24px 48px rgba(20, 44, 68, 0.14);
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.05;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 900px;
+      color: rgba(255, 255, 255, 0.84);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin: 20px 0 24px;
+    }
+    .pill {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px 18px;
+      box-shadow: 0 16px 30px rgba(28, 47, 68, 0.06);
+    }
+    .pill .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .pill .value {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .pill .sub {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 18px;
+      box-shadow: 0 16px 30px rgba(28, 47, 68, 0.06);
+    }
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+    }
+    .panel p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .panel img {
+      width: 100%;
+      display: block;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+    .foot {
+      margin-top: 22px;
+      padding: 18px 20px;
+      border-radius: 22px;
+      background: #fff9ef;
+      border: 1px solid #f0d8b2;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    @media (max-width: 980px) {
+      .summary { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .summary { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>RISE at Nocatee Investor Visual Pack</h1>
+      <p>
+        Four visuals built from the reconciled March 2026 DLR, budget path, funnel counts,
+        pricing response notes, and active-adult peer data. These are designed to support an
+        investor-facing narrative, not to replace the source reports.
+      </p>
+    </section>
+
+    <section class="summary">
+      <div class="pill">
+        <div class="label">Current Occupancy</div>
+        <div class="value">60.11%</div>
+        <div class="sub">Ahead of March budget as of 03/24/2026</div>
+      </div>
+      <div class="pill">
+        <div class="label">Current Leased</div>
+        <div class="value">65.73%</div>
+        <div class="sub">Shows a 10-unit leased-not-occupied cushion</div>
+      </div>
+      <div class="pill">
+        <div class="label">Lead Volume</div>
+        <div class="value">174</div>
+        <div class="sub">19.2% above the 146-lead benchmark</div>
+      </div>
+      <div class="pill">
+        <div class="label">Adjusted Set Response</div>
+        <div class="value">6 leases</div>
+        <div class="sub">5 Cypress and 1 Osprey since 02/20/2026</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>1. Occupancy vs budget</h2>
+        <p>The fastest way to rebut the “already behind” narrative is to anchor on month-end budget definitions and the March 24 DLR projection.</p>
+        <img src="nocatee_occupancy_budget_vs_projection.svg" alt="Occupancy vs budget chart"/>
+      </article>
+
+      <article class="panel">
+        <h2>2. Funnel strength</h2>
+        <p>This visual makes the demand-generation case quickly: 2026 is stronger than 2025 on the top and middle of the funnel.</p>
+        <img src="nocatee_funnel_yoy.svg" alt="Leasing funnel year over year"/>
+      </article>
+
+      <article class="panel">
+        <h2>3. Pricing response by floor plan</h2>
+        <p>The goal here is not to prove every pricing move worked. It is to show pricing has been active and the next actions are already identified.</p>
+        <img src="nocatee_pricing_response.svg" alt="Pricing response by floor plan"/>
+      </article>
+
+      <article class="panel">
+        <h2>4. Active-adult peer position</h2>
+        <p>This is the market check: Nocatee is above the active-adult average on leased and pre-leased percentage and below average on exposure.</p>
+        <img src="nocatee_active_adult_peer_positioning.svg" alt="Active adult peer positioning"/>
+      </article>
+    </section>
+
+    <section class="foot">
+      If you want a tighter board-room version next, the best upgrade would be a single-slide summary that pulls one chart, three callout bullets, and a small appendix table of the post-03/24 move-ins by floor plan and date.
+    </section>
+  </div>
+</body>
+</html>

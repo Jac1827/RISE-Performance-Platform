@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#f6f7fb"/>
+  <text x="72.00" y="66.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">Pricing Response by Targeted Floor Plan</text>
+  <text x="72.00" y="96.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#5f7080" text-anchor="start">The visual case here is not that every price move worked. It is that pricing was active, and the response pattern is now clear by plan.</text>
+
+  
+    <g>
+      <rect x="72" y="126" width="360" height="108" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="90" y="144" width="10" height="72" rx="5" fill="#2f6bff" opacity="0.9"/>
+      <text x="116.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Adjusted Set Leases Since 02/20</text>
+      <text x="116.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">6</text>
+      <text x="116.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">5 Cypress + 1 Osprey</text>
+    </g>
+    
+  
+    <g>
+      <rect x="456" y="126" width="420" height="108" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="474" y="144" width="10" height="72" rx="5" fill="#2fa26b" opacity="0.9"/>
+      <text x="500.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">What this disproves</text>
+      <text x="500.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">No-response narrative</text>
+      <text x="500.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">The changes produced measurable leasing response, even if uneven by plan</text>
+    </g>
+    
+  
+    <g>
+      <rect x="900" y="126" width="428" height="108" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="918" y="144" width="10" height="72" rx="5" fill="#df5f59" opacity="0.9"/>
+      <text x="944.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">What still needs action</text>
+      <text x="944.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">Pelican and Mayfair</text>
+      <text x="944.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Those are the clearest next-round pricing and merchandising pain points</text>
+    </g>
+    
+
+  
+        <g>
+          <rect x="72" y="260" width="282" height="520" rx="24" fill="#ffffff" stroke="#dfe6ee"/>
+          <rect x="96" y="284" width="56" height="10" rx="5" fill="#22b8b3" opacity="0.9"/>
+          <text x="96.00" y="328.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">Cypress</text>
+          <text x="96.00" y="358.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Leases since 02/20/2026 pricing change</text>
+          <text x="96.00" y="406.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="700" fill="#0f2235" text-anchor="start">5</text>
+          <rect x="96" y="436" width="220" height="18" rx="9" fill="#edf2f7"/>
+          <rect x="96" y="436" width="220.0" height="18" rx="9" fill="#22b8b3"/>
+          <text x="96.00" y="496.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Current DLR discount to budgeted in-place rent</text>
+          <text x="96.00" y="538.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#22b8b3" text-anchor="start">-5.8%</text>
+          <text x="96.00" y="594.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="600" fill="#163047" text-anchor="start">DLR showed the strongest lease response in this set</text>
+          <rect x="96" y="632" width="234" height="116" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+          <text x="114.00" y="670.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#5f7080" text-anchor="start">Operating read</text>
+          <text x="114.00" y="706.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#163047" text-anchor="start">Strongest response after 02/20 pricing reset</text>
+        </g>
+        
+        <g>
+          <rect x="386" y="260" width="282" height="520" rx="24" fill="#ffffff" stroke="#dfe6ee"/>
+          <rect x="410" y="284" width="56" height="10" rx="5" fill="#df5f59" opacity="0.9"/>
+          <text x="410.00" y="328.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">Pelican</text>
+          <text x="410.00" y="358.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Leases since 02/20/2026 pricing change</text>
+          <text x="410.00" y="406.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="700" fill="#0f2235" text-anchor="start">0</text>
+          <rect x="410" y="436" width="220" height="18" rx="9" fill="#edf2f7"/>
+          <rect x="410" y="436" width="0.0" height="18" rx="9" fill="#df5f59"/>
+          <text x="410.00" y="496.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Current DLR discount to budgeted in-place rent</text>
+          <text x="410.00" y="538.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#df5f59" text-anchor="start">-7.5%</text>
+          <text x="410.00" y="594.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="600" fill="#163047" text-anchor="start">8 remaining</text>
+          <rect x="410" y="632" width="234" height="116" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+          <text x="428.00" y="670.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#5f7080" text-anchor="start">Operating read</text>
+          <text x="428.00" y="706.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#163047" text-anchor="start">8 remaining; review again as lost leader</text>
+        </g>
+        
+        <g>
+          <rect x="700" y="260" width="282" height="520" rx="24" fill="#ffffff" stroke="#dfe6ee"/>
+          <rect x="724" y="284" width="56" height="10" rx="5" fill="#f08a24" opacity="0.9"/>
+          <text x="724.00" y="328.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">Osprey</text>
+          <text x="724.00" y="358.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Leases since 02/20/2026 pricing change</text>
+          <text x="724.00" y="406.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="700" fill="#0f2235" text-anchor="start">1</text>
+          <rect x="724" y="436" width="220" height="18" rx="9" fill="#edf2f7"/>
+          <rect x="724" y="436" width="44.0" height="18" rx="9" fill="#f08a24"/>
+          <text x="724.00" y="496.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Current DLR discount to budgeted in-place rent</text>
+          <text x="724.00" y="538.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#f08a24" text-anchor="start">-14.5%</text>
+          <text x="724.00" y="594.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="600" fill="#163047" text-anchor="start">5 remaining</text>
+          <rect x="724" y="632" width="234" height="116" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+          <text x="742.00" y="670.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#5f7080" text-anchor="start">Operating read</text>
+          <text x="742.00" y="706.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#163047" text-anchor="start">5 remaining; one response, but needs another review</text>
+        </g>
+        
+        <g>
+          <rect x="1014" y="260" width="282" height="520" rx="24" fill="#ffffff" stroke="#dfe6ee"/>
+          <rect x="1038" y="284" width="56" height="10" rx="5" fill="#c58a14" opacity="0.9"/>
+          <text x="1038.00" y="328.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">Mayfair</text>
+          <text x="1038.00" y="358.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Leases since 02/20/2026 pricing change</text>
+          <text x="1038.00" y="406.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="700" fill="#0f2235" text-anchor="start">0</text>
+          <rect x="1038" y="436" width="220" height="18" rx="9" fill="#edf2f7"/>
+          <rect x="1038" y="436" width="0.0" height="18" rx="9" fill="#c58a14"/>
+          <text x="1038.00" y="496.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">Current DLR discount to budgeted in-place rent</text>
+          <text x="1038.00" y="538.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#c58a14" text-anchor="start">-16.9%</text>
+          <text x="1038.00" y="594.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="600" fill="#163047" text-anchor="start">7 remaining</text>
+          <rect x="1038" y="632" width="234" height="116" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+          <text x="1056.00" y="670.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#5f7080" text-anchor="start">Operating read</text>
+          <text x="1056.00" y="706.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#163047" text-anchor="start">7 remaining; guest suite merchandising goes live 04/06</text>
+        </g>
+        
+</svg>

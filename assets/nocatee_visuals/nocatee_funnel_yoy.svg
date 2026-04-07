@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860">
+  <rect width="1400" height="860" fill="#f6f7fb"/>
+  <text x="72.00" y="66.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">Nocatee Leasing Funnel</text>
+  <text x="72.00" y="96.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="400" fill="#5f7080" text-anchor="start">Q1 2025 compared with year-to-date 2026 through late March. This is the cleanest visual for the 'lead volume and activity' rebuttal.</text>
+
+  
+    <g>
+      <rect x="72" y="126" width="300" height="116" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="90" y="144" width="10" height="80" rx="5" fill="#2f6bff" opacity="0.9"/>
+      <text x="116.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Lead Growth</text>
+      <text x="116.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">+8.8%</text>
+      <text x="116.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">174 YTD 2026 vs 160 in Q1 2025</text>
+    </g>
+    
+  
+    <g>
+      <rect x="396" y="126" width="300" height="116" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="414" y="144" width="10" height="80" rx="5" fill="#22b8b3" opacity="0.9"/>
+      <text x="440.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Tour Growth</text>
+      <text x="440.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">+21.4%</text>
+      <text x="440.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">85 YTD 2026 vs 70 in Q1 2025</text>
+    </g>
+    
+  
+    <g>
+      <rect x="720" y="126" width="300" height="116" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="738" y="144" width="10" height="80" rx="5" fill="#2fa26b" opacity="0.9"/>
+      <text x="764.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Application Growth</text>
+      <text x="764.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">+41.7%</text>
+      <text x="764.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">17 YTD 2026 vs 12 in Q1 2025</text>
+    </g>
+    
+  
+    <g>
+      <rect x="1044" y="126" width="284" height="116" rx="18" fill="#ffffff" stroke="#dfe6ee"/>
+      <rect x="1062" y="144" width="10" height="80" rx="5" fill="#f08a24" opacity="0.9"/>
+      <text x="1088.00" y="160.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Lead Target</text>
+      <text x="1088.00" y="198.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#0f2235" text-anchor="start">+19.2%</text>
+      <text x="1088.00" y="222.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">174 leads vs the 146 benchmark</text>
+    </g>
+    
+
+  <rect x="72" y="260" width="1256" height="486" rx="24" fill="#ffffff" stroke="#dfe6ee"/>
+  <text x="96.00" y="302.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="19" font-weight="700" fill="#0f2235" text-anchor="start">Top-of-funnel and mid-funnel volume</text>
+  <text x="96.00" y="328.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="400" fill="#5f7080" text-anchor="start">The volume story is better in 2026, which helps push back on the idea that demand generation itself is missing.</text>
+
+  <line x1="130" y1="700.00" x2="1250" y2="700.00" stroke="#dbe3eb" stroke-dasharray="4 8"/><text x="114.00" y="705.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="end">0</text><line x1="130" y1="611.58" x2="1250" y2="611.58" stroke="#dbe3eb" stroke-dasharray="4 8"/><text x="114.00" y="616.58" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="end">40</text><line x1="130" y1="523.16" x2="1250" y2="523.16" stroke="#dbe3eb" stroke-dasharray="4 8"/><text x="114.00" y="528.16" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="end">80</text><line x1="130" y1="434.74" x2="1250" y2="434.74" stroke="#dbe3eb" stroke-dasharray="4 8"/><text x="114.00" y="439.74" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="end">120</text><line x1="130" y1="346.32" x2="1250" y2="346.32" stroke="#dbe3eb" stroke-dasharray="4 8"/><text x="114.00" y="351.32" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="end">160</text>
+  <rect x="210.0" y="346.32" width="130" height="353.68" rx="18" fill="#9aa9b8" opacity="0.95"/><rect x="358.0" y="315.37" width="130" height="384.63" rx="18" fill="#2f6bff" opacity="0.95"/><rect x="583.3333333333333" y="545.26" width="130" height="154.74" rx="18" fill="#9aa9b8" opacity="0.95"/><rect x="731.3333333333333" y="512.11" width="130" height="187.89" rx="18" fill="#2f6bff" opacity="0.95"/><rect x="956.6666666666666" y="673.47" width="130" height="26.53" rx="18" fill="#9aa9b8" opacity="0.95"/><rect x="1104.6666666666665" y="662.42" width="130" height="37.58" rx="18" fill="#2f6bff" opacity="0.95"/>
+  <text x="275.00" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">Q1 2025</text><text x="423.00" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">YTD 2026</text><text x="349.00" y="756.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f2235" text-anchor="middle">Leads</text><text x="275.00" y="334.32" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#9aa9b8" text-anchor="middle">160</text><text x="423.00" y="303.37" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#2f6bff" text-anchor="middle">174</text><text x="648.33" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">Q1 2025</text><text x="796.33" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">YTD 2026</text><text x="722.33" y="756.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f2235" text-anchor="middle">Tours</text><text x="648.33" y="533.26" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#9aa9b8" text-anchor="middle">70</text><text x="796.33" y="500.11" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#2f6bff" text-anchor="middle">85</text><text x="1021.67" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">Q1 2025</text><text x="1169.67" y="726.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="middle">YTD 2026</text><text x="1095.67" y="756.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f2235" text-anchor="middle">Applications</text><text x="1021.67" y="661.47" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#9aa9b8" text-anchor="middle">12</text><text x="1169.67" y="650.42" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#2f6bff" text-anchor="middle">17</text>
+
+  <rect x="98" y="610" width="220" height="92" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+  <text x="122.00" y="642.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Lead to tour conversion</text>
+  <text x="122.00" y="680.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">43.8% -> 48.9%</text>
+  <text x="122.00" y="704.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">43.8% in 2025 vs 48.9% in 2026</text>
+
+  <rect x="348" y="610" width="220" height="92" rx="18" fill="#f8fbff" stroke="#dfe6ee"/>
+  <text x="372.00" y="642.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#5f7080" text-anchor="start">Tour to app conversion</text>
+  <text x="372.00" y="680.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f2235" text-anchor="start">17.1% -> 20.0%</text>
+  <text x="372.00" y="704.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="400" fill="#5f7080" text-anchor="start">17.1% in 2025 vs 20.0% in 2026</text>
+
+  <rect x="598" y="610" width="706" height="92" rx="18" fill="#f2fbf8" stroke="#cae8da"/>
+  <text x="622.00" y="642.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#2fa26b" text-anchor="start">Suggested talking line</text>
+  <text x="622.00" y="676.00" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="400" fill="#163047" text-anchor="start">Traffic is not the missing piece at Nocatee. Through late March 2026, the property was ahead of Q1 lead target, ahead of Q1 2025 on leads and tours, and materially ahead on applications.</text>
+</svg>
