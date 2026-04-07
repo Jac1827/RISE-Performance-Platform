@@ -160,6 +160,9 @@
     financialImport: {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
+      periodMode: "csv",
+      periodMonth: String(new Date().getMonth() + 1).padStart(2, "0"),
+      periodYear: String(new Date().getFullYear()),
     },
     snapshotScope: {
       mode: "all",
@@ -187,6 +190,9 @@
     openSelectedOps: document.getElementById("open-selected-ops"),
     financialImportScope: document.getElementById("financial-import-scope"),
     financialImportMode: document.getElementById("financial-import-mode"),
+    financialPeriodMode: document.getElementById("financial-period-mode"),
+    financialPeriodMonth: document.getElementById("financial-period-month"),
+    financialPeriodYear: document.getElementById("financial-period-year"),
     financialImportSummary: document.getElementById("financial-import-summary"),
     financialImportCoverage: document.getElementById("financial-import-coverage"),
     financialImportWorkspaceChip: document.getElementById("financial-import-workspace-chip"),
@@ -516,6 +522,18 @@
       return "replace all loaded financial history";
     }
     return "merge into the loaded financial history";
+  }
+
+  function getFinancialPeriodOverride(importState = state.financialImport) {
+    if ((importState?.periodMode || "csv") !== "override") {
+      return null;
+    }
+    const month = String(importState?.periodMonth || "").padStart(2, "0");
+    const year = String(importState?.periodYear || "").trim();
+    if (!/^\d{4}$/.test(year) || !/^(0[1-9]|1[0-2])$/.test(month)) {
+      return null;
+    }
+    return `${year}-${month}`;
   }
 
   function getSnapshotScopeLabel(modeValue, selectedCount = 0) {
@@ -1160,6 +1178,8 @@
       type === "financial" && options.scopeOverride && options.scopeOverride !== AUTO_IMPORT_SCOPE
         ? matchCommunityName(options.scopeOverride)
         : null;
+    const periodOverride =
+      type === "financial" && options.periodOverride ? parsePeriod(options.periodOverride) : null;
     const spec = {
       ...FILE_SPECS[type],
       required: { ...(FILE_SPECS[type].required || {}) },
@@ -1169,8 +1189,17 @@
       // If the user didn't choose a scope override, the file must supply an entity name.
       spec.required.property = FILE_SPECS.financial.recommended.property;
     }
+    if (periodOverride) {
+      delete spec.required.period;
+    }
     const rawRows = parseCsv(text);
-    return parseDatasetFromRows(type, rawRows, fileName, { ...options, sourceText: text, _specOverride: spec, _scopeOverride: scopeOverride });
+    return parseDatasetFromRows(type, rawRows, fileName, {
+      ...options,
+      sourceText: text,
+      _specOverride: spec,
+      _scopeOverride: scopeOverride,
+      periodOverride,
+    });
   }
 
   function parseDatasetFromRows(type, rawRows, fileName, options = {}) {
@@ -1180,6 +1209,8 @@
         : type === "financial" && options.scopeOverride && options.scopeOverride !== AUTO_IMPORT_SCOPE
           ? matchCommunityName(options.scopeOverride)
           : null;
+    const periodOverride =
+      type === "financial" && options.periodOverride ? parsePeriod(options.periodOverride) : null;
     const spec = options._specOverride
       ? options._specOverride
       : {
@@ -1190,9 +1221,12 @@
     if (type === "financial" && !scopeOverride && !options._specOverride) {
       spec.required.property = FILE_SPECS.financial.recommended.property;
     }
+    if (type === "financial" && periodOverride && spec.required?.period) {
+      delete spec.required.period;
+    }
+
     const headerRowIndex = (() => {
       if (!rawRows.length) return -1;
-      // Some exports include preamble rows (title/company/period) before headers.
       for (let i = 0; i < rawRows.length; i += 1) {
         const candidate = rawRows[i];
         if (!candidate || candidate.length < 2) continue;
@@ -1235,6 +1269,7 @@
           const property = matchCommunityName(scopeOverride || getField(row, fieldInfo.detected, "property"));
           const rawPeriod = getField(row, fieldInfo.detected, "period");
           const period =
+            periodOverride ||
             parsePeriod(rawPeriod) ||
             parsePeriod(options.period) ||
             state.selectedPeriod ||
@@ -1469,6 +1504,9 @@
     state.financialImport = {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
+      periodMode: "csv",
+      periodMonth: String(new Date().getMonth() + 1).padStart(2, "0"),
+      periodYear: String(new Date().getFullYear()),
     };
     state.snapshotScope = {
       mode: "all",
@@ -1527,6 +1565,10 @@
       state.financialImport = {
         scope: parsed.financialImport?.scope || AUTO_IMPORT_SCOPE,
         mode: parsed.financialImport?.mode || "merge",
+        periodMode: parsed.financialImport?.periodMode || "csv",
+        periodMonth:
+          parsed.financialImport?.periodMonth || String(new Date().getMonth() + 1).padStart(2, "0"),
+        periodYear: parsed.financialImport?.periodYear || String(new Date().getFullYear()),
       };
       state.snapshotScope = {
         mode: parsed.snapshotScope?.mode || "all",
@@ -2320,9 +2362,19 @@
     if (dom.financialImportMode && dom.financialImportMode.value !== (state.financialImport.mode || "merge")) {
       dom.financialImportMode.value = state.financialImport.mode || "merge";
     }
+    if (dom.financialPeriodMode && dom.financialPeriodMode.value !== (state.financialImport.periodMode || "csv")) {
+      dom.financialPeriodMode.value = state.financialImport.periodMode || "csv";
+    }
+    if (dom.financialPeriodMonth && dom.financialPeriodMonth.value !== (state.financialImport.periodMonth || "01")) {
+      dom.financialPeriodMonth.value = state.financialImport.periodMonth || "01";
+    }
+    if (dom.financialPeriodYear && dom.financialPeriodYear.value !== String(state.financialImport.periodYear || "")) {
+      dom.financialPeriodYear.value = String(state.financialImport.periodYear || "");
+    }
 
     const scopeValue = dom.financialImportScope?.value || state.financialImport.scope || AUTO_IMPORT_SCOPE;
     const modeValue = dom.financialImportMode?.value || state.financialImport.mode || "merge";
+    const periodOverride = getFinancialPeriodOverride(state.financialImport);
     const coverage = getDatasetCoverage(state.datasets.financial);
     const scopeLabel = getFinancialImportScopeLabel(scopeValue);
     const modeLabel = getFinancialImportModeLabel(modeValue);
@@ -2340,12 +2392,20 @@
       dom.financialImportSummary.innerHTML = coverage.recordCount
         ? `Next financial upload will <strong>${escapeHtml(modeLabel)}</strong> and map rows to <strong>${escapeHtml(
             scopeLabel,
-          )}</strong>. Current ledger covers <strong>${formatNumber(coverage.entityCount)}</strong> entities from <span class="mono">${escapeHtml(
+          )}</strong>${
+            periodOverride
+              ? ` with the upload period forced to <span class="mono">${escapeHtml(periodOverride)}</span>`
+              : " using periods from the CSV"
+          }. Current ledger covers <strong>${formatNumber(coverage.entityCount)}</strong> entities from <span class="mono">${escapeHtml(
             coverage.periodStart || "--",
           )}</span> through <span class="mono">${escapeHtml(coverage.periodEnd || "--")}</span>.`
         : `Next financial upload will <strong>${escapeHtml(modeLabel)}</strong> and map rows to <strong>${escapeHtml(
             scopeLabel,
-          )}</strong>. Import financial history to unlock community ranking plus MoM and YoY pacing.`;
+          )}</strong>${
+            periodOverride
+              ? ` with the upload period forced to <span class="mono">${escapeHtml(periodOverride)}</span>`
+              : " using periods from the CSV"
+          }. Import financial history to unlock community ranking plus MoM and YoY pacing.`;
     }
 
     if (dom.financialImportCoverage) {
@@ -3673,6 +3733,18 @@
     const scopeOverride = dom.financialImportScope?.value || state.financialImport.scope || AUTO_IMPORT_SCOPE;
     const replaceMode = dom.financialImportMode?.value || state.financialImport.mode || "merge";
     const manualPeriodOverride = dom.manualPeriodInput?.value || state.manualPeriod;
+    const periodOverride =
+      getFinancialPeriodOverride({
+        ...state.financialImport,
+        periodMode: dom.financialPeriodMode?.value || state.financialImport.periodMode || "csv",
+        periodMonth: dom.financialPeriodMonth?.value || state.financialImport.periodMonth,
+        periodYear: dom.financialPeriodYear?.value || state.financialImport.periodYear,
+      }) || null;
+
+    // Persist the most recent backfill selection so the next upload behaves consistently.
+    state.financialImport.periodMode = dom.financialPeriodMode?.value || state.financialImport.periodMode || "csv";
+    state.financialImport.periodMonth = dom.financialPeriodMonth?.value || state.financialImport.periodMonth;
+    state.financialImport.periodYear = Number(dom.financialPeriodYear?.value || state.financialImport.periodYear || "") || state.financialImport.periodYear;
 
     let staged = state.pendingFinancial?.dataset || null;
     const stagedFiles = state.pendingFinancial?.files ? [...state.pendingFinancial.files] : [];
@@ -3685,6 +3757,7 @@
         replaceMode,
         period: manualPeriodOverride,
         sourceText,
+        periodOverride,
       });
       staged = staged
         ? {
@@ -3710,7 +3783,7 @@
       dataset: staged,
       files: stagedFiles,
       rowCount: stagedRowCount,
-      options: { scopeOverride, replaceMode, period: manualPeriodOverride },
+      options: { scopeOverride, replaceMode, period: manualPeriodOverride, periodOverride },
       stagedAt: new Date().toISOString(),
     };
     persistState();
@@ -3760,6 +3833,15 @@
     if (dom.financialImportMode) {
       dom.financialImportMode.value = state.financialImport.mode || "merge";
     }
+    if (dom.financialPeriodMode) {
+      dom.financialPeriodMode.value = state.financialImport.periodMode || "csv";
+    }
+    if (dom.financialPeriodMonth) {
+      dom.financialPeriodMonth.value = state.financialImport.periodMonth || String(new Date().getMonth() + 1).padStart(2, "0");
+    }
+    if (dom.financialPeriodYear) {
+      dom.financialPeriodYear.value = String(state.financialImport.periodYear || new Date().getFullYear());
+    }
     if (dom.snapshotScopeMode) {
       dom.snapshotScopeMode.value = state.snapshotScope.mode || "all";
     }
@@ -3781,6 +3863,24 @@
 
     dom.financialImportMode?.addEventListener("change", (event) => {
       state.financialImport.mode = event.target.value || "merge";
+      persistState();
+      render();
+    });
+
+    dom.financialPeriodMode?.addEventListener("change", (event) => {
+      state.financialImport.periodMode = event.target.value || "csv";
+      persistState();
+      render();
+    });
+
+    dom.financialPeriodMonth?.addEventListener("change", (event) => {
+      state.financialImport.periodMonth = event.target.value || state.financialImport.periodMonth;
+      persistState();
+      render();
+    });
+
+    dom.financialPeriodYear?.addEventListener("input", (event) => {
+      state.financialImport.periodYear = String(event.target.value || "").trim();
       persistState();
       render();
     });

@@ -1015,6 +1015,34 @@
                     <option value="approved_budget">Approved Budget baseline (store budgets for the selected year)</option>
                   </select>
                 </div>
+                <div class="field">
+                  <label for="financial-period-mode">Report Period Source</label>
+                  <select id="financial-period-mode">
+                    <option value="csv">Use period from CSV</option>
+                    <option value="override">Apply one month/year to this upload</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="financial-period-month">Backfill Month</label>
+                  <select id="financial-period-month">
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="financial-period-year">Backfill Year</label>
+                  <input id="financial-period-year" type="number" min="2000" max="2100" step="1" placeholder="2024" />
+                </div>
               </div>
               <div class="status-line" id="financial-import-summary" style="margin-top: 10px"></div>
               <div class="chip-row" id="financial-import-coverage" style="margin-top: 10px"></div>
@@ -1028,6 +1056,7 @@
                 <li>Choose a community or RISE Corporate when the file is only for one entity or the source file omits property names.</li>
                 <li>Use replace modes when you want to refresh one entity’s history or reset the full ledger before importing a new baseline.</li>
                 <li><strong>Approved Budget baseline</strong> stores the final budget rows and uses them as the source of truth for “vs budget” comparisons (for the same year/month) until replaced.</li>
+                <li>Switch to backfill mode when uploading older monthly reports that do not already include a clean period column.</li>
                 <li>Imported financial history is stored locally for this dashboard so you can keep building trends over time.</li>
               </ul>
             </section>
