@@ -352,6 +352,7 @@
       </div>
     </div>
     <div class="header-actions">
+      <button class="btn btn-gray" onclick="openFinancialAccountabilityPage()">💼 Financial Accountability</button>
       <button class="btn btn-green" onclick="saveBudgetCurve()">📋 Save as Budget Curve</button>
       <button class="btn btn-blue" onclick="saveCommunityData()">💾 Save Community Data</button>
       <button class="btn btn-gray" onclick="publishWeeklySnapshot()">📡 Sync Weekly Baseline</button>
@@ -433,6 +434,7 @@ const FULL_MONTHS = ["January","February","March","April","May","June","July","A
 const DEFAULT_CURRENT_MONTH = Math.max(0, Math.min(11, new Date().getMonth()));
 const WEEKLY_SNAPSHOT_STORAGE_KEY = "rise_weekly_portfolio_snapshot_v1";
 const OPS_GLOBAL_STORAGE_KEY = "rise_ops_global_v1";
+const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
 const WINDOWSHADE_DEFAULTS = {
   recommendations: false,
   setup_foundation: false,
@@ -1957,6 +1959,53 @@ queuePersistedPhotoStorageCompaction();
 
 // ─── Derived ──────────────────────────────────────────────────────────────────
 function getProp() { return PROPERTIES[selectedPropIdx]; }
+function getWorkspacePeriodString(monthIdx = currentMonth, year = new Date().getFullYear()) {
+  const numericMonth = Number.isInteger(monthIdx) ? monthIdx : DEFAULT_CURRENT_MONTH;
+  return `${year}-${String(numericMonth + 1).padStart(2, "0")}`;
+}
+function buildOperationsWorkspaceContext() {
+  return {
+    community: getProp().name,
+    monthIndex: Number.isInteger(currentMonth) ? currentMonth : DEFAULT_CURRENT_MONTH,
+    period: getWorkspacePeriodString(currentMonth),
+    source: "portfolio-operations-dashboard",
+    updatedAt: new Date().toISOString()
+  };
+}
+function persistOperationsWorkspaceContext() {
+  try {
+    localStorage.setItem(OPS_WORKSPACE_CONTEXT_KEY, JSON.stringify(buildOperationsWorkspaceContext()));
+  } catch {}
+}
+function buildFinancialAccountabilityHref() {
+  const context = buildOperationsWorkspaceContext();
+  const params = new URLSearchParams();
+  params.set("community", context.community);
+  params.set("period", context.period);
+  return `financial-accountability.html?${params.toString()}`;
+}
+function openFinancialAccountabilityPage() {
+  persistOperationsWorkspaceContext();
+  window.location.href = buildFinancialAccountabilityHref();
+}
+function applyIncomingWorkspaceNavigation() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const incomingCommunity = params.get("community");
+    const incomingPeriod = params.get("period") || params.get("month");
+    if (incomingCommunity) {
+      const matchedCommunity = matchPropertyName(incomingCommunity);
+      const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedCommunity);
+      if (matchedIdx >= 0) selectedPropIdx = matchedIdx;
+    }
+    const incomingMonthIdx = parseMonthIndexValue(incomingPeriod);
+    if (incomingMonthIdx !== null && incomingMonthIdx !== undefined) {
+      currentMonth = incomingMonthIdx;
+      workspaceMonthOverride = incomingMonthIdx;
+      importMonthOverride = incomingMonthIdx;
+    }
+  } catch {}
+}
 function getHeaderSubText() {
   return getProp().name
     + (getTotalUnits() > 0 ? ` · ${getTotalUnits()} Units` : " · Units TBD")
@@ -3297,6 +3346,7 @@ function renderQuarterlyTurnoverRollupSection(portfolioScope, regionalRoles, rol
 function selectProp(idx) {
   selectedPropIdx = idx;
   loadPropertyData(getProp().name);
+  persistOperationsWorkspaceContext();
   renderPropGrid();
   renderTab();
 }
@@ -4350,6 +4400,9 @@ function attachEventListeners() {
       else if (!isNaN(idx)) { updateMonthly(idx, field, el.value, el.dataset.recommended); }
       if (field === "currentMonth" && importMonthOverride === prevCurrentMonth) {
         importMonthOverride = currentMonth;
+      }
+      if (field === "currentMonth") {
+        persistOperationsWorkspaceContext();
       }
       renderTab();
     });
@@ -11762,9 +11815,11 @@ async function handleCSVFile(file) {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+applyIncomingWorkspaceNavigation();
 loadPropertyData(getProp().name);
 renderPropGrid();
 renderTab();
+persistOperationsWorkspaceContext();
 </script>
 </body>
 </html>
