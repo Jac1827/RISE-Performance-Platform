@@ -480,6 +480,8 @@ if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions){
 function makeNewPlanDraft(){
   return {
     employeeId: '',
+    planImportedActionItems: [],
+    msoeImportedActionItems: [],
     extractedActionItems: [],
     selectedWriteupIds: [],
     recommendedActionItems: [],
@@ -1211,6 +1213,24 @@ function writeupsForEmployee(employeeId){
   return (STATE.writeups || [])
     .filter(writeup => writeup.employeeId === employeeId)
     .sort((left, right) => (right.date || '').localeCompare(left.date || ''));
+}
+
+function msoeHistoryForEmployee(employeeId, excludePlanId){
+  return (STATE.plans || [])
+    .filter(plan => plan.employeeId === employeeId && plan.id !== excludePlanId && plan.msoeScore != null)
+    .sort((left, right) => (right.createdAt || '').localeCompare(left.createdAt || ''))
+    .map(plan => ({
+      planId: plan.id,
+      date: plan.createdAt || '',
+      score: plan.msoeScore,
+      type: plan.type || ''
+    }));
+}
+
+function latestMsoeSnapshotForEmployee(employeeId, excludePlanId){
+  const history = msoeHistoryForEmployee(employeeId, excludePlanId);
+  if(!history.length) return null;
+  return {score: history[0].score, date: history[0].date, planId: history[0].planId};
 }
 
 function evaluateWriteupRecommendation(employeeId){
@@ -2371,6 +2391,14 @@ function formatActionItemsForTextarea(items){
     .join('\n');
 }
 
+function refreshNewPlanImportedActionItems(){
+  const merged = dedupeActionItems([
+    ...(UI.newPlanDraft.planImportedActionItems || []),
+    ...(UI.newPlanDraft.msoeImportedActionItems || [])
+  ]);
+  UI.newPlanDraft.extractedActionItems = merged;
+}
+
 function renderSourceStatus(kind){
   const sourceMap = {
     shop: {
@@ -2695,6 +2723,12 @@ function buildPlanFromForm(){
       : [...selectedRecommendationItems, ...importedItems]
   );
 
+  const currentMsoeScore = numberOrNull('np-msoe');
+  const priorMsoe = latestMsoeSnapshotForEmployee(employeeId);
+  const msoeDelta = (priorMsoe && currentMsoeScore != null && !Number.isNaN(Number(currentMsoeScore)))
+    ? Math.round((Number(currentMsoeScore) - Number(priorMsoe.score)) * 10) / 10
+    : null;
+
   return {
     id: genId(),
     employeeId,
@@ -2706,7 +2740,10 @@ function buildPlanFromForm(){
     manager: document.getElementById('np-manager').value.trim() || (employee ? managerDisplayName(employee) : '') || 'Manager Name',
     notes: document.getElementById('np-notes').value.trim(),
     overallScore: numberOrNull('np-overall'),
-    msoeScore: numberOrNull('np-msoe'),
+    msoeScore: currentMsoeScore,
+    priorMsoeScore: priorMsoe ? priorMsoe.score : null,
+    priorMsoeDate: priorMsoe ? priorMsoe.date : '',
+    msoeDelta,
     telScore: numberOrNull('np-telephone'),
     onsiteScore: numberOrNull('np-onsite'),
     followupScore: numberOrNull('np-followup'),
@@ -2914,6 +2951,42 @@ function parseMsoeScoreFromText(text){
   return findLabelledScore(normalized, MSOE_SCORE_ALIASES.filter(alias => alias !== 'msoe'));
 }
 
+function extractMsoeIncompleteActionItemsFromText(text){
+  const normalized = normalizeDocumentText(text);
+  const lines = splitDocumentLines(normalized);
+  const candidates = [];
+
+  lines.forEach(line => {
+    const cleaned = line
+      .replace(/\s+/g, ' ')
+      .replace(/^\d{1,2}\.\s+/, '')
+      .trim();
+    if(cleaned.length < 8) return;
+
+    const lower = cleaned.toLowerCase();
+    const looksUnchecked = /(^|\s)(?:\[\s\]|\(\s\)|☐|\u2610)(\s|$)/.test(cleaned);
+    const looksFailed = /\b(incomplete|not complete|not completed|not met|needs improvement|needs attention|missed|did not|lacking)\b/i.test(cleaned);
+    const looksZeroScore = /\b0\s*\/\s*\d+\b/.test(cleaned) || /\b0\s+of\s+\d+\b/i.test(cleaned);
+
+    if(!(looksUnchecked || looksFailed || looksZeroScore)) return;
+    if(/\b(complete|completed|met|achieved|passed)\b/i.test(cleaned) && !/not\s+(?:complete|completed|met|achieved|passed)/i.test(cleaned)) return;
+
+    // Strip common status phrases to turn the line into an actionable item.
+    const textOnly = cleaned
+      .replace(/\b(incomplete|not complete|not completed|not met|needs improvement|needs attention)\b/ig, '')
+      .replace(/\bscore\b/ig, '')
+      .replace(/\b0\s*\/\s*\d+\b/g, '')
+      .replace(/\b0\s+of\s+\d+\b/ig, '')
+      .replace(/[:\-–]\s*$/, '')
+      .trim();
+
+    const finalText = textOnly || cleaned;
+    candidates.push(buildDetailedActionItem('MSOE follow-up', finalText));
+  });
+
+  return dedupeActionItems(candidates);
+}
+
 function applyShopScores(scores){
   SHOP_SCORE_FIELDS.forEach(field => {
     if(scores[field.key] == null) return;
@@ -2979,13 +3052,28 @@ async function handleMsoeSourceUpload(event){
   try{
     const text = await extractTextFromFile(file);
     const msoeScore = parseMsoeScoreFromText(text);
+    const extractedItems = extractMsoeIncompleteActionItemsFromText(text);
+    const previousImportedText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
+    UI.newPlanDraft.msoeImportedActionItems = extractedItems;
+    refreshNewPlanImportedActionItems();
     if(msoeScore != null){
       applyMsoeScore(msoeScore);
-      UI.newPlanDraft.msoeSummary = `${file.name} filled the MSOE rating at ${msoeScore}%.`;
+      UI.newPlanDraft.msoeSummary = `${file.name} filled the MSOE rating at ${msoeScore}%${extractedItems.length ? ` and loaded ${extractedItems.length} incomplete MSOE item${extractedItems.length === 1 ? '' : 's'} as action items.` : '.'}`;
       UI.newPlanDraft.msoeTone = 'success';
     }else{
-      UI.newPlanDraft.msoeSummary = `${file.name} uploaded, but no MSOE rating was confidently detected. You can still enter it manually.`;
+      UI.newPlanDraft.msoeSummary = `${file.name} uploaded${extractedItems.length ? ` and loaded ${extractedItems.length} incomplete MSOE item${extractedItems.length === 1 ? '' : 's'} as action items` : ''}, but no MSOE rating was confidently detected. You can still enter it manually.`;
       UI.newPlanDraft.msoeTone = 'warn';
+    }
+
+    if(extractedItems.length){
+      const nextImportedText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
+      const textarea = document.getElementById('np-items');
+      if(textarea){
+        const currentValue = textarea.value.trim();
+        if(!currentValue || currentValue === previousImportedText || confirm('Add the incomplete MSOE items as action items for this plan?')){
+          textarea.value = nextImportedText;
+        }
+      }
     }
   }catch(error){
     UI.newPlanDraft.msoeError = `Could not read ${file.name}. ${error.message}`;
@@ -3095,10 +3183,11 @@ async function handlePlanSourceUpload(event){
     const text = await extractTextFromFile(file);
     const extractedItems = extractActionItemsFromText(text);
     const previousImportedText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
-    UI.newPlanDraft.extractedActionItems = extractedItems;
+    UI.newPlanDraft.planImportedActionItems = extractedItems;
+    refreshNewPlanImportedActionItems();
 
     if(extractedItems.length){
-      const nextImportedText = formatActionItemsForTextarea(extractedItems);
+      const nextImportedText = formatActionItemsForTextarea(UI.newPlanDraft.extractedActionItems);
       const textarea = document.getElementById('np-items');
       if(textarea){
         const currentValue = textarea.value.trim();
@@ -6213,6 +6302,13 @@ function exportPlanDocument(planId){
   if(!plan) return;
   const employee = getEmployee(plan.employeeId);
   const showPerformanceScores = Boolean(plan.shopSourceName);
+  const msoeHistory = msoeHistoryForEmployee(plan.employeeId, plan.id);
+  const showMsoeTrend = (plan.msoeScore != null) || msoeHistory.length;
+  const priorMsoeScore = plan.priorMsoeScore != null ? plan.priorMsoeScore : (msoeHistory.length ? msoeHistory[0].score : null);
+  const priorMsoeDate = plan.priorMsoeDate || (msoeHistory.length ? (msoeHistory[0].date || '') : '');
+  const msoeDelta = (priorMsoeScore != null && plan.msoeScore != null)
+    ? Math.round((Number(plan.msoeScore) - Number(priorMsoeScore)) * 10) / 10
+    : null;
   const grouped = {};
   (plan.actionItems || []).forEach(item => {
     const key = item.area || 'General';
@@ -6279,6 +6375,16 @@ function exportPlanDocument(planId){
               <td>${plan.followupScore != null ? plan.followupScore + '%' : 'N/A'}</td>
             </tr>
           </table>
+        ` : ''}
+        ${showMsoeTrend ? `
+          <h2>MSOE Rating</h2>
+          <div class="panel">
+            <strong>Current MSOE:</strong> ${plan.msoeScore != null ? plan.msoeScore + '%' : 'Not captured on this plan'}<br>
+            ${priorMsoeScore != null ? `<strong>Previous MSOE:</strong> ${priorMsoeScore}%${priorMsoeDate ? ` (plan issued ${formatDate(priorMsoeDate)})` : ''}<br>` : ''}
+            ${msoeDelta != null ? `<strong>Trend:</strong> ${msoeDelta === 0 ? 'No change' : (msoeDelta > 0 ? '+' : '') + msoeDelta + ' points'}<br>` : ''}
+            ${plan.msoeSourceName ? `<span class="muted">Source:</span> ${escapeHtml(plan.msoeSourceName)}` : ''}
+            ${msoeHistory.length ? `<div class="muted" style="margin-top:10px"><strong>Recent MSOE history</strong><br>${msoeHistory.slice(0,6).map(entry => `${formatDate(entry.date)}: ${entry.score}%`).join('<br>')}</div>` : ''}
+          </div>
         ` : ''}
         <h2>Corrective Actions / Focus Areas</h2>
         ${Object.keys(grouped).length ? Object.entries(grouped).map(([area, items]) => `
