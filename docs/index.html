@@ -483,6 +483,13 @@ function makeNewPlanDraft(){
     planImportedActionItems: [],
     msoeImportedActionItems: [],
     extractedActionItems: [],
+    importedActionCandidates: [],
+    knownImportedActionIds: [],
+    selectedImportedActionIds: [],
+    importedActionFilter: '',
+    importedActionCollapsedAreas: {},
+    importedActionEdits: {},
+    customActionItems: [],
     docFindings: [],
     selectedDocFindingIds: [],
     docActionRecommendations: [],
@@ -2395,6 +2402,196 @@ function formatActionItemsForTextarea(items){
     .join('\n');
 }
 
+function hashString(value){
+  // djb2-ish small hash for stable ids (not cryptographic).
+  let hash = 5381;
+  const text = String(value || '');
+  for(let i = 0; i < text.length; i += 1){
+    hash = ((hash << 5) + hash) ^ text.charCodeAt(i);
+    hash >>>= 0;
+  }
+  return hash.toString(36);
+}
+
+function importedActionId(area, text){
+  return `imp_${hashString(`${normalizeComparable(area)}|${normalizeComparable(text)}`)}`;
+}
+
+function applyImportedActionEdits(candidate){
+  const edits = (UI.newPlanDraft.importedActionEdits || {})[candidate.id];
+  if(!edits) return candidate;
+  return {...candidate, area: edits.area || candidate.area, text: edits.text || candidate.text};
+}
+
+function refreshImportedActionCandidates(){
+  const baseCandidates = (UI.newPlanDraft.extractedActionItems || []).map(item => ({
+    id: importedActionId(item.area || 'General', item.text || ''),
+    area: item.area || 'General',
+    text: item.text || '',
+    sourceLabel: 'Imported'
+  }));
+
+  const custom = (UI.newPlanDraft.customActionItems || []).map(item => ({
+    id: item.id || fallbackId('custom_act'),
+    area: item.area || 'General',
+    text: item.text || '',
+    sourceLabel: 'Custom'
+  }));
+
+  const merged = dedupeDocItems([...baseCandidates, ...custom]).map(applyImportedActionEdits);
+  UI.newPlanDraft.importedActionCandidates = merged;
+
+  const prevKnown = new Set(UI.newPlanDraft.knownImportedActionIds || []);
+  const prevSelected = new Set(UI.newPlanDraft.selectedImportedActionIds || []);
+  const nextIds = merged.map(item => item.id);
+  if(!prevSelected.size && !prevKnown.size){
+    UI.newPlanDraft.selectedImportedActionIds = nextIds;
+    UI.newPlanDraft.knownImportedActionIds = nextIds;
+    return;
+  }
+
+  // Preserve user selections; auto-select only items that are truly new to the list.
+  merged.forEach(item => {
+    if(!prevKnown.has(item.id)) prevSelected.add(item.id);
+  });
+  UI.newPlanDraft.selectedImportedActionIds = [...prevSelected].filter(id => nextIds.includes(id));
+  UI.newPlanDraft.knownImportedActionIds = nextIds;
+}
+
+function setImportedActionFilter(value){
+  UI.newPlanDraft.importedActionFilter = String(value || '').trim();
+  syncNewPlanDraftToDom();
+}
+
+function toggleImportedActionCollapsed(area){
+  const key = normalizeComparable(area);
+  const map = UI.newPlanDraft.importedActionCollapsedAreas || {};
+  map[key] = !map[key];
+  UI.newPlanDraft.importedActionCollapsedAreas = map;
+  syncNewPlanDraftToDom();
+}
+
+function toggleImportedAction(id, checked){
+  const next = new Set(UI.newPlanDraft.selectedImportedActionIds || []);
+  if(checked) next.add(id); else next.delete(id);
+  UI.newPlanDraft.selectedImportedActionIds = [...next];
+  syncNewPlanDraftToDom();
+}
+
+function toggleImportedActionArea(area, checked){
+  const candidates = UI.newPlanDraft.importedActionCandidates || [];
+  const target = normalizeComparable(area);
+  const next = new Set(UI.newPlanDraft.selectedImportedActionIds || []);
+  candidates.forEach(item => {
+    if(normalizeComparable(item.area) !== target) return;
+    if(checked) next.add(item.id); else next.delete(item.id);
+  });
+  UI.newPlanDraft.selectedImportedActionIds = [...next];
+  syncNewPlanDraftToDom();
+}
+
+function selectAllImportedActions(){
+  UI.newPlanDraft.selectedImportedActionIds = (UI.newPlanDraft.importedActionCandidates || []).map(item => item.id);
+  syncNewPlanDraftToDom();
+}
+
+function selectNoImportedActions(){
+  UI.newPlanDraft.selectedImportedActionIds = [];
+  syncNewPlanDraftToDom();
+}
+
+function selectedImportedActions(){
+  const selectedIds = new Set(UI.newPlanDraft.selectedImportedActionIds || []);
+  return dedupeActionItems((UI.newPlanDraft.importedActionCandidates || [])
+    .filter(item => selectedIds.has(item.id))
+    .map(item => ({area:item.area || 'General', text:item.text || ''})));
+}
+
+function replaceActionItemsWithSelectedImported(){
+  const textarea = document.getElementById('np-items');
+  if(!textarea) return;
+  const items = selectedImportedActions();
+  if(!items.length){
+    alert('Select at least one imported/custom task first.');
+    return;
+  }
+  textarea.value = formatActionItemsForTextarea(items);
+}
+
+function appendSelectedImportedToActionItems(){
+  const textarea = document.getElementById('np-items');
+  if(!textarea) return;
+  const items = selectedImportedActions();
+  if(!items.length){
+    alert('Select at least one imported/custom task first.');
+    return;
+  }
+  const next = formatActionItemsForTextarea(items);
+  textarea.value = textarea.value.trim() ? `${textarea.value.trim()}\n${next}` : next;
+}
+
+function openEditImportedAction(id){
+  const candidate = (UI.newPlanDraft.importedActionCandidates || []).find(item => item.id === id);
+  if(!candidate){
+    alert('Could not locate that task.');
+    return;
+  }
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Edit task</h3>
+      <div class="sub">Update the section label and the task wording before adding it to the plan.</div>
+      <div style="margin-top:12px">
+        <label>Section / area</label>
+        <input id="imp-edit-area" value="${escapeHtml(candidate.area || 'General')}">
+      </div>
+      <div style="margin-top:12px">
+        <label>Task text</label>
+        <textarea id="imp-edit-text" style="min-height:120px">${escapeHtml(candidate.text || '')}</textarea>
+      </div>
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditImportedAction('${candidate.id}')">Save</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveEditImportedAction(id){
+  const area = String(document.getElementById('imp-edit-area').value || '').trim() || 'General';
+  const text = String(document.getElementById('imp-edit-text').value || '').trim();
+  if(!text){
+    alert('Task text cannot be blank.');
+    return;
+  }
+  UI.newPlanDraft.importedActionEdits = UI.newPlanDraft.importedActionEdits || {};
+  UI.newPlanDraft.importedActionEdits[id] = {area, text};
+
+  // Persist edits for custom tasks as well.
+  const custom = UI.newPlanDraft.customActionItems || [];
+  const customItem = custom.find(item => item.id === id);
+  if(customItem){
+    customItem.area = area;
+    customItem.text = text;
+    UI.newPlanDraft.customActionItems = custom;
+  }
+
+  refreshImportedActionCandidates();
+  closeModal();
+  syncNewPlanDraftToDom();
+}
+
+function addCustomImportedAction(){
+  const id = fallbackId('custom_act');
+  UI.newPlanDraft.customActionItems = [...(UI.newPlanDraft.customActionItems || []), {id, area:'General', text:'Draft a new action item here'}];
+  refreshImportedActionCandidates();
+  if(!(UI.newPlanDraft.selectedImportedActionIds || []).includes(id)){
+    UI.newPlanDraft.selectedImportedActionIds = [...(UI.newPlanDraft.selectedImportedActionIds || []), id];
+  }
+  syncNewPlanDraftToDom();
+  openEditImportedAction(id);
+}
+
 function dedupeDocItems(items){
   const seen = new Set();
   return (Array.isArray(items) ? items : []).filter(item => {
@@ -2415,6 +2612,7 @@ function refreshNewPlanImportedActionItems(){
     ...(UI.newPlanDraft.msoeImportedActionItems || [])
   ]);
   UI.newPlanDraft.extractedActionItems = merged;
+  refreshImportedActionCandidates();
 }
 
 function selectedDocFindings(){
@@ -2618,7 +2816,7 @@ function renderSourceStatus(kind){
 }
 
 function renderImportedActionPreview(){
-  if(!UI.newPlanDraft.extractedActionItems.length){
+  if(!UI.newPlanDraft.importedActionCandidates.length){
     return `
       <div class="history-card">
         <h4>Imported action items</h4>
@@ -2627,17 +2825,97 @@ function renderImportedActionPreview(){
     `;
   }
 
+  const candidates = UI.newPlanDraft.importedActionCandidates || [];
+  const filter = normalizeComparable(UI.newPlanDraft.importedActionFilter || '');
+  const collapsed = UI.newPlanDraft.importedActionCollapsedAreas || {};
+  const selectedIds = new Set(UI.newPlanDraft.selectedImportedActionIds || []);
+
+  const filtered = filter
+    ? candidates.filter(item => normalizeComparable(`${item.area} ${item.text}`).includes(filter))
+    : candidates;
+
+  const groups = {};
+  filtered.forEach(item => {
+    const key = item.area || 'General';
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(item);
+  });
+  const areas = Object.keys(groups).sort((a,b) => normalizeComparable(a).localeCompare(normalizeComparable(b)));
+  const selectedCount = candidates.filter(item => selectedIds.has(item.id)).length;
+
   return `
     <div class="history-card">
-      <h4>${UI.newPlanDraft.extractedActionItems.length} imported action item${UI.newPlanDraft.extractedActionItems.length === 1 ? '' : 's'}</h4>
-      <div class="stack" style="margin-top:10px">
-        ${UI.newPlanDraft.extractedActionItems.slice(0,6).map((item, index) => `
-          <div class="small">
-            <strong>${index + 1}. ${escapeHtml(item.area || 'General')}</strong><br>
-            <span class="muted">${escapeHtml(item.text)}</span>
+      <div class="inline" style="justify-content:space-between;gap:12px;align-items:flex-end">
+        <div>
+          <h4 style="margin:0">${candidates.length} imported/custom task${candidates.length === 1 ? '' : 's'}</h4>
+          <div class="tiny muted" style="margin-top:6px">Use the checkboxes to curate which tasks will be added into the plan. Group toggles let you include/exclude a whole section at once.</div>
+        </div>
+        <div class="tiny muted">${selectedCount} selected</div>
+      </div>
+
+      <div class="form-grid cols-2" style="margin-top:12px">
+        <div>
+          <label>Filter tasks</label>
+          <input value="${escapeHtml(UI.newPlanDraft.importedActionFilter || '')}" placeholder="Search by section or keyword" oninput="setImportedActionFilter(this.value)">
+        </div>
+        <div>
+          <label>Quick actions</label>
+          <div class="inline" style="gap:8px">
+            <button class="btn btn-sm btn-soft" onclick="selectAllImportedActions()">Select all</button>
+            <button class="btn btn-sm btn-soft" onclick="selectNoImportedActions()">Select none</button>
+            <button class="btn btn-sm btn-soft" onclick="addCustomImportedAction()">Add custom</button>
           </div>
-        `).join('')}
-        ${UI.newPlanDraft.extractedActionItems.length > 6 ? `<div class="tiny muted">+ ${UI.newPlanDraft.extractedActionItems.length - 6} more items loaded into the action-items box.</div>` : ''}
+        </div>
+      </div>
+
+      <div class="inline" style="margin-top:10px;gap:10px">
+        <button class="btn btn-sm btn-soft" onclick="appendSelectedImportedToActionItems()">Add selected to Action Items</button>
+        <button class="btn btn-sm btn-accent" onclick="replaceActionItemsWithSelectedImported()">Replace Action Items</button>
+        <span class="small muted">${filtered.length !== candidates.length ? `${filtered.length} shown` : `${candidates.length} shown`}</span>
+      </div>
+
+      <div class="stack" style="margin-top:12px;max-height:360px;overflow:auto;padding-right:6px">
+        ${areas.map(area => {
+          const list = groups[area] || [];
+          const areaKey = normalizeComparable(area);
+          const total = list.length;
+          const selected = list.filter(item => selectedIds.has(item.id)).length;
+          const isCollapsed = Boolean(collapsed[areaKey]);
+          const allSelected = total > 0 && selected === total;
+          const noneSelected = selected === 0;
+          return `
+            <div class="history-card" style="background:#fff">
+              <div class="inline" style="justify-content:space-between;gap:10px">
+                <div class="inline" style="gap:10px;align-items:center">
+                  <button class="btn btn-sm btn-soft" onclick="toggleImportedActionCollapsed(${JSON.stringify(area)})" title="Collapse/expand">${isCollapsed ? '+' : '-'}</button>
+                  <label class="inline" style="gap:10px;align-items:center">
+                    <input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleImportedActionArea(${JSON.stringify(area)}, this.checked)">
+                    <strong>${escapeHtml(area)}</strong>
+                  </label>
+                </div>
+                <span class="tiny muted">${selected}/${total} selected</span>
+              </div>
+              ${isCollapsed ? '' : `
+                <div class="stack" style="margin-top:10px">
+                  ${list.map(item => `
+                    <label class="history-card" style="background:#f8fbfc;border-style:solid">
+                      <div class="checkbox-row">
+                        <input type="checkbox" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleImportedAction('${item.id}', this.checked)">
+                        <div style="flex:1">
+                          <div class="inline" style="justify-content:space-between;gap:10px;align-items:flex-start">
+                            <div class="small">${escapeHtml(item.text)}</div>
+                            <button class="btn btn-sm btn-soft" type="button" onclick="openEditImportedAction('${item.id}')">Edit</button>
+                          </div>
+                          <div class="tiny muted" style="margin-top:6px">${escapeHtml(item.sourceLabel || 'Imported')}</div>
+                        </div>
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>
   `;
