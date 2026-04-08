@@ -1940,7 +1940,6 @@ function renderShell(){
           ${navItems.map(([id,label]) => `<button class="nav-btn ${UI.currentView === id ? 'active' : ''}" onclick="switchView('${id}')">${label}</button>`).join('')}
         </div>
         <div class="toolbar">
-          ${user.role === 'admin' ? `<button class="btn btn-soft btn-sm" onclick="reloadCompanyRoster()">Reload Company Roster</button><button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset Data</button>` : ''}
           <div class="user-meta">
             <span class="badge ${user.role === 'admin' ? 'badge-admin' : 'badge-soft'}">${user.role === 'admin' ? 'Admin' : 'Manager'}</span>
             <span class="badge badge-soft">${escapeHtml(userScopeLabel(user))}</span>
@@ -2198,6 +2197,20 @@ function renderPlans(){
               `}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>Admin data controls</h2>
+            <p>Only admin access can replace the saved company roster or clear locked platform data from this browser.</p>
+          </div>
+        </div>
+        <div class="alert alert-warn">Manager passcodes can work inside the platform, but destructive data reset actions stay restricted to admins only.</div>
+        <div class="inline" style="margin-top:14px">
+          <button class="btn btn-soft" onclick="reloadCompanyRoster()">Reload company roster</button>
+          <button class="btn btn-danger" onclick="resetAllData()">Reset platform data</button>
         </div>
       </div>
     </div>
@@ -6611,6 +6624,7 @@ function saveEditUser(userId){
 }
 
 function removeUser(userId){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
   const user = STATE.users.find(item => item.id === userId);
   if(!user) return;
   if(user.id === STATE.currentUser.id){
@@ -6649,6 +6663,10 @@ function escapeHtml(value){
 }
 
 function resetAllData(){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')){
+    alert('Only admins can reset saved platform data.');
+    return;
+  }
   if(!confirm('Clear all saved users, settings, employees, plans, and write-ups from this browser, then reload the published company roster?')) return;
   STATE = {
     users: makeDefaultUsers(),
