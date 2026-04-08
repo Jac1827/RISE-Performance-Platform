@@ -634,6 +634,8 @@ let activeTab = 1;
 let reputationData = defaultReputationData();
 let communityPhotoBank = [];
 let marketSurveyData = defaultMarketSurveyData();
+let financialLedger = {};
+let financialUpdatedAt = "";
 let currentOccupied = 87;
 let currentLeased = 90;
 let occupancyGoal = 95;
@@ -1903,6 +1905,8 @@ function normalizeSavedCommunityRecord(propName, data) {
     msoeByQuarter: normalizeMsoeByQuarter(input.msoeByQuarter),
     reputationData: normalizeReputationData(input.reputationData),
     marketSurveyData: normalizeMarketSurveyData(input.marketSurveyData),
+    financialLedger: (input.financialLedger && typeof input.financialLedger === "object") ? input.financialLedger : {},
+    financialUpdatedAt: String(input.financialUpdatedAt ?? ""),
     propertyName: propName
   };
 }
@@ -1933,7 +1937,9 @@ function getCurrentCommunityRecord() {
     propertyTurnoverByQuarter,
     msoeByQuarter,
     reputationData,
-    marketSurveyData
+    marketSurveyData,
+    financialLedger,
+    financialUpdatedAt
   });
 }
 
@@ -2432,6 +2438,8 @@ function loadPropertyData(propName) {
   msoeByQuarter = d.msoeByQuarter;
   reputationData = d.reputationData;
   marketSurveyData = d.marketSurveyData;
+  financialLedger = d.financialLedger;
+  financialUpdatedAt = d.financialUpdatedAt;
   renewalImportLog = [];
   renewalImportSourceLabel = "";
   restoreCurrentMonthSnapshots(currentMonth);

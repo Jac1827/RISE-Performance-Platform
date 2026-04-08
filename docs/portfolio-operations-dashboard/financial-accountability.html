@@ -883,7 +883,6 @@
           <a class="btn btn-soft" id="open-selected-ops" href="index.html">Open Selected Community In Ops</a>
           <button class="btn btn-primary" id="open-financial-import-header">Import Financial CSVs</button>
           <button class="btn btn-soft" id="sync-dashboard-history">Sync Ops Dashboard History</button>
-          <button class="btn btn-soft" id="load-sample-pack">Load Sample Pack</button>
           <button class="btn" id="clear-all">Clear</button>
           <button class="btn btn-green" id="export-scorecards" disabled>Export Scorecards CSV</button>
           <button class="btn" id="export-summary" disabled>Export Board Summary</button>
@@ -972,52 +971,10 @@
                 <span>Required aliases: property or community, period, section, line item, actual, budget</span>
               </label>
               <div class="button-row" style="margin-top: 10px">
-                <button class="btn btn-soft" data-sample="financial">Load sample</button>
-                <button class="btn" data-download-sample="financial">Download sample</button>
+                <button class="btn btn-primary" id="apply-financial-upload" disabled>Apply To Ledger</button>
+                <button class="btn btn-soft" id="clear-financial-staging" disabled>Clear Staging</button>
               </div>
               <div class="mini-grid" id="financial-meta" style="margin-top: 10px"></div>
-            </section>
-
-            <section class="ingest-card" data-dataset="operations">
-              <div class="ingest-top">
-                <div>
-                  <h3>Operational CSV</h3>
-                  <p>Auto-synced from the operations dashboard community history. Upload a CSV only to override or extend the stored driver detail.</p>
-                </div>
-                <span class="chip" id="operations-chip">Awaiting file</span>
-              </div>
-              <label class="dropzone" id="operations-dropzone">
-                <input id="operations-input" type="file" accept=".csv,text/csv" />
-                <strong>Drop or choose an operational override CSV</strong>
-                <span>The page can run from saved dashboard history alone. CSVs are optional for deeper operational detail.</span>
-              </label>
-              <div class="button-row" style="margin-top: 10px">
-                <button class="btn btn-soft" id="sync-operations">Sync from dashboard</button>
-                <button class="btn btn-soft" data-sample="operations">Load sample</button>
-                <button class="btn" data-download-sample="operations">Download sample</button>
-              </div>
-              <div class="mini-grid" id="operations-meta" style="margin-top: 10px"></div>
-            </section>
-
-            <section class="ingest-card" data-dataset="leasing">
-              <div class="ingest-top">
-                <div>
-                  <h3>Leasing CSV</h3>
-                  <p>Auto-synced from the operations dashboard monthly history. Upload a CSV only if you need more leasing history than the dashboard already stores.</p>
-                </div>
-                <span class="chip" id="leasing-chip">Awaiting file</span>
-              </div>
-              <label class="dropzone" id="leasing-dropzone">
-                <input id="leasing-input" type="file" accept=".csv,text/csv" />
-                <strong>Drop or choose a leasing override CSV</strong>
-                <span>Dashboard history provides occupancy, leased %, traffic, applications, and lease activity where available.</span>
-              </label>
-              <div class="button-row" style="margin-top: 10px">
-                <button class="btn btn-soft" id="sync-leasing">Sync from dashboard</button>
-                <button class="btn btn-soft" data-sample="leasing">Load sample</button>
-                <button class="btn" data-download-sample="leasing">Download sample</button>
-              </div>
-              <div class="mini-grid" id="leasing-meta" style="margin-top: 10px"></div>
             </section>
 
             <section class="panel">

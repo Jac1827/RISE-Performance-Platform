@@ -3,19 +3,6 @@
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
   const AUTO_IMPORT_SCOPE = "__AUTO__";
-  const DEFAULT_COMMUNITIES = [
-    { name: "Bartram Park", units: 297 },
-    { name: "Baymeadows", units: 331 },
-    { name: "Nocatee", units: 178 },
-    { name: "Doro", units: 247 },
-    { name: "St Augustine", units: null },
-    { name: "Sutton House", units: null },
-    { name: "Viera", units: 166 },
-    { name: "Florence Villa", units: 224 },
-    { name: "Citrus Ridge", units: 222 },
-    { name: "Sereno", units: 320 },
-    { name: "Glen Kernan Park", units: 308 },
-  ];
 
   const FINANCIAL_LINES = [
     { key: "rentalIncome", label: "Rental Income", glCode: "4000", section: "Operating Income" },
@@ -28,187 +15,19 @@
     { key: "turnExpense", label: "Turn Expense", glCode: "5030", section: "Operating Expenses" },
   ];
 
-  const SAMPLE_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04"];
-
-  const SAMPLE_PROPERTIES = [
-    {
-      property: "Harbor Flats",
-      units: 240,
-      budgets: {
-        rentalIncome: 190000,
-        otherIncome: 7000,
-        concessions: -3000,
-        badDebt: -2500,
-        payroll: 33000,
-        utilities: 14000,
-        repairsMaintenance: 12000,
-        turnExpense: 8000,
-      },
-      financialMultipliers: {
-        rentalIncome: [0.997, 1.002, 1.005, 1.008],
-        otherIncome: [1.0, 1.02, 1.01, 1.03],
-        concessions: [1.0, 0.96, 0.91, 0.88],
-        badDebt: [1.0, 0.98, 0.95, 0.91],
-        payroll: [1.01, 1.0, 1.02, 1.01],
-        utilities: [0.98, 1.0, 0.97, 0.99],
-        repairsMaintenance: [0.97, 1.03, 0.98, 0.96],
-        turnExpense: [0.92, 1.0, 0.94, 0.9],
-      },
-      operations: {
-        turns: [6, 5, 5, 4],
-        openWorkOrders: [15, 14, 12, 11],
-        completedWorkOrders: [26, 28, 30, 29],
-        avgMakeReadyDays: [7, 7, 6, 6],
-        payrollHours: [1320, 1310, 1335, 1325],
-        overtimeHours: [18, 16, 14, 12],
-      },
-      leasing: {
-        occupancyPct: [96.2, 96.4, 96.6, 96.8],
-        leasedPct: [96.9, 97.0, 97.2, 97.4],
-        concessionsPct: [2.4, 2.3, 2.2, 2.1],
-        traffic: [46, 48, 47, 48],
-        applications: [18, 19, 18, 19],
-        leases: [12, 13, 12, 13],
-        delinquencyPct: [1.5, 1.4, 1.3, 1.2],
-      },
-    },
-    {
-      property: "Cypress Pointe",
-      units: 220,
-      budgets: {
-        rentalIncome: 175000,
-        otherIncome: 6000,
-        concessions: -4000,
-        badDebt: -3000,
-        payroll: 31000,
-        utilities: 13500,
-        repairsMaintenance: 11000,
-        turnExpense: 9000,
-      },
-      financialMultipliers: {
-        rentalIncome: [0.98, 0.985, 0.99, 0.992],
-        otherIncome: [0.99, 1.0, 1.01, 1.02],
-        concessions: [1.05, 1.08, 1.12, 1.15],
-        badDebt: [1.05, 1.08, 1.1, 1.12],
-        payroll: [1.02, 1.04, 1.08, 1.09],
-        utilities: [1.01, 1.03, 1.04, 1.05],
-        repairsMaintenance: [1.0, 1.04, 1.08, 1.1],
-        turnExpense: [1.05, 1.07, 1.1, 1.12],
-      },
-      operations: {
-        turns: [9, 10, 11, 12],
-        openWorkOrders: [21, 24, 26, 29],
-        completedWorkOrders: [31, 33, 36, 38],
-        avgMakeReadyDays: [8, 9, 10, 10],
-        payrollHours: [1280, 1298, 1315, 1322],
-        overtimeHours: [24, 28, 34, 37],
-      },
-      leasing: {
-        occupancyPct: [93.8, 93.4, 93.0, 92.8],
-        leasedPct: [95.0, 94.7, 94.3, 94.1],
-        concessionsPct: [3.8, 4.0, 4.3, 4.5],
-        traffic: [55, 58, 59, 61],
-        applications: [18, 19, 20, 20],
-        leases: [11, 11, 12, 12],
-        delinquencyPct: [2.8, 3.0, 3.1, 3.3],
-      },
-    },
-    {
-      property: "Lake Vista",
-      units: 205,
-      budgets: {
-        rentalIncome: 160000,
-        otherIncome: 5500,
-        concessions: -3500,
-        badDebt: -2800,
-        payroll: 29500,
-        utilities: 15000,
-        repairsMaintenance: 11500,
-        turnExpense: 8500,
-      },
-      financialMultipliers: {
-        rentalIncome: [0.99, 0.995, 1.0, 1.005],
-        otherIncome: [1.0, 1.01, 1.0, 1.02],
-        concessions: [1.0, 1.02, 1.05, 1.08],
-        badDebt: [1.0, 1.03, 1.05, 1.08],
-        payroll: [1.0, 1.01, 1.03, 1.05],
-        utilities: [1.08, 1.12, 1.15, 1.18],
-        repairsMaintenance: [1.04, 1.08, 1.12, 1.18],
-        turnExpense: [0.98, 1.0, 1.04, 1.06],
-      },
-      operations: {
-        turns: [7, 8, 8, 9],
-        openWorkOrders: [18, 19, 21, 23],
-        completedWorkOrders: [29, 30, 32, 34],
-        avgMakeReadyDays: [7, 8, 8, 9],
-        payrollHours: [1185, 1195, 1210, 1220],
-        overtimeHours: [20, 22, 24, 26],
-      },
-      leasing: {
-        occupancyPct: [94.8, 94.9, 95.0, 95.1],
-        leasedPct: [95.8, 96.0, 96.2, 96.4],
-        concessionsPct: [3.0, 3.1, 3.2, 3.4],
-        traffic: [42, 43, 44, 45],
-        applications: [15, 15, 16, 16],
-        leases: [9, 10, 10, 10],
-        delinquencyPct: [2.0, 2.1, 2.2, 2.3],
-      },
-    },
-    {
-      property: "North Terrace",
-      units: 198,
-      budgets: {
-        rentalIncome: 150000,
-        otherIncome: 5000,
-        concessions: -4500,
-        badDebt: -3500,
-        payroll: 28500,
-        utilities: 14500,
-        repairsMaintenance: 10500,
-        turnExpense: 7800,
-      },
-      financialMultipliers: {
-        rentalIncome: [0.93, 0.91, 0.89, 0.87],
-        otherIncome: [0.96, 0.95, 0.93, 0.9],
-        concessions: [1.2, 1.28, 1.38, 1.52],
-        badDebt: [1.25, 1.35, 1.45, 1.6],
-        payroll: [1.08, 1.12, 1.18, 1.24],
-        utilities: [1.06, 1.09, 1.11, 1.12],
-        repairsMaintenance: [1.12, 1.18, 1.24, 1.32],
-        turnExpense: [1.2, 1.28, 1.36, 1.42],
-      },
-      operations: {
-        turns: [12, 14, 16, 18],
-        openWorkOrders: [30, 33, 37, 41],
-        completedWorkOrders: [42, 46, 54, 60],
-        avgMakeReadyDays: [10, 11, 13, 15],
-        payrollHours: [1210, 1240, 1290, 1350],
-        overtimeHours: [30, 36, 44, 52],
-      },
-      leasing: {
-        occupancyPct: [91.8, 91.0, 90.2, 89.4],
-        leasedPct: [93.0, 92.2, 91.4, 90.7],
-        concessionsPct: [5.1, 5.6, 6.2, 6.8],
-        traffic: [58, 56, 54, 52],
-        applications: [17, 17, 17, 17],
-        leases: [9, 9, 8, 8],
-        delinquencyPct: [4.2, 4.7, 5.1, 5.6],
-      },
-    },
-  ];
 
   const FILE_SPECS = {
     financial: {
       label: "Financial",
       required: {
-        property: ["property", "propertyname", "community", "asset", "assetname", "site"],
-        period: ["period", "month", "asof", "asofmonth", "reportingmonth", "date"],
-        section: ["section", "category", "accountsection", "finsection"],
         lineItem: ["lineitem", "accountname", "name", "description", "accountdescription"],
         actual: ["actual", "actualamount", "ytdactual", "mtdactual"],
         budget: ["budget", "budgetamount", "ytdbudget", "mtdbudget"],
       },
       recommended: {
+        property: ["property", "propertyname", "community", "asset", "assetname", "site"],
+        period: ["period", "month", "asof", "asofmonth", "reportingmonth", "date"],
+        section: ["section", "category", "accountsection", "finsection"],
         glCode: ["gl", "glcode", "account", "accountnumber", "glaccount"],
         annualBudget: ["annualbudget", "fybudget", "fullyearbudget", "annualplan", "budgetannual"],
       },
@@ -335,6 +154,7 @@
     selectedPeriod: null,
     selectedProperty: null,
     manualPeriod: defaultManualPeriodSelection(),
+    pendingFinancial: null,
     financialImport: {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
@@ -373,9 +193,9 @@
     exportSummary: document.getElementById("export-summary"),
     exportReport: document.getElementById("export-report"),
     exportPptx: document.getElementById("export-pptx"),
+    applyFinancialUpload: document.getElementById("apply-financial-upload"),
+    clearFinancialStaging: document.getElementById("clear-financial-staging"),
     syncDashboardHistory: document.getElementById("sync-dashboard-history"),
-    syncOperations: document.getElementById("sync-operations"),
-    syncLeasing: document.getElementById("sync-leasing"),
   };
 
   function normalizeKey(value) {
@@ -487,8 +307,7 @@
 
   function getCommunityCatalog() {
     const saved = loadDashboardCommunityStore();
-    const merged = new Map(DEFAULT_COMMUNITIES.map((community) => [community.name, { ...community }]));
-
+    const merged = new Map();
     Object.entries(saved).forEach(([name, record]) => {
       const trimmedName = String(name ?? "").trim();
       if (!trimmedName) {
@@ -1168,111 +987,6 @@
     return column ? row[column] : "";
   }
 
-  function generateSamplePack() {
-    const financialRows = [];
-    const operationsRows = [];
-    const leasingRows = [];
-
-    const actualLookup = new Map();
-
-    const getActual = (propertyName, lineKey, monthIndex) => {
-      const lookupKey = `${propertyName}::${lineKey}::${monthIndex}`;
-      return actualLookup.get(lookupKey);
-    };
-
-    for (const property of SAMPLE_PROPERTIES) {
-      for (let monthIndex = 0; monthIndex < SAMPLE_MONTHS.length; monthIndex += 1) {
-        const period = SAMPLE_MONTHS[monthIndex];
-
-        for (const line of FINANCIAL_LINES) {
-          const monthlyBudget = property.budgets[line.key];
-          const actual = Math.round(monthlyBudget * property.financialMultipliers[line.key][monthIndex]);
-          actualLookup.set(`${property.property}::${line.key}::${monthIndex}`, actual);
-
-          financialRows.push({
-            property: property.property,
-            period,
-            section: line.section,
-            gl_code: line.glCode,
-            line_item: line.label,
-            actual,
-            budget: monthlyBudget,
-            annual_budget: monthlyBudget * 12,
-          });
-        }
-
-        operationsRows.push({
-          property: property.property,
-          period,
-          units: property.units,
-          turns: property.operations.turns[monthIndex],
-          open_work_orders: property.operations.openWorkOrders[monthIndex],
-          completed_work_orders: property.operations.completedWorkOrders[monthIndex],
-          avg_make_ready_days: property.operations.avgMakeReadyDays[monthIndex],
-          payroll_hours: property.operations.payrollHours[monthIndex],
-          overtime_hours: property.operations.overtimeHours[monthIndex],
-          payroll_cost: getActual(property.property, "payroll", monthIndex),
-          utilities_cost: getActual(property.property, "utilities", monthIndex),
-          rm_cost: getActual(property.property, "repairsMaintenance", monthIndex),
-        });
-
-        leasingRows.push({
-          property: property.property,
-          period,
-          units: property.units,
-          occupancy_pct: property.leasing.occupancyPct[monthIndex],
-          leased_pct: property.leasing.leasedPct[monthIndex],
-          concessions_pct: property.leasing.concessionsPct[monthIndex],
-          traffic: property.leasing.traffic[monthIndex],
-          applications: property.leasing.applications[monthIndex],
-          leases: property.leasing.leases[monthIndex],
-          delinquency_pct: property.leasing.delinquencyPct[monthIndex],
-        });
-      }
-    }
-
-    return {
-      financial: toCsv(
-        ["property", "period", "section", "gl_code", "line_item", "actual", "budget", "annual_budget"],
-        financialRows,
-      ),
-      operations: toCsv(
-        [
-          "property",
-          "period",
-          "units",
-          "turns",
-          "open_work_orders",
-          "completed_work_orders",
-          "avg_make_ready_days",
-          "payroll_hours",
-          "overtime_hours",
-          "payroll_cost",
-          "utilities_cost",
-          "rm_cost",
-        ],
-        operationsRows,
-      ),
-      leasing: toCsv(
-        [
-          "property",
-          "period",
-          "units",
-          "occupancy_pct",
-          "leased_pct",
-          "concessions_pct",
-          "traffic",
-          "applications",
-          "leases",
-          "delinquency_pct",
-        ],
-        leasingRows,
-      ),
-    };
-  }
-
-  const samplePack = generateSamplePack();
-
   function parseDataset(type, text, fileName, options = {}) {
     const scopeOverride =
       type === "financial" && options.scopeOverride && options.scopeOverride !== AUTO_IMPORT_SCOPE
@@ -1283,10 +997,23 @@
       required: { ...(FILE_SPECS[type].required || {}) },
       recommended: { ...(FILE_SPECS[type].recommended || {}) },
     };
-    if (scopeOverride) {
-      delete spec.required.property;
+    if (type === "financial" && !scopeOverride) {
+      // If the user didn't choose a scope override, the file must supply an entity name.
+      spec.required.property = FILE_SPECS.financial.recommended.property;
     }
-    const rows = parseCsv(text);
+    const rawRows = parseCsv(text);
+    const headerRowIndex = (() => {
+      if (!rawRows.length) return -1;
+      // Some exports include preamble rows (title/company/period) before headers.
+      for (let i = 0; i < rawRows.length; i += 1) {
+        const candidate = rawRows[i];
+        if (!candidate || candidate.length < 2) continue;
+        const info = detectFields(candidate, spec);
+        if (!info.missingRequired.length) return i;
+      }
+      return 0;
+    })();
+    const rows = headerRowIndex >= 0 ? rawRows.slice(headerRowIndex) : rawRows;
 
     if (!rows.length) {
       return {
@@ -1309,6 +1036,7 @@
     const records = [];
 
     if (!fieldInfo.missingRequired.length) {
+      let currentSection = "";
       for (const rowCells of rows.slice(1)) {
         const row = {};
         headers.forEach((header, index) => {
@@ -1323,8 +1051,23 @@
             parsePeriod(options.period) ||
             state.selectedPeriod ||
             state.manualPeriod;
-          const section = getField(row, fieldInfo.detected, "section");
-          const lineItem = getField(row, fieldInfo.detected, "lineItem");
+          const rawSection = getField(row, fieldInfo.detected, "section");
+          const rawLineItem = getField(row, fieldInfo.detected, "lineItem");
+          const glCodeValue = getField(row, fieldInfo.detected, "glCode").trim();
+          const sectionHeaderCandidate = rawSection || rawLineItem;
+          const hasNumeric =
+            parseAmount(getField(row, fieldInfo.detected, "actual")) != null ||
+            parseAmount(getField(row, fieldInfo.detected, "budget")) != null;
+
+          // For "Income Statement - Budget vs Actual" style exports, section headers appear as
+          // rows with no account code and no numeric values.
+          if (!glCodeValue && sectionHeaderCandidate && !hasNumeric) {
+            currentSection = String(sectionHeaderCandidate).trim();
+            continue;
+          }
+
+          const section = String(rawSection || currentSection || "Uncategorized").trim();
+          const lineItem = String(rawLineItem).trim();
           const actual = parseAmount(getField(row, fieldInfo.detected, "actual"));
           const budget = parseAmount(getField(row, fieldInfo.detected, "budget"));
 
@@ -1341,7 +1084,7 @@
             period,
             section: section.trim(),
             lineItem: lineItem.trim(),
-            glCode: getField(row, fieldInfo.detected, "glCode").trim(),
+            glCode: glCodeValue,
             actual: actual ?? 0,
             budget: budget ?? 0,
             annualBudget,
@@ -1490,6 +1233,7 @@
     state.selectedPeriod = null;
     state.selectedProperty = null;
     state.layer = "financial";
+    state.pendingFinancial = null;
     state.financialImport = {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
@@ -1510,6 +1254,7 @@
       layer: state.layer,
       selectedPeriod: state.selectedPeriod,
       selectedProperty: state.selectedProperty,
+      manualPeriod: state.manualPeriod,
       financialImport: state.financialImport,
       datasets: Object.fromEntries(
         Object.entries(state.datasets).map(([key, dataset]) => [
@@ -1540,6 +1285,7 @@
       state.layer = parsed.layer || "financial";
       state.selectedPeriod = parsed.selectedPeriod || null;
       state.selectedProperty = parsed.selectedProperty || null;
+      state.manualPeriod = parsePeriod(parsed.manualPeriod) || state.manualPeriod;
       state.financialImport = {
         scope: parsed.financialImport?.scope || AUTO_IMPORT_SCOPE,
         mode: parsed.financialImport?.mode || "merge",
@@ -2317,11 +2063,37 @@
     const dataset = state.datasets[type];
     const chip = document.getElementById(`${type}-chip`);
     const meta = document.getElementById(`${type}-meta`);
+    if (!chip || !meta) {
+      return;
+    }
+
+    if (type === "financial" && state.pendingFinancial?.dataset) {
+      const staged = state.pendingFinancial.dataset;
+      const coverage = getDatasetCoverage(staged);
+      if (chip) {
+        chip.className = `chip warn`;
+        chip.textContent = coverage.recordCount ? `${formatNumber(coverage.recordCount)} staged` : "Staged";
+      }
+      if (meta) {
+        meta.innerHTML = `
+          <div class="status-line">
+            <strong>Staged upload ready</strong><br />
+            Files: ${escapeHtml((state.pendingFinancial.files || []).slice(0, 4).join(", ") || "—")}${
+              (state.pendingFinancial.files || []).length > 4 ? ` (+${formatNumber((state.pendingFinancial.files || []).length - 4)} more)` : ""
+            }<br />
+            Records staged: ${formatNumber(coverage.recordCount)}<br />
+            Target period override: <span class="mono">${escapeHtml(state.pendingFinancial.options?.period || state.manualPeriod)}</span><br />
+            Scope: <strong>${escapeHtml(getFinancialImportScopeLabel(state.pendingFinancial.options?.scopeOverride))}</strong> · Mode: <strong>${escapeHtml(getFinancialImportModeLabel(state.pendingFinancial.options?.replaceMode))}</strong>
+          </div>
+        `;
+      }
+      return;
+    }
 
     if (!dataset) {
       chip.className = "chip";
       chip.textContent = "Awaiting file";
-      meta.innerHTML = `<div class="status-line">Upload a ${FILE_SPECS[type].label.toLowerCase()} CSV, sync the dashboard history, or load the sample file.</div>`;
+      meta.innerHTML = `<div class="status-line">Upload a ${FILE_SPECS[type].label.toLowerCase()} CSV or sync the dashboard history to activate this section.</div>`;
       return;
     }
 
@@ -2438,7 +2210,7 @@
     if (!view) {
       dom.snapshotGrid.innerHTML = `
         <div class="empty-state" style="grid-column: 1 / -1">
-          Load the sample pack or import a financial CSV to start building the portfolio view.
+          Import a financial CSV to start building the portfolio view.
         </div>
       `;
       return;
@@ -2939,10 +2711,89 @@
     dom.exportPptx.disabled = !enabled;
   }
 
+  function applyFinancialRecordsToOpsStore(records = []) {
+    if (!Array.isArray(records) || records.length === 0) {
+      return;
+    }
+    const store = loadDashboardCommunityStore();
+    const updatedAt = new Date().toISOString();
+
+    for (const record of records) {
+      const property = String(record?.property ?? "").trim();
+      const period = String(record?.period ?? "").trim();
+      if (!property || !period) continue;
+
+      if (property === "RISE Corporate") {
+        continue;
+      }
+
+      const existing = store[property];
+      if (!existing) continue;
+      const existingLedger = existing.financialLedger && typeof existing.financialLedger === "object" ? existing.financialLedger : {};
+      const periodRows = Array.isArray(existingLedger[period]) ? existingLedger[period] : [];
+      periodRows.push({
+        section: String(record.section ?? ""),
+        lineItem: String(record.lineItem ?? ""),
+        glCode: String(record.glCode ?? ""),
+        actual: Number(record.actual ?? 0),
+        budget: Number(record.budget ?? 0),
+        annualBudget: Number(record.annualBudget ?? 0),
+        updatedAt,
+      });
+      existingLedger[period] = periodRows;
+      store[property] = { ...existing, financialLedger: existingLedger, financialUpdatedAt: updatedAt };
+    }
+
+    try {
+      window.localStorage.setItem(COMMUNITY_STORAGE_KEY, JSON.stringify(store));
+    } catch (_error) {}
+  }
+
+  function applyStagedFinancialUpload() {
+    const staged = state.pendingFinancial?.dataset;
+    if (!staged || !Array.isArray(staged.records) || staged.records.length === 0) {
+      window.alert("No staged financial upload found. Upload a CSV first.");
+      return;
+    }
+
+    const options = state.pendingFinancial.options || {};
+    const replaceMode = options.replaceMode || "merge";
+    const scopeOverride = options.scopeOverride || AUTO_IMPORT_SCOPE;
+
+    let baseRecords = state.datasets.financial?.records || [];
+    if (replaceMode === "replace_all") {
+      baseRecords = [];
+    } else if (replaceMode === "replace_scope") {
+      baseRecords = pruneFinancialRecords(baseRecords, scopeOverride, staged.records);
+    }
+
+    const mergedRecords = mergeDatasetRecords("financial", baseRecords, staged.records);
+    state.datasets.financial = {
+      type: "financial",
+      fileName: staged.fileName || "Financial CSV",
+      sourceKind: "file",
+      sourceText: "",
+      records: mergedRecords,
+      diagnostics: {
+        parsedRows: mergedRecords.length,
+        fileRows: mergedRecords.length,
+        missingRequired: [],
+        missingRecommended: [],
+        detected: { source: "staged" },
+      },
+    };
+
+    applyFinancialRecordsToOpsStore(staged.records);
+
+    state.pendingFinancial = null;
+    persistState();
+    render();
+  }
+
   function render() {
     renderCrosswalkLibrary();
     renderFinancialImportWorkspace();
-    ["financial", "operations", "leasing"].forEach(renderUploadMeta);
+    ["financial"].forEach(renderUploadMeta);
 
     const view = computeViewModel();
     renderWorkspaceBridge();
@@ -2958,6 +2809,13 @@
     renderCrosswalkContent(view);
     renderBoardSummary(view);
     updateExportButtons(Boolean(view));
+    if (dom.applyFinancialUpload) {
+      const hasStaged = Boolean(state.pendingFinancial?.dataset?.records?.length);
+      dom.applyFinancialUpload.disabled = !hasStaged;
+    }
+    if (dom.clearFinancialStaging) {
+      dom.clearFinancialStaging.disabled = !Boolean(state.pendingFinancial);
+    }
 
     document.querySelectorAll(".tab-btn").forEach((button) => {
       button.classList.toggle("active", button.dataset.layer === state.layer);
@@ -3369,27 +3227,54 @@
       return;
     }
 
-    const scopeOverride =
-      type === "financial" ? dom.financialImportScope?.value || state.financialImport.scope || AUTO_IMPORT_SCOPE : AUTO_IMPORT_SCOPE;
-    const selectedReplaceMode =
-      type === "financial" ? dom.financialImportMode?.value || state.financialImport.mode || "merge" : "merge";
-    let currentReplaceMode = selectedReplaceMode;
+    if (type !== "financial") {
+      return;
+    }
+
+    const scopeOverride = dom.financialImportScope?.value || state.financialImport.scope || AUTO_IMPORT_SCOPE;
+    const replaceMode = dom.financialImportMode?.value || state.financialImport.mode || "merge";
     const manualPeriodOverride = dom.manualPeriodInput?.value || state.manualPeriod;
+
+    let staged = state.pendingFinancial?.dataset || null;
+    const stagedFiles = state.pendingFinancial?.files ? [...state.pendingFinancial.files] : [];
+    let stagedRowCount = state.pendingFinancial?.rowCount || 0;
 
     for (const file of fileList) {
       const text = await file.text();
-      const shouldMerge =
-        Boolean(state.datasets[type]?.records?.length) &&
-        (type === "financial" ? currentReplaceMode === "merge" : state.datasets[type]?.sourceKind === "file");
-
-      setDataset(type, text, file.name, "file", {
-        merge: shouldMerge,
+      const parsed = parseDataset("financial", text, file.name, {
         scopeOverride,
-        replaceMode: type === "financial" ? currentReplaceMode : "merge",
+        replaceMode,
         period: manualPeriodOverride,
       });
-      currentReplaceMode = "merge";
+      staged = staged
+        ? {
+            ...parsed,
+            fileName: `${staged.fileName || "staged"} + ${parsed.fileName || file.name}`,
+            sourceKind: "staged",
+            records: mergeDatasetRecords("financial", staged.records || [], parsed.records || []),
+            diagnostics: {
+              ...(parsed.diagnostics || {}),
+              parsedRows: (staged.records?.length || 0) + (parsed.records?.length || 0),
+              fileRows: (staged.records?.length || 0) + (parsed.records?.length || 0),
+            },
+          }
+        : {
+            ...parsed,
+            sourceKind: "staged",
+          };
+      stagedFiles.push(file.name);
+      stagedRowCount += parsed.records?.length || 0;
     }
+
+    state.pendingFinancial = {
+      dataset: staged,
+      files: stagedFiles,
+      rowCount: stagedRowCount,
+      options: { scopeOverride, replaceMode, period: manualPeriodOverride },
+      stagedAt: new Date().toISOString(),
+    };
+    persistState();
+    render();
   }
 
   function bindDropzone(type) {
@@ -3425,8 +3310,6 @@
     }
 
     bindDropzone("financial");
-    bindDropzone("operations");
-    bindDropzone("leasing");
 
     [dom.openFinancialImport, dom.openFinancialImportHeader].filter(Boolean).forEach((button) => {
       button.addEventListener("click", () => dom.financialInput?.click());
@@ -3444,25 +3327,9 @@
       render();
     });
 
-    document.getElementById("load-sample-pack").addEventListener("click", () => {
-      setDataset("financial", samplePack.financial, "sample-financial.csv", "sample");
-      setDataset("operations", samplePack.operations, "sample-operations.csv", "sample");
-      setDataset("leasing", samplePack.leasing, "sample-leasing.csv", "sample");
-    });
-
     document.getElementById("clear-all").addEventListener("click", clearState);
     dom.syncDashboardHistory.addEventListener("click", () => {
       syncDashboardDriverDatasets();
-      persistState();
-      render();
-    });
-    dom.syncOperations.addEventListener("click", () => {
-      state.datasets.operations = buildDashboardDataset("operations");
-      persistState();
-      render();
-    });
-    dom.syncLeasing.addEventListener("click", () => {
-      state.datasets.leasing = buildDashboardDataset("leasing");
       persistState();
       render();
     });
@@ -3481,18 +3348,11 @@
       }
     });
 
-    document.querySelectorAll("[data-sample]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const type = button.dataset.sample;
-        setDataset(type, samplePack[type], `sample-${type}.csv`, "sample");
-      });
-    });
-
-    document.querySelectorAll("[data-download-sample]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const type = button.dataset.downloadSample;
-        downloadBlob(`sample-${type}.csv`, samplePack[type], "text/csv");
-      });
+    dom.applyFinancialUpload?.addEventListener("click", () => applyStagedFinancialUpload());
+    dom.clearFinancialStaging?.addEventListener("click", () => {
+      state.pendingFinancial = null;
+      persistState();
+      render();
     });
 
     document.querySelectorAll(".tab-btn").forEach((button) => {
