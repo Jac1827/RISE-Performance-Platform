@@ -877,6 +877,39 @@ function managerDisplayName(employee){
   return managerName(employee.managerId) || employee.managerName || '';
 }
 
+function employeeManagerCandidates(){
+  return sortEmployeesByName((STATE.employees || []).filter(employee =>
+    employee
+    && !isEmployeeTerminated(employee)
+    && normalizeComparable(employee.role).includes('manager')
+  )).map(employee => ({id:`emp:${employee.id}`, name: employee.name}));
+}
+
+function primaryManagerChoices(){
+  const seen = new Set();
+  const merged = [];
+
+  [...managerUsers(), ...employeeManagerCandidates()].forEach(item => {
+    const id = String(item && item.id || '').trim();
+    const name = String(item && item.name || '').trim();
+    if(!id || !name) return;
+    if(seen.has(id)) return;
+    seen.add(id);
+    merged.push({id, name});
+  });
+
+  return sortedUsers(merged);
+}
+
+function primaryManagerSelectionValue(employee){
+  if(!employee) return '';
+  if(employee.managerId) return employee.managerId;
+  const target = normalizeComparable(employee.managerName);
+  if(!target) return '';
+  const match = employeeManagerCandidates().find(candidate => normalizeComparable(candidate.name) === target);
+  return match ? match.id : '';
+}
+
 function regionalManagerDisplayName(employee){
   if(!employee) return '';
   return managerName(employee.regionalManagerId) || employee.regionalManagerName || '';
@@ -3082,7 +3115,7 @@ function renderEmployees(){
             <div><label>Role</label><input id="emp-role" list="role-options" placeholder="Leasing Professional"></div>
           </div>
           <div class="form-grid cols-2" style="margin-top:12px">
-            <div><label>Manager</label><select id="emp-manager" ${isAdmin ? '' : 'disabled'}>${renderManagerOptions(defaultManagerId, isAdmin ? 'Select manager' : 'Assigned to you', isAdmin ? managerUsers() : assignableManagers())}</select></div>
+            <div><label>Manager</label><select id="emp-manager" ${isAdmin ? '' : 'disabled'}>${renderManagerOptions(defaultManagerId, isAdmin ? 'Select manager' : 'Assigned to you', isAdmin ? primaryManagerChoices() : assignableManagers())}</select></div>
             <div><label>Area / region</label><select id="emp-region">
               <option value="">Select area</option>
               ${Object.entries(REGIONS).map(([key,value]) => `<option value="${key}" ${defaultRegion === key ? 'selected' : ''}>${value.name}</option>`).join('')}
@@ -3135,13 +3168,13 @@ function renderEmployees(){
             </div>
             <div>
               <label>Match current manager</label>
-              <select id="bulk-match-manager">${renderManagerOptions('', 'Any current manager', managerUsers())}</select>
+              <select id="bulk-match-manager">${renderManagerOptions('', 'Any current manager', primaryManagerChoices())}</select>
             </div>
           </div>
           <div class="form-grid cols-2" style="margin-top:12px">
             <div>
               <label>Set primary manager</label>
-              <select id="bulk-set-manager">${renderManagerOptions('', 'Leave unchanged', managerUsers())}</select>
+              <select id="bulk-set-manager">${renderManagerOptions('', 'Leave unchanged', primaryManagerChoices())}</select>
             </div>
             <div>
               <label>Set regional alert owner</label>
@@ -3241,7 +3274,7 @@ function renderEmployees(){
                       </td>
                       <td>
                         <select onchange="updateEmployeeManager('${employee.id}', this.value)" ${isAdmin ? '' : 'disabled'}>
-                          ${renderManagerOptions(employee.managerId || '', isAdmin ? 'Unassigned' : (managerDisplayName(employee) || 'Assigned to you'), isAdmin ? managerUsers() : assignableManagers(), employee.managerId ? '' : (managerDisplayName(employee) || 'Unlinked manager mapping'))}
+                          ${renderManagerOptions(primaryManagerSelectionValue(employee), isAdmin ? 'Unassigned' : (managerDisplayName(employee) || 'Assigned to you'), isAdmin ? primaryManagerChoices() : assignableManagers(), primaryManagerSelectionValue(employee) ? '' : (managerDisplayName(employee) || 'Unlinked manager mapping'))}
                         </select>
                       </td>
                       <td>
@@ -3603,8 +3636,16 @@ function updateEmployeeManager(id, managerId){
   const employee = STATE.employees.find(item => item.id === id);
   if(!employee || !canUserAccessEmployee(STATE.currentUser, employee)) return;
   if(STATE.currentUser.role !== 'admin') return;
-  employee.managerId = String(managerId || '').trim();
-  employee.managerName = employee.managerId ? managerName(employee.managerId) : '';
+  const selected = String(managerId || '').trim();
+  if(selected.startsWith('emp:')){
+    const empId = selected.slice(4);
+    const managerEmployee = (STATE.employees || []).find(item => item && item.id === empId);
+    employee.managerId = '';
+    employee.managerName = managerEmployee ? managerEmployee.name : '';
+  }else{
+    employee.managerId = selected;
+    employee.managerName = employee.managerId ? managerName(employee.managerId) : '';
+  }
   saveState();
   render();
 }
@@ -3782,14 +3823,30 @@ function applyBulkAssignments(){
     if(isEmployeeTerminated(employee)) return false;
     if(matchRegion && employee.region !== matchRegion) return false;
     if(matchCommunity && normalizeComparable(employee.community) !== normalizeComparable(matchCommunity)) return false;
-    if(matchManagerId && employee.managerId !== matchManagerId) return false;
+    if(matchManagerId){
+      if(matchManagerId.startsWith('emp:')){
+        const empId = matchManagerId.slice(4);
+        const managerEmployee = (STATE.employees || []).find(item => item && item.id === empId);
+        if(!managerEmployee || normalizeComparable(employee.managerName) !== normalizeComparable(managerEmployee.name)) return false;
+      }else if(employee.managerId !== matchManagerId){
+        return false;
+      }
+    }
     return true;
   });
 
   matches.forEach(employee => {
     if(setManagerId){
-      employee.managerId = setManagerId;
-      employee.managerName = managerName(setManagerId);
+      const selected = String(setManagerId || '').trim();
+      if(selected.startsWith('emp:')){
+        const empId = selected.slice(4);
+        const managerEmployee = (STATE.employees || []).find(item => item && item.id === empId);
+        employee.managerId = '';
+        employee.managerName = managerEmployee ? managerEmployee.name : '';
+      }else{
+        employee.managerId = selected;
+        employee.managerName = managerName(selected);
+      }
     }
     if(setRegionalManagerId){
       employee.regionalManagerId = setRegionalManagerId;
