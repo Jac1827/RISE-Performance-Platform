@@ -532,6 +532,7 @@ function makeReportFilters(){
 function makeEmployeeRosterFilters(){
   return {
     search: '',
+    role: '',
     managerId: '',
     regionalManagerId: '',
     region: '',
@@ -832,11 +833,18 @@ function riseWordmark(height){
 }
 
 function sortedUsers(users){
-  return [...users].sort((left, right) => left.name.localeCompare(right.name));
+  return [...users].sort((left, right) =>
+    normalizeComparable(left && left.name).localeCompare(normalizeComparable(right && right.name))
+      || String(left && left.id || '').localeCompare(String(right && right.id || ''))
+  );
 }
 
 function managerUsers(){
-  return sortedUsers(STATE.users.filter(user => user.role === 'manager' || user.role === 'admin'));
+  return sortedUsers(STATE.users.filter(user => {
+    if(!user) return false;
+    if(user.role === 'manager' || user.role === 'admin') return true;
+    return normalizeComparable(user.name).includes('manager');
+  }));
 }
 
 function communityChoices(){
@@ -905,18 +913,20 @@ function employeeRosterFilters(){
 
 function hasEmployeeRosterFilters(){
   const filters = employeeRosterFilters();
-  return Boolean(filters.search || filters.managerId || filters.regionalManagerId || filters.region || filters.community || filters.status !== 'all');
+  return Boolean(filters.search || filters.role || filters.managerId || filters.regionalManagerId || filters.region || filters.community || filters.status !== 'all');
 }
 
 function filteredRosterEmployees(){
   const filters = employeeRosterFilters();
   const search = normalizeComparable(filters.search);
+  const roleSearch = normalizeComparable(filters.role);
   const community = normalizeComparable(filters.community);
   return sortedVisibleEmployees().filter(employee => {
     if(filters.managerId && employee.managerId !== filters.managerId) return false;
     if(filters.regionalManagerId && employee.regionalManagerId !== filters.regionalManagerId) return false;
     if(filters.region && employee.region !== filters.region) return false;
     if(community && !normalizeComparable(employee.community).includes(community)) return false;
+    if(roleSearch && !normalizeComparable(employee.role).includes(roleSearch)) return false;
     if(filters.status === 'active' && isEmployeeTerminated(employee)) return false;
     if(filters.status === 'terminated' && !isEmployeeTerminated(employee)) return false;
     if(search){
@@ -944,7 +954,7 @@ function assignableManagers(){
 }
 
 function renderManagerOptions(selectedId, blankLabel, list, fallbackSelectedLabel){
-  const users = list || assignableManagers();
+  const users = sortedUsers(list || assignableManagers());
   const selectedExists = selectedId && users.some(user => user.id === selectedId);
   const options = [
     `<option value="" ${!selectedExists && fallbackSelectedLabel ? 'selected' : ''}>${escapeHtml(fallbackSelectedLabel || blankLabel || 'Select manager')}</option>`,
@@ -3011,6 +3021,7 @@ async function handlePlanSourceUpload(event){
 function applyEmployeeRosterFilters(){
   UI.employeeRosterFilters = {
     search: String(document.getElementById('roster-filter-search').value || '').trim(),
+    role: String(document.getElementById('roster-filter-role').value || '').trim(),
     managerId: String(document.getElementById('roster-filter-manager').value || ''),
     regionalManagerId: String(document.getElementById('roster-filter-regional-manager').value || ''),
     region: String(document.getElementById('roster-filter-region').value || ''),
@@ -3163,6 +3174,10 @@ function renderEmployees(){
               <div>
                 <label>Search</label>
                 <input id="roster-filter-search" value="${escapeHtml(rosterFilters.search)}" placeholder="Name, email, employee #, role...">
+              </div>
+              <div>
+                <label>Role</label>
+                <input id="roster-filter-role" value="${escapeHtml(rosterFilters.role || '')}" list="role-options" placeholder="All roles">
               </div>
               <div>
                 <label>Manager</label>
