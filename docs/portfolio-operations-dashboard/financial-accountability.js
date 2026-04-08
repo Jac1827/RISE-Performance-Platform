@@ -592,11 +592,23 @@
         diagnostics: dataset.diagnostics || null,
       },
     };
-    window.localStorage.setItem(FINANCIAL_HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    try {
+      window.localStorage.setItem(FINANCIAL_HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    } catch (_error) {
+      // Storage quota errors should not prevent the UI from updating.
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message:
+          "Could not save the financial ledger into local stored history because browser storage is full. Clear stored history and try again.",
+      };
+    }
   }
 
   function clearFinancialHistoryStore() {
-    window.localStorage.removeItem(FINANCIAL_HISTORY_STORAGE_KEY);
+    try {
+      window.localStorage.removeItem(FINANCIAL_HISTORY_STORAGE_KEY);
+    } catch (_error) {}
   }
 
   function populateFinancialImportScopeOptions() {
@@ -1546,7 +1558,17 @@
       ),
     };
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (_error) {
+      // Quota errors would otherwise prevent apply/render from completing.
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message:
+          "Could not save dashboard state because browser storage is full. Clear stored history or remove older uploads, then retry Apply To Ledger.",
+      };
+    }
   }
 
   function restoreState() {
@@ -2375,6 +2397,17 @@
     const modeValue = dom.financialImportMode?.value || state.financialImport.mode || "merge";
     const periodOverride = getFinancialPeriodOverride(state.financialImport);
     const coverage = getDatasetCoverage(state.datasets.financial);
+    const allowedEntities = (() => {
+      const allowed = new Set(getCommunityCatalog().map((community) => community.name));
+      allowed.add("RISE Corporate");
+      return allowed;
+    })();
+    const filteredCoverageProperties = coverage.properties.filter((property) => allowedEntities.has(property));
+    const filteredCoverage = {
+      ...coverage,
+      entityCount: filteredCoverageProperties.length,
+      properties: filteredCoverageProperties,
+    };
     const scopeLabel = getFinancialImportScopeLabel(scopeValue);
     const modeLabel = getFinancialImportModeLabel(modeValue);
     const storedHistory = loadFinancialHistoryStore();
@@ -2390,8 +2423,12 @@
     if (dom.financialImportSummary) {
       const notice = state.lastFinancialApplyNotice;
       const noticeHtml = notice?.message
-        ? `<div style="margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--green-soft);border:1px solid #c8dcae;color:var(--green);font-size:0.78rem">
-            <strong>Confirmed:</strong> ${escapeHtml(notice.message)}
+        ? `<div style="margin:10px 0 0;padding:10px 12px;border-radius:12px;background:${
+            notice.kind === "error" ? "var(--red-soft)" : "var(--green-soft)"
+          };border:1px solid ${notice.kind === "error" ? "#e6c8c8" : "#c8dcae"};color:${
+            notice.kind === "error" ? "var(--red)" : "var(--green)"
+          };font-size:0.78rem">
+            <strong>${notice.kind === "error" ? "Could not apply:" : "Confirmed:"}</strong> ${escapeHtml(notice.message)}
             <span style="color:var(--muted);margin-left:8px">(${escapeHtml(formatStoredTimestamp(notice.at))})</span>
           </div>`
         : "";
@@ -2402,8 +2439,8 @@
             periodOverride
               ? ` with the upload period forced to <span class="mono">${escapeHtml(periodOverride)}</span>`
               : " using periods from the CSV"
-          }. Current ledger covers <strong>${formatNumber(coverage.entityCount)}</strong> entities from <span class="mono">${escapeHtml(
-            coverage.periodStart || "--",
+          }. Current ledger covers <strong>${formatNumber(filteredCoverage.entityCount)}</strong> entities from <span class="mono">${escapeHtml(
+            filteredCoverage.periodStart || "--",
           )}</span> through <span class="mono">${escapeHtml(coverage.periodEnd || "--")}</span>.`
         : `Next financial upload will <strong>${escapeHtml(modeLabel)}</strong> and map rows to <strong>${escapeHtml(
             scopeLabel,
@@ -2425,12 +2462,12 @@
         return;
       }
 
-      const visibleEntities = coverage.properties.slice(0, 4)
+      const visibleEntities = filteredCoverage.properties.slice(0, 4)
         .map((property) => `<span class="chip good">${escapeHtml(property)}</span>`)
         .join("");
-      const overflowCount = Math.max(coverage.properties.length - 4, 0);
+      const overflowCount = Math.max(filteredCoverage.properties.length - 4, 0);
       dom.financialImportCoverage.innerHTML = `
-        <span class="chip good">${formatNumber(coverage.entityCount)} entities</span>
+        <span class="chip good">${formatNumber(filteredCoverage.entityCount)} entities</span>
         <span class="chip good">${escapeHtml(coverage.periodStart || "--")} to ${escapeHtml(coverage.periodEnd || "--")}</span>
         ${visibleEntities}
         ${overflowCount ? `<span class="chip">+${formatNumber(overflowCount)} more</span>` : ""}
@@ -3295,6 +3332,8 @@
         detected: { source: "staged" },
       },
     };
+    // Keep a stored ledger copy for trend comparisons across sessions.
+    saveFinancialHistoryStore(state.datasets.financial);
 
     applyFinancialRecordsToOpsStore(staged.records);
 
