@@ -3,6 +3,7 @@
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
   const AUTO_IMPORT_SCOPE = "__AUTO__";
+  const APPROVED_BUDGET_STORAGE_KEY = "rise_financial_accountability_approved_budgets_v1";
 
   const FINANCIAL_LINES = [
     { key: "rentalIncome", label: "Rental Income", glCode: "4000", section: "Operating Income" },
@@ -164,6 +165,10 @@
       operations: null,
       leasing: null,
     },
+    approvedBudgets: {
+      records: [],
+      updatedAt: null,
+    },
   };
 
   const dom = {
@@ -225,6 +230,34 @@
     } catch (_error) {
       return {};
     }
+  }
+
+  function loadApprovedBudgets() {
+    try {
+      const raw = window.localStorage.getItem(APPROVED_BUDGET_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || typeof parsed !== "object") {
+        return { records: [], updatedAt: null };
+      }
+      return {
+        records: Array.isArray(parsed.records) ? parsed.records : [],
+        updatedAt: parsed.updatedAt || null,
+      };
+    } catch (_error) {
+      return { records: [], updatedAt: null };
+    }
+  }
+
+  function persistApprovedBudgets() {
+    try {
+      window.localStorage.setItem(
+        APPROVED_BUDGET_STORAGE_KEY,
+        JSON.stringify({
+          records: Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [],
+          updatedAt: state.approvedBudgets.updatedAt || null,
+        }),
+      );
+    } catch (_error) {}
   }
 
   function formatPeriodLabel(period) {
@@ -1002,6 +1035,26 @@
       spec.required.property = FILE_SPECS.financial.recommended.property;
     }
     const rawRows = parseCsv(text);
+    return parseDatasetFromRows(type, rawRows, fileName, { ...options, sourceText: text, _specOverride: spec, _scopeOverride: scopeOverride });
+  }
+
+  function parseDatasetFromRows(type, rawRows, fileName, options = {}) {
+    const scopeOverride =
+      type === "financial" && options._scopeOverride
+        ? options._scopeOverride
+        : type === "financial" && options.scopeOverride && options.scopeOverride !== AUTO_IMPORT_SCOPE
+          ? matchCommunityName(options.scopeOverride)
+          : null;
+    const spec = options._specOverride
+      ? options._specOverride
+      : {
+          ...FILE_SPECS[type],
+          required: { ...(FILE_SPECS[type].required || {}) },
+          recommended: { ...(FILE_SPECS[type].recommended || {}) },
+        };
+    if (type === "financial" && !scopeOverride && !options._specOverride) {
+      spec.required.property = FILE_SPECS.financial.recommended.property;
+    }
     const headerRowIndex = (() => {
       if (!rawRows.length) return -1;
       // Some exports include preamble rows (title/company/period) before headers.
@@ -1020,7 +1073,7 @@
         type,
         fileName,
         sourceKind: "file",
-        sourceText: text,
+        sourceText: String(options.sourceText ?? ""),
         records: [],
         diagnostics: {
           parsedRows: 0,
@@ -1143,7 +1196,7 @@
       type,
       fileName,
       sourceKind: "file",
-      sourceText: text,
+      sourceText: String(options.sourceText ?? ""),
       records: normalizedRecords,
       diagnostics: {
         parsedRows: normalizedRecords.length,
@@ -1153,6 +1206,44 @@
         detected: fieldInfo.detected,
       },
     };
+  }
+
+  function fileExt(name = "") {
+    const match = /\.([a-z0-9]+)$/i.exec(String(name));
+    return match ? match[1].toLowerCase() : "";
+  }
+
+  async function readFileToRows(file) {
+    const ext = fileExt(file?.name || "");
+    const isWorkbook = ["xlsx", "xlsm", "xls"].includes(ext);
+    if (!isWorkbook) {
+      const text = await file.text();
+      return { rows: parseCsv(text), sourceText: text };
+    }
+
+    if (typeof window.XLSX === "undefined") {
+      throw new Error("Excel parser is not available. Ensure xlsx library is loaded.");
+    }
+
+    const buffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(buffer, { type: "array" });
+    const sheetNames = Array.isArray(workbook.SheetNames) ? workbook.SheetNames : [];
+    const sheetName =
+      sheetNames.find((name) => {
+        const sheet = workbook.Sheets?.[name];
+        if (!sheet) return false;
+        const data = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+        return Array.isArray(data) && data.some((row) => Array.isArray(row) && row.some((cell) => String(cell ?? "").trim() !== ""));
+      }) || sheetNames[0];
+    const sheet = sheetName ? workbook.Sheets?.[sheetName] : null;
+    if (!sheet) {
+      return { rows: [], sourceText: "" };
+    }
+    const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+    const normalized = (Array.isArray(rows) ? rows : [])
+      .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "").trim()) : []))
+      .filter((row) => row.some((cell) => cell !== ""));
+    return { rows: normalized, sourceText: "" };
   }
 
   function recordKeyForType(type, record) {
@@ -1512,6 +1603,38 @@
     };
   }
 
+  function approvedBudgetKey(record) {
+    const gl = String(record.glCode ?? "").trim();
+    const item = String(record.lineItem ?? "").trim();
+    return `${record.property}::${record.period}::${gl || item}`.toLowerCase();
+  }
+
+  function buildApprovedBudgetIndex(records = [], year, property) {
+    const index = new Map();
+    for (const record of records) {
+      if (!record?.property || !record?.period) continue;
+      if (year && !String(record.period).startsWith(String(year))) continue;
+      if (property && record.property !== property) continue;
+      index.set(approvedBudgetKey(record), record);
+    }
+    return index;
+  }
+
+  function applyApprovedBudgetToRecords(records = [], approvedIndex) {
+    if (!approvedIndex || approvedIndex.size === 0) {
+      return records;
+    }
+    return records.map((record) => {
+      const approved = approvedIndex.get(approvedBudgetKey(record));
+      if (!approved) return record;
+      return {
+        ...record,
+        budget: Number(approved.budget ?? record.budget ?? 0),
+        annualBudget: Number(approved.annualBudget ?? record.annualBudget ?? 0),
+      };
+    });
+  }
+
   function summarizeFinancial(property, asOf) {
     const dataset = state.datasets.financial;
     if (!dataset) {
@@ -1519,8 +1642,12 @@
     }
 
     const year = String(asOf).slice(0, 4);
-    const records = dataset.records.filter(
+    const approvedIndex = buildApprovedBudgetIndex(state.approvedBudgets?.records || [], year, property);
+    const records = applyApprovedBudgetToRecords(
+      dataset.records.filter(
       (record) => record.property === property && record.period.startsWith(year) && comparePeriod(record.period, asOf) <= 0,
+      ),
+      approvedIndex,
     );
 
     if (!records.length) {
@@ -1531,20 +1658,29 @@
     const elapsedMonths = periodsObserved.length || Number(String(asOf).slice(5, 7)) || 1;
     const ytdRollup = buildFinancialRollup(records, elapsedMonths);
     const currentMonthRollup = buildFinancialRollup(
-      dataset.records.filter((record) => record.property === property && record.period === asOf),
+      applyApprovedBudgetToRecords(
+        dataset.records.filter((record) => record.property === property && record.period === asOf),
+        approvedIndex,
+      ),
       1,
     );
     const priorMonthPeriod = shiftPeriod(asOf, -1);
     const priorMonthRollup = priorMonthPeriod
       ? buildFinancialRollup(
-          dataset.records.filter((record) => record.property === property && record.period === priorMonthPeriod),
+          applyApprovedBudgetToRecords(
+            dataset.records.filter((record) => record.property === property && record.period === priorMonthPeriod),
+            approvedIndex,
+          ),
           1,
         )
       : null;
     const priorYearPeriod = shiftPeriod(asOf, -12);
     const priorYearRollup = priorYearPeriod
       ? buildFinancialRollup(
-          dataset.records.filter((record) => record.property === property && record.period === priorYearPeriod),
+          applyApprovedBudgetToRecords(
+            dataset.records.filter((record) => record.property === property && record.period === priorYearPeriod),
+            approvedIndex,
+          ),
           1,
         )
       : null;
@@ -2760,6 +2896,32 @@
     const replaceMode = options.replaceMode || "merge";
     const scopeOverride = options.scopeOverride || AUTO_IMPORT_SCOPE;
 
+    if (replaceMode === "approved_budget") {
+      const approvedAt = new Date().toISOString();
+      const existing = Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [];
+      const stagedRecords = staged.records.map((record) => ({
+        ...record,
+        actual: 0,
+        source: "approved_budget",
+        updatedAt: approvedAt,
+      }));
+
+      state.approvedBudgets = {
+        records: mergeDatasetRecords("financial", existing, stagedRecords).map((record) => ({
+          ...record,
+          actual: 0,
+          source: "approved_budget",
+        })),
+        updatedAt: approvedAt,
+      };
+      persistApprovedBudgets();
+
+      state.pendingFinancial = null;
+      persistState();
+      render();
+      return;
+    }
+
     let baseRecords = state.datasets.financial?.records || [];
     if (replaceMode === "replace_all") {
       baseRecords = [];
@@ -3240,11 +3402,12 @@
     let stagedRowCount = state.pendingFinancial?.rowCount || 0;
 
     for (const file of fileList) {
-      const text = await file.text();
-      const parsed = parseDataset("financial", text, file.name, {
+      const { rows, sourceText } = await readFileToRows(file);
+      const parsed = parseDatasetFromRows("financial", rows, file.name, {
         scopeOverride,
         replaceMode,
         period: manualPeriodOverride,
+        sourceText,
       });
       staged = staged
         ? {
@@ -3396,6 +3559,7 @@
   }
 
   const restored = restoreState();
+  state.approvedBudgets = loadApprovedBudgets();
   if (!restored) {
     applyWorkspaceContext(loadWorkspaceContextFromStorage(), { forceSelection: true, updateImportScope: true });
   }

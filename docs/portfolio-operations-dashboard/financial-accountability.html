@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.2/dist/xlsx.full.min.js"></script>
     <style>
       :root {
         --bg: #f5f5f3;
@@ -939,9 +940,10 @@
                 <div class="field">
                   <label for="financial-import-mode">Storage Mode</label>
                   <select id="financial-import-mode">
-                    <option value="merge">Merge into existing history</option>
-                    <option value="replace_scope">Replace only this entity scope</option>
-                    <option value="replace_all">Replace all financial history</option>
+                    <option value="merge">Append actuals (keeps history)</option>
+                    <option value="replace_scope">Replace actuals for this scope (month + entity)</option>
+                    <option value="replace_all">Replace ALL stored actuals (full reset)</option>
+                    <option value="approved_budget">Approved Budget baseline (store budgets for the selected year)</option>
                   </select>
                 </div>
               </div>
@@ -951,6 +953,7 @@
                 <li>Leave scope on auto-detect when the CSV already contains a property or community column.</li>
                 <li>Choose a community or RISE Corporate when the file is only for one entity or the source file omits property names.</li>
                 <li>Use replace modes when you want to refresh one entity’s history or reset the full ledger before importing a new baseline.</li>
+                <li><strong>Approved Budget baseline</strong> stores the final budget rows and uses them as the source of truth for “vs budget” comparisons (for the same year/month) until replaced.</li>
               </ul>
             </section>
 
@@ -966,9 +969,9 @@
                 <span class="chip" id="financial-chip">Awaiting file</span>
               </div>
               <label class="dropzone" id="financial-dropzone">
-                <input id="financial-input" type="file" accept=".csv,text/csv" multiple />
-                <strong>Drop or choose one or more financial CSVs</strong>
-                <span>Required aliases: property or community, period, section, line item, actual, budget</span>
+                <input id="financial-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls" multiple />
+                <strong>Drop or choose one or more financial files</strong>
+                <span>Supported: CSV, XLSX, XLSM, XLS (Budget vs Actual, final budgets, income statement exports)</span>
               </label>
               <div class="button-row" style="margin-top: 10px">
                 <button class="btn btn-primary" id="apply-financial-upload" disabled>Apply To Ledger</button>
