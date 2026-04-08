@@ -620,7 +620,9 @@ function normalizePlan(plan){
     updatedShopScores: plan && typeof plan.updatedShopScores === 'object' && plan.updatedShopScores ? plan.updatedShopScores : null,
     hrApprovedAt: String(plan && plan.hrApprovedAt || ''),
     hrApprovedBy: String(plan && plan.hrApprovedBy || ''),
-    hrApprovalCorrespondenceId: String(plan && plan.hrApprovalCorrespondenceId || '')
+    hrApprovalCorrespondenceId: String(plan && plan.hrApprovalCorrespondenceId || ''),
+    hrApprovalRequestedAt: String(plan && plan.hrApprovalRequestedAt || ''),
+    hrApprovalRequestCorrespondenceId: String(plan && plan.hrApprovalRequestCorrespondenceId || '')
   };
 }
 
@@ -2063,6 +2065,65 @@ function openNewPlanForEmployee(employeeId){
   render();
 }
 
+function pendingHrApprovalPlans(){
+  return activePlans()
+    .filter(plan => !plan.hrApprovedAt)
+    .sort((left, right) => (left.createdAt || '').localeCompare(right.createdAt || '') || (left.id || '').localeCompare(right.id || ''));
+}
+
+function openHrApprovalQueue(){
+  if(!(STATE.currentUser && STATE.currentUser.role === 'admin')) return;
+  const pending = pendingHrApprovalPlans();
+  openModal(`
+    <div class="modal">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Pending HR approvals</h3>
+      <div class="sub">Review plan notes and action items, open the branded document, and approve with today’s date (or a selected approval date).</div>
+      ${pending.length ? `
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Type</th>
+                <th>Issued</th>
+                <th>Review Date</th>
+                <th>Manager</th>
+                <th>Regional Alert Owner</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pending.map(plan => {
+                const employee = getEmployee(plan.employeeId);
+                return `
+                  <tr>
+                    <td>
+                      ${employee ? renderEmployeeProfileLink(employee) : '<strong>Unknown employee</strong>'}
+                      <div class="small muted">${employee ? (employee.community || 'Community not set') : 'Community not set'}</div>
+                    </td>
+                    <td><span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span></td>
+                    <td>${formatDate(plan.createdAt)}</td>
+                    <td>${formatDate(plan.reviewDate)}</td>
+                    <td>${escapeHtml(plan.manager || managerDisplayName(employee) || 'Not set')}</td>
+                    <td>${escapeHtml(regionalManagerDisplayName(employee) || 'Not set')}</td>
+                    <td>
+                      <div class="inline">
+                        <button class="btn btn-sm btn-soft" onclick="closeModal();openPlanDetail('${plan.id}')">Review</button>
+                        <button class="btn btn-sm btn-primary" onclick="closeModal();openHrApprovalModal('${plan.id}')">Approve</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<div class="alert alert-success" style="margin-top:14px">No HR approvals are pending right now.</div>'}
+    </div>
+  `);
+}
+
 function renderDashboard(){
   const plans = trackedPlans();
   const active = plans.filter(plan => plan.status === 'active');
@@ -2071,6 +2132,7 @@ function renderDashboard(){
   const attention = active.filter(plan => getPlanAlerts(plan).length);
   const employees = activeVisibleEmployees();
   const writeupAreas = writeupAreaSummary();
+  const pendingApprovals = (STATE.currentUser && STATE.currentUser.role === 'admin') ? pendingHrApprovalPlans() : [];
 
   return `
     <div class="page">
@@ -2094,11 +2156,19 @@ function renderDashboard(){
           <div><button class="stat-link" onclick="openDashboardPlanQueue('attention')">${attention.length}</button></div>
           <div class="sub">Active plans with alerts</div>
         </div>
-        <div class="card stat-card">
-          <div class="label">Shop Ordered</div>
-          <div><button class="stat-link" onclick="openShopPage()">${shopOrdered.length}</button></div>
-          <div class="sub">Plans waiting on a targeted shop</div>
-        </div>
+        ${STATE.currentUser && STATE.currentUser.role === 'admin' ? `
+          <div class="card stat-card">
+            <div class="label">HR Approvals</div>
+            <div><button class="stat-link" onclick="openHrApprovalQueue()">${pendingApprovals.length}</button></div>
+            <div class="sub">Plans awaiting HR approval</div>
+          </div>
+        ` : `
+          <div class="card stat-card">
+            <div class="label">Shop Ordered</div>
+            <div><button class="stat-link" onclick="openShopPage()">${shopOrdered.length}</button></div>
+            <div class="sub">Plans waiting on a targeted shop</div>
+          </div>
+        `}
       </div>
 
       <div class="grid-2">
@@ -2661,6 +2731,7 @@ function createPlan(openDocument){
   STATE.plans.push(plan);
   UI.currentView = 'plans';
   saveState();
+  maybeTriggerHrApprovalRequest(plan);
   if(openDocument) exportPlanDocument(plan.id);
   UI.newPlanType = 'coaching';
   UI.newPlanDraft = makeNewPlanDraft();
@@ -5717,14 +5788,15 @@ function renderExport(){
 
 function buildPlanApprovalDraft(plan){
   const employee = getEmployee(plan.employeeId);
-  const manager = employee ? managerDisplayName(employee) : '';
-  const recipient = employee ? userEmail(employee.managerId) : '';
+  const regionalName = employee ? regionalManagerDisplayName(employee) : '';
+  const recipient = employee ? regionalManagerEmail(employee) : '';
   const subject = `RISE ${plan.type.toUpperCase()} approved for ${employee ? employee.name : 'employee'}`;
   const body =
-    `Hello ${manager || 'Manager'},\n\n` +
-    `Your requested ${plan.type.toUpperCase()} plan for ${employee ? employee.name : 'this employee'} has been approved by HR and can now be presented to the employee.\n\n` +
+    `Hello ${regionalName || 'Regional Leader'},\n\n` +
+    `The requested ${plan.type.toUpperCase()} plan for ${employee ? employee.name : 'this employee'} has been approved by HR and can now be issued to the appropriate direct report for presentation.\n\n` +
     `Employee: ${employee ? employee.name : 'Unknown employee'}\n` +
     `Community: ${employee ? (employee.community || 'Not set') : 'Not set'}\n` +
+    `Direct manager: ${employee ? (managerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
     `Review date: ${formatDate(plan.reviewDate)}\n\n` +
     `The branded plan document has been opened from the platform so the PDF can be attached before sending.\n\n` +
     `Approved by: ${STATE.currentUser ? STATE.currentUser.name : 'HR'}\n`;
@@ -5734,6 +5806,50 @@ function buildPlanApprovalDraft(plan){
     body,
     attachmentName: `${employee ? employee.name : 'Employee'}_${plan.type.toUpperCase()}_Plan.pdf`
   };
+}
+
+function buildHrApprovalRequestDraft(plan){
+  const employee = getEmployee(plan.employeeId);
+  const subject = `HR approval needed: ${employee ? employee.name : 'Employee'} · ${plan.type.toUpperCase()} plan`;
+  const body =
+    'HR team,\n\n' +
+    'A new plan is awaiting HR approval in the RISE Performance Platform.\n\n' +
+    `Employee: ${employee ? employee.name : 'Unknown employee'}\n` +
+    `Community: ${employee ? (employee.community || 'Not set') : 'Not set'}\n` +
+    `Area: ${employee && employee.region && REGIONS[employee.region] ? REGIONS[employee.region].name : (employee ? (employee.region || 'Not set') : 'Not set')}\n` +
+    `Direct manager: ${employee ? (managerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
+    `Regional alert owner: ${employee ? (regionalManagerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
+    `Plan type: ${plan.type.toUpperCase()}\n` +
+    `Issued: ${formatDate(plan.createdAt)}\n` +
+    `Review date: ${formatDate(plan.reviewDate)}\n\n` +
+    `Notes:\n${plan.notes ? plan.notes : 'No notes entered.'}\n\n` +
+    'Please review and approve inside the platform.\n';
+  return {recipient: HR_ALERT_EMAIL, subject, body};
+}
+
+function maybeTriggerHrApprovalRequest(plan){
+  if(!plan || plan.hrApprovedAt) return;
+  if(plan.hrApprovalRequestedAt) return;
+  const employee = getEmployee(plan.employeeId);
+  if(employee && isEmployeeTerminated(employee)) return;
+
+  const draft = buildHrApprovalRequestDraft(plan);
+  plan.hrApprovalRequestedAt = today();
+  const correspondence = logCorrespondence({
+    employeeId: employee ? employee.id : '',
+    planId: plan.id,
+    type: 'hr_approval_request',
+    date: today(),
+    subject: draft.subject,
+    recipient: draft.recipient,
+    status: 'HR approval email draft opened',
+    summary: 'Plan saved and an HR approval request email draft was opened (static-site mailto).',
+    body: draft.body,
+    createdBy: STATE.currentUser ? STATE.currentUser.name : ''
+  });
+  plan.hrApprovalRequestCorrespondenceId = correspondence.id;
+  saveState();
+  window.location.href = `mailto:${draft.recipient}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
 }
 
 function openHrApprovalModal(planId){
@@ -5749,16 +5865,25 @@ function openHrApprovalModal(planId){
     <div class="modal narrow">
       <button class="close-btn" onclick="closeModal()">x</button>
       <h3>Approve plan by HR</h3>
-      <div class="sub">Approving this plan will log the correspondence, open the branded plan document, and open the direct manager email draft${draft.recipient ? '' : ' if a manager email exists'}.</div>
+      <div class="sub">Approving this plan will log the correspondence, open the branded plan document, and open the regional alert owner email draft${draft.recipient ? '' : ' if an email exists'}.</div>
       <div class="alert alert-info" style="margin-bottom:12px">
         <strong>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</strong><br>
         Direct manager: ${escapeHtml(managerDisplayName(employee) || 'Not assigned')}<br>
-        Manager email: ${escapeHtml(draft.recipient || 'Not set in Settings')}<br>
+        Regional alert owner: ${escapeHtml(regionalManagerDisplayName(employee) || 'Not assigned')}<br>
+        Regional email: ${escapeHtml(draft.recipient || 'Not set in Settings')}<br>
         Static-site note: the app can open the email draft and branded plan document, but the PDF still has to be attached manually.
+      </div>
+      <div style="margin-bottom:12px">
+        <label>Approval date</label>
+        <input id="hr-approve-date" type="date" value="${today()}">
+      </div>
+      <div class="history-card" style="margin-bottom:12px">
+        <h4>Manager notes</h4>
+        <div class="small">${escapeHtml(plan.notes || 'No notes entered.')}</div>
       </div>
       <div class="inline" style="justify-content:flex-end;margin-top:18px">
         <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="approvePlanByHr('${planId}')">Approve + notify manager</button>
+        <button class="btn btn-primary" onclick="approvePlanByHr('${planId}')">Approve + notify regional</button>
       </div>
     </div>
   `);
@@ -5773,20 +5898,21 @@ function approvePlanByHr(planId){
   }
   const employee = getEmployee(plan.employeeId);
   const draft = buildPlanApprovalDraft(plan);
-  plan.hrApprovedAt = today();
+  const approvalDateField = document.getElementById('hr-approve-date');
+  plan.hrApprovedAt = approvalDateField ? (approvalDateField.value || today()) : today();
   plan.hrApprovedBy = STATE.currentUser.name;
 
   const correspondence = logCorrespondence({
     employeeId: employee ? employee.id : '',
     planId: plan.id,
     type: 'plan_approval',
-    date: today(),
+    date: plan.hrApprovedAt,
     subject: draft.subject,
     recipient: draft.recipient,
-    status: draft.recipient ? 'Approval email draft opened' : 'Approval recorded - manager email missing',
+    status: draft.recipient ? 'Approval email draft opened' : 'Approval recorded - regional email missing',
     summary: draft.recipient
-      ? `HR approved the ${plan.type.toUpperCase()} plan and opened the manager notification draft. Attach the branded PDF manually before sending.`
-      : `HR approved the ${plan.type.toUpperCase()} plan, but no direct-manager email is saved in Settings for this employee.`,
+      ? `HR approved the ${plan.type.toUpperCase()} plan and opened the regional notification draft. Attach the branded PDF manually before sending.`
+      : `HR approved the ${plan.type.toUpperCase()} plan, but no regional alert-owner email is saved in Settings for this employee.`,
     body: draft.body,
     attachmentName: draft.attachmentName,
     createdBy: STATE.currentUser.name
@@ -5799,7 +5925,7 @@ function approvePlanByHr(planId){
   if(draft.recipient){
     window.location.href = `mailto:${draft.recipient}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
   }else{
-    alert('Plan approved and correspondence logged, but no direct-manager email is saved in Settings for this employee.');
+    alert('Plan approved and correspondence logged, but no regional alert-owner email is saved in Settings for this employee.');
   }
 }
 
