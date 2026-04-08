@@ -682,6 +682,36 @@ function makeDefaultUsers(){
   return DEFAULT_USERS.map(normalizeUser);
 }
 
+function ensureAdminAccess(users){
+  const list = Array.isArray(users) ? [...users] : [];
+
+  // Always ensure there is a usable admin at passcode 0000 so the platform can be recovered
+  // even if localStorage was edited or a prior settings change removed admin access.
+  let admin = list.find(user => user && user.id === 'admin');
+  if(!admin){
+    admin = normalizeUser(DEFAULT_USERS[0]);
+    list.unshift(admin);
+  }
+  admin.role = 'admin';
+  admin.scopeType = 'all';
+  admin.scopeValue = '';
+  admin.pin = '0000';
+  admin.name = admin.name || 'Admin';
+
+  // If any non-admin uses 0000, clear it so only the admin unlocks with that code.
+  list.forEach(user => {
+    if(!user || user.id === 'admin') return;
+    if(user.pin === '0000') user.pin = '';
+  });
+
+  // Ensure at least one admin exists.
+  if(!list.some(user => user && user.role === 'admin')){
+    list.unshift(admin);
+  }
+
+  return list.map(normalizeUser);
+}
+
 function clampNumber(value, fallback, min, max){
   const next = Number(value);
   if(Number.isNaN(next)) return fallback;
@@ -741,10 +771,8 @@ let UI = {
 function loadState(){
   try{
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    const users = Array.isArray(stored.users) && stored.users.length ? stored.users.map(normalizeUser) : makeDefaultUsers();
-    if(!users.some(user => user.role === 'admin')){
-      users.unshift(normalizeUser(DEFAULT_USERS[0]));
-    }
+    const rawUsers = Array.isArray(stored.users) && stored.users.length ? stored.users.map(normalizeUser) : makeDefaultUsers();
+    const users = ensureAdminAccess(rawUsers);
     return {
       users,
       settings: normalizeSettings(stored.settings),
@@ -6577,6 +6605,10 @@ function saveEditUser(userId){
   const user = STATE.users.find(item => item.id === userId);
   if(!user) return;
 
+  if(user.id === 'admin'){
+    alert('The Admin access code is fixed to passcode 0000 for recovery. Create a second admin if you need a different admin passcode.');
+  }
+
   const nextRole = document.getElementById('eu-role').value;
   if(user.role === 'admin' && nextRole !== 'admin' && countAdmins() === 1){
     alert('At least one admin account must remain.');
@@ -6605,7 +6637,7 @@ function saveEditUser(userId){
   user.scopeType = scopeType;
   user.scopeValue = scopeValue;
   const nextPin = String(document.getElementById('eu-pin').value || '').trim();
-  if(nextPin){
+  if(nextPin && user.id !== 'admin'){
     if(isPasscodeTaken(nextPin, user.id)){
       alert('That passcode is already assigned to another user. Use a unique passcode.');
       return;
@@ -6616,8 +6648,15 @@ function saveEditUser(userId){
     user.scopeType = 'all';
     user.scopeValue = '';
   }
+  if(user.id === 'admin'){
+    user.role = 'admin';
+    user.pin = '0000';
+    user.scopeType = 'all';
+    user.scopeValue = '';
+  }
 
   syncEmployeeManagerReferences(user);
+  STATE.users = ensureAdminAccess(STATE.users);
   saveState();
   closeModal();
   render();
