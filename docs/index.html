@@ -6212,6 +6212,7 @@ function exportPlanDocument(planId){
   const plan = getPlan(planId);
   if(!plan) return;
   const employee = getEmployee(plan.employeeId);
+  const showPerformanceScores = Boolean(plan.shopSourceName);
   const grouped = {};
   (plan.actionItems || []).forEach(item => {
     const key = item.area || 'General';
@@ -6263,20 +6264,22 @@ function exportPlanDocument(planId){
           <tr><th>Issued</th><td>${formatDate(plan.createdAt)}</td><th>Review Date</th><td>${formatDate(plan.reviewDate)}</td></tr>
           <tr><th>Presented</th><td>${plan.presentedAt ? formatDate(plan.presentedAt) : 'Not yet presented'}</td><th>Signed Plan</th><td>${plan.signedDocName ? escapeHtml(plan.signedDocName) : 'Not yet uploaded'}</td></tr>
         </table>
-        <h2>Performance Scores</h2>
-        <table>
-          <tr><th>Overall</th><th>MSOE</th><th>Telephone</th><th>On-Site</th><th>Greeting</th><th>Needs</th><th>Demonstrating / Closing</th><th>Follow-Up</th></tr>
-          <tr>
-            <td>${plan.overallScore != null ? plan.overallScore + '%' : 'N/A'}</td>
-            <td>${plan.msoeScore != null ? plan.msoeScore + '%' : 'N/A'}</td>
-            <td>${plan.telScore != null ? plan.telScore + '%' : 'N/A'}</td>
-            <td>${plan.onsiteScore != null ? plan.onsiteScore + '%' : 'N/A'}</td>
-            <td>${plan.greetScore != null ? plan.greetScore + '%' : 'N/A'}</td>
-            <td>${plan.needsScore != null ? plan.needsScore + '%' : 'N/A'}</td>
-            <td>${plan.demoScore != null ? plan.demoScore + '%' : 'N/A'}</td>
-            <td>${plan.followupScore != null ? plan.followupScore + '%' : 'N/A'}</td>
-          </tr>
-        </table>
+        ${showPerformanceScores ? `
+          <h2>Performance Scores</h2>
+          <table>
+            <tr><th>Overall</th><th>MSOE</th><th>Telephone</th><th>On-Site</th><th>Greeting</th><th>Needs</th><th>Demonstrating / Closing</th><th>Follow-Up</th></tr>
+            <tr>
+              <td>${plan.overallScore != null ? plan.overallScore + '%' : 'N/A'}</td>
+              <td>${plan.msoeScore != null ? plan.msoeScore + '%' : 'N/A'}</td>
+              <td>${plan.telScore != null ? plan.telScore + '%' : 'N/A'}</td>
+              <td>${plan.onsiteScore != null ? plan.onsiteScore + '%' : 'N/A'}</td>
+              <td>${plan.greetScore != null ? plan.greetScore + '%' : 'N/A'}</td>
+              <td>${plan.needsScore != null ? plan.needsScore + '%' : 'N/A'}</td>
+              <td>${plan.demoScore != null ? plan.demoScore + '%' : 'N/A'}</td>
+              <td>${plan.followupScore != null ? plan.followupScore + '%' : 'N/A'}</td>
+            </tr>
+          </table>
+        ` : ''}
         <h2>Corrective Actions / Focus Areas</h2>
         ${Object.keys(grouped).length ? Object.entries(grouped).map(([area, items]) => `
           <div class="panel">
