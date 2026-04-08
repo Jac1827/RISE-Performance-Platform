@@ -178,6 +178,7 @@
       records: [],
       updatedAt: null,
     },
+    lastFinancialApplyNotice: null,
   };
 
   const dom = {
@@ -604,17 +605,9 @@
     }
 
     const selectedValue = state.financialImport.scope || AUTO_IMPORT_SCOPE;
-    const importedEntities = Array.from(
-      new Set((state.datasets.financial?.records || []).map((record) => record.property).filter(Boolean)),
-    ).sort((left, right) => left.localeCompare(right));
     const knownCommunityMap = new Map();
     getCommunityCatalog().forEach((community) => {
       knownCommunityMap.set(community.name, `${community.name}${community.units ? ` (${community.units} units)` : ""}`);
-    });
-    importedEntities.forEach((name) => {
-      if (!knownCommunityMap.has(name) && name !== "RISE Corporate") {
-        knownCommunityMap.set(name, `${name} (imported entity)`);
-      }
     });
 
     const options = [
@@ -813,9 +806,13 @@
   }
 
   function getFinancialEntityNames() {
+    const allowed = new Set(getCommunityCatalog().map((community) => community.name));
+    allowed.add("RISE Corporate");
     return Array.from(
       new Set((state.datasets.financial?.records || []).map((record) => record.property).filter(Boolean)),
-    ).sort((left, right) => left.localeCompare(right));
+    )
+      .filter((property) => allowed.has(property))
+      .sort((left, right) => left.localeCompare(right));
   }
 
   function getScopeEntityPool(properties, mode) {
@@ -1531,6 +1528,7 @@
       selectedProperty: state.selectedProperty,
       manualPeriod: state.manualPeriod,
       financialImport: state.financialImport,
+      lastFinancialApplyNotice: state.lastFinancialApplyNotice,
       snapshotScope: state.snapshotScope,
       datasets: Object.fromEntries(
         Object.entries(state.datasets).map(([key, dataset]) => [
@@ -1562,6 +1560,7 @@
       state.selectedPeriod = parsed.selectedPeriod || null;
       state.selectedProperty = parsed.selectedProperty || null;
       state.manualPeriod = parsePeriod(parsed.manualPeriod) || state.manualPeriod;
+      state.lastFinancialApplyNotice = parsed.lastFinancialApplyNotice || null;
       state.financialImport = {
         scope: parsed.financialImport?.scope || AUTO_IMPORT_SCOPE,
         mode: parsed.financialImport?.mode || "merge",
@@ -2389,6 +2388,13 @@
     }
 
     if (dom.financialImportSummary) {
+      const notice = state.lastFinancialApplyNotice;
+      const noticeHtml = notice?.message
+        ? `<div style="margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--green-soft);border:1px solid #c8dcae;color:var(--green);font-size:0.78rem">
+            <strong>Confirmed:</strong> ${escapeHtml(notice.message)}
+            <span style="color:var(--muted);margin-left:8px">(${escapeHtml(formatStoredTimestamp(notice.at))})</span>
+          </div>`
+        : "";
       dom.financialImportSummary.innerHTML = coverage.recordCount
         ? `Next financial upload will <strong>${escapeHtml(modeLabel)}</strong> and map rows to <strong>${escapeHtml(
             scopeLabel,
@@ -2406,6 +2412,7 @@
               ? ` with the upload period forced to <span class="mono">${escapeHtml(periodOverride)}</span>`
               : " using periods from the CSV"
           }. Import financial history to unlock community ranking plus MoM and YoY pacing.`;
+      dom.financialImportSummary.innerHTML += noticeHtml;
     }
 
     if (dom.financialImportCoverage) {
@@ -3231,6 +3238,7 @@
     const options = state.pendingFinancial.options || {};
     const replaceMode = options.replaceMode || "merge";
     const scopeOverride = options.scopeOverride || AUTO_IMPORT_SCOPE;
+    const periodOverride = options.periodOverride || null;
 
     if (replaceMode === "approved_budget") {
       const approvedAt = new Date().toISOString();
@@ -3253,6 +3261,13 @@
       persistApprovedBudgets();
 
       state.pendingFinancial = null;
+      state.lastFinancialApplyNotice = {
+        at: approvedAt,
+        kind: "approved_budget",
+        message: `Approved budget baseline saved: ${formatNumber(staged.records.length)} rows applied to ${getFinancialImportScopeLabel(
+          scopeOverride,
+        )}${periodOverride ? ` for ${periodOverride}` : ""}.`,
+      };
       persistState();
       render();
       return;
@@ -3284,6 +3299,14 @@
     applyFinancialRecordsToOpsStore(staged.records);
 
     state.pendingFinancial = null;
+    const appliedAt = new Date().toISOString();
+    state.lastFinancialApplyNotice = {
+      at: appliedAt,
+      kind: "actuals",
+      message: `Upload applied: ${formatNumber(staged.records.length)} mapped row(s) stored for ${getFinancialImportScopeLabel(
+        scopeOverride,
+      )}${periodOverride ? ` (${periodOverride})` : ""}.`,
+    };
     persistState();
     render();
   }
