@@ -11,7 +11,7 @@
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs/dist/pptxgen.bundle.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.2/dist/xlsx.full.min.js"></script>
+    <script src="assets/xlsx.full.min.js"></script>
     <style>
       :root {
         --bg: #f5f5f3;
@@ -414,6 +414,11 @@
         background: #ddeaf2;
       }
 
+      .import-workspace.dragging {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.14);
+      }
+
       .dropzone input {
         position: absolute;
         inset: 0;
@@ -701,6 +706,31 @@
         flex-wrap: wrap;
       }
 
+      .layer-toolbar {
+        display: grid;
+        gap: 10px;
+        justify-items: end;
+      }
+
+      .layer-filter-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(170px, 1fr));
+        gap: 10px;
+        align-items: end;
+        min-width: min(100%, 640px);
+      }
+
+      .layer-filter-row .field label {
+        font-size: 0.62rem;
+      }
+
+      .layer-filter-note {
+        margin: 0;
+        font-size: 0.68rem;
+        color: var(--muted);
+        text-align: right;
+      }
+
       .tab-btn {
         border: 1px solid var(--border);
         border-radius: 999px;
@@ -909,6 +939,15 @@
         .snapshot-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+
+        .layer-filter-row {
+          grid-template-columns: 1fr;
+          min-width: 100%;
+        }
+
+        .layer-filter-note {
+          text-align: left;
+        }
       }
 
       @media (max-width: 720px) {
@@ -982,6 +1021,7 @@
                   <input type="month" id="manual-period-input" />
                 </div>
                 <div class="status-line" id="data-readiness"></div>
+                <div class="status-line" id="ledger-debug"></div>
                 <div class="chip-row" id="ops-workspace-chips"></div>
                 <div class="status-line" id="ops-workspace-note"></div>
               </div>
@@ -1061,6 +1101,50 @@
               </ul>
             </section>
 
+            <section class="import-workspace">
+              <div class="import-head">
+                <div>
+                  <h3>Finalized Budget Library</h3>
+                  <p>
+                    Upload approved annual budgets by entity (not actuals). These rows are stored as budget baselines and
+                    used automatically when monthly income statement actuals are uploaded.
+                  </p>
+                </div>
+                <div class="button-row">
+                  <span class="chip" id="approved-budget-chip">No budget staged</span>
+                  <button class="btn btn-primary" id="open-approved-budget-import">Choose Finalized Budget</button>
+                </div>
+              </div>
+              <div class="import-grid">
+                <div class="field">
+                  <label for="approved-budget-scope">Budget Entity</label>
+                  <select id="approved-budget-scope"></select>
+                </div>
+                <div class="field">
+                  <label for="approved-budget-year">Budget Year</label>
+                  <input id="approved-budget-year" type="number" min="2000" max="2100" step="1" value="2026" />
+                </div>
+                <div class="field">
+                  <label for="approved-budget-expand-year">Apply Across All 12 Months</label>
+                  <select id="approved-budget-expand-year">
+                    <option value="yes" selected>Yes (recommended)</option>
+                    <option value="no">No (use period from file)</option>
+                  </select>
+                </div>
+              </div>
+              <label class="dropzone" id="approved-budget-dropzone" style="margin-top: 10px">
+                <input id="approved-budget-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls" multiple />
+                <strong>Drop or choose finalized budget file(s)</strong>
+                <span>Supported: CSV, XLSX, XLSM, XLS (approved/final budget reports)</span>
+              </label>
+              <div class="button-row" style="margin-top: 10px">
+                <button class="btn btn-primary" id="apply-approved-budget-upload" disabled>Apply Finalized Budget</button>
+                <button class="btn btn-soft" id="clear-approved-budget-staging" disabled>Clear Budget Staging</button>
+              </div>
+              <div class="status-line" id="approved-budget-summary" style="margin-top: 10px"></div>
+              <div class="mini-grid" id="approved-budget-meta" style="margin-top: 10px"></div>
+            </section>
+
             <section class="ingest-card" data-dataset="financial">
               <div class="ingest-top">
                 <div>
@@ -1084,17 +1168,6 @@
               <div class="mini-grid" id="financial-meta" style="margin-top: 10px"></div>
             </section>
 
-            <section class="panel">
-              <div class="panel-inner">
-                <div class="panel-head">
-                  <div>
-                    <h3>Crosswalk Library</h3>
-                    <p>These link financial lines to the operating and leasing metrics most likely to explain them.</p>
-                  </div>
-                </div>
-                <div class="mini-grid" id="crosswalk-library"></div>
-              </div>
-            </section>
           </div>
         </aside>
 
@@ -1186,10 +1259,31 @@
                     conditions underneath them.
                   </p>
                 </div>
-                <div class="tab-row">
-                  <button class="tab-btn active" data-layer="financial">Financial accountability</button>
-                  <button class="tab-btn" data-layer="operations">Operational drivers</button>
-                  <button class="tab-btn" data-layer="leasing">Leasing drivers</button>
+                <div class="layer-toolbar">
+                  <div class="tab-row">
+                    <button class="tab-btn active" data-layer="financial">Financial accountability</button>
+                    <button class="tab-btn" data-layer="operations">Operational drivers</button>
+                    <button class="tab-btn" data-layer="leasing">Leasing drivers</button>
+                  </div>
+                  <div class="layer-filter-row">
+                    <div class="field">
+                      <label for="financial-filter-period">Month Filter</label>
+                      <select id="financial-filter-period"></select>
+                    </div>
+                    <div class="field">
+                      <label for="financial-filter-gl">GL Code Filter</label>
+                      <select id="financial-filter-gl"></select>
+                    </div>
+                    <div class="field">
+                      <label for="financial-filter-status">Track Status</label>
+                      <select id="financial-filter-status">
+                        <option value="all">All lines</option>
+                        <option value="off_track">Off track only</option>
+                        <option value="on_track">On track only</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="layer-filter-note" id="financial-filter-note"></p>
                 </div>
               </div>
               <div id="layer-content"></div>
@@ -1223,6 +1317,6 @@
       </div>
     </div>
 
-    <script src="financial-accountability.js"></script>
+    <script src="financial-accountability.js?v=2026-04-09.9"></script>
   </body>
 </html>

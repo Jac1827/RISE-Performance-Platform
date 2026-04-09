@@ -1,7 +1,9 @@
 (() => {
+  const BUILD_ID = "2026-04-09.9";
   const STORAGE_KEY = "rise_financial_accountability_page_v1";
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
+  const OPS_PROPERTY_CATALOG_KEY = "rise_ops_property_catalog_v1";
   const FINANCIAL_HISTORY_STORAGE_KEY = "rise_financial_history_v1";
   const AUTO_IMPORT_SCOPE = "__AUTO__";
   const APPROVED_BUDGET_STORAGE_KEY = "rise_financial_accountability_approved_budgets_v1";
@@ -157,6 +159,7 @@
     selectedProperty: null,
     manualPeriod: defaultManualPeriodSelection(),
     pendingFinancial: null,
+    pendingApprovedBudget: null,
     financialImport: {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
@@ -169,6 +172,11 @@
       search: "",
       selectedEntities: [],
     },
+    financialLineFilter: {
+      period: "selected",
+      glCode: "all",
+      status: "all",
+    },
     datasets: {
       financial: null,
       operations: null,
@@ -176,7 +184,14 @@
     },
     approvedBudgets: {
       records: [],
+      benchmarks: [],
       updatedAt: null,
+    },
+    lastApprovedBudgetNotice: null,
+    approvedBudgetImport: {
+      scope: "RISE Corporate",
+      year: "2026",
+      expandAcrossYear: true,
     },
     lastFinancialApplyNotice: null,
   };
@@ -185,6 +200,7 @@
     periodSelect: document.getElementById("period-select"),
     manualPeriodInput: document.getElementById("manual-period-input"),
     dataReadiness: document.getElementById("data-readiness"),
+    ledgerDebug: document.getElementById("ledger-debug"),
     opsWorkspaceChips: document.getElementById("ops-workspace-chips"),
     opsWorkspaceNote: document.getElementById("ops-workspace-note"),
     backToOperations: document.getElementById("back-to-operations"),
@@ -217,6 +233,10 @@
     crosswalkContent: document.getElementById("crosswalk-content"),
     boardSummary: document.getElementById("board-summary"),
     crosswalkLibrary: document.getElementById("crosswalk-library"),
+    financialFilterPeriod: document.getElementById("financial-filter-period"),
+    financialFilterGl: document.getElementById("financial-filter-gl"),
+    financialFilterStatus: document.getElementById("financial-filter-status"),
+    financialFilterNote: document.getElementById("financial-filter-note"),
     exportScorecards: document.getElementById("export-scorecards"),
     exportSummary: document.getElementById("export-summary"),
     exportReport: document.getElementById("export-report"),
@@ -224,7 +244,61 @@
     applyFinancialUpload: document.getElementById("apply-financial-upload"),
     clearFinancialStaging: document.getElementById("clear-financial-staging"),
     syncDashboardHistory: document.getElementById("sync-dashboard-history"),
+    approvedBudgetScope: document.getElementById("approved-budget-scope"),
+    approvedBudgetYear: document.getElementById("approved-budget-year"),
+    approvedBudgetExpandYear: document.getElementById("approved-budget-expand-year"),
+    approvedBudgetInput: document.getElementById("approved-budget-input"),
+    openApprovedBudgetImport: document.getElementById("open-approved-budget-import"),
+    applyApprovedBudgetUpload: document.getElementById("apply-approved-budget-upload"),
+    clearApprovedBudgetStaging: document.getElementById("clear-approved-budget-staging"),
+    approvedBudgetChip: document.getElementById("approved-budget-chip"),
+    approvedBudgetMeta: document.getElementById("approved-budget-meta"),
+    approvedBudgetSummary: document.getElementById("approved-budget-summary"),
   };
+
+  let xlsxLoaderPromise = null;
+  let pendingApprovedBudgetFiles = [];
+
+  function logDebug(...args) {
+    // Keep console noise low in normal operation, but invaluable while we harden imports.
+    try {
+      // eslint-disable-next-line no-console
+      console.log("[financial-accountability]", ...args);
+    } catch (_error) {}
+  }
+
+  function isLegacyCdnParserErrorNotice(notice) {
+    const message = String(notice?.message || "");
+    if (!message) return false;
+    return (
+      /Excel parser could not be loaded from CDN/i.test(message) &&
+      !/Offline parser detail:/i.test(message)
+    );
+  }
+
+  function withTimeout(promise, timeoutMs, message) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(message));
+      }, timeoutMs);
+      Promise.resolve(promise)
+        .then((value) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(value);
+        })
+        .catch((error) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          reject(error);
+        });
+    });
+  }
 
   function normalizeKey(value) {
     return String(value ?? "")
@@ -255,19 +329,37 @@
     }
   }
 
+  function loadOpsPropertyCatalog() {
+    try {
+      const raw = window.localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      const properties = Array.isArray(parsed?.properties) ? parsed.properties : [];
+      return properties
+        .map((entry) => ({
+          name: String(entry?.name ?? "").trim(),
+          units: parseAmount(entry?.units) ?? null,
+        }))
+        .filter((entry) => Boolean(entry.name));
+    } catch (_error) {
+      return [];
+    }
+  }
+
   function loadApprovedBudgets() {
     try {
       const raw = window.localStorage.getItem(APPROVED_BUDGET_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
       if (!parsed || typeof parsed !== "object") {
-        return { records: [], updatedAt: null };
+        return { records: [], benchmarks: [], updatedAt: null };
       }
       return {
         records: Array.isArray(parsed.records) ? parsed.records : [],
+        benchmarks: Array.isArray(parsed.benchmarks) ? parsed.benchmarks : [],
         updatedAt: parsed.updatedAt || null,
       };
     } catch (_error) {
-      return { records: [], updatedAt: null };
+      return { records: [], benchmarks: [], updatedAt: null };
     }
   }
 
@@ -277,6 +369,7 @@
         APPROVED_BUDGET_STORAGE_KEY,
         JSON.stringify({
           records: Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [],
+          benchmarks: Array.isArray(state.approvedBudgets.benchmarks) ? state.approvedBudgets.benchmarks : [],
           updatedAt: state.approvedBudgets.updatedAt || null,
         }),
       );
@@ -362,20 +455,18 @@
   }
 
   function getCommunityCatalog() {
-    const saved = loadDashboardCommunityStore();
-    const merged = new Map();
-    Object.entries(saved).forEach(([name, record]) => {
-      const trimmedName = String(name ?? "").trim();
-      if (!trimmedName) {
-        return;
-      }
-      const current = merged.get(trimmedName) || { name: trimmedName, units: null };
-      const customUnits = parseAmount(record?.customUnits);
-      current.units = customUnits || current.units || null;
-      merged.set(trimmedName, current);
-    });
-
-    return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name));
+    // IMPORTANT:
+    // This page must ONLY show entities from the Operations Dashboard property catalog
+    // plus "RISE Corporate". We intentionally do not merge in the leasing dashboard
+    // community store here because it can contain demo/sample communities and photo blobs.
+    const catalog = loadOpsPropertyCatalog();
+    return catalog
+      .map((entry) => ({
+        name: String(entry?.name ?? "").trim(),
+        units: parseAmount(entry?.units) ?? null,
+      }))
+      .filter((entry) => Boolean(entry.name))
+      .sort((left, right) => left.name.localeCompare(right.name));
   }
 
   function matchCommunityName(rawName) {
@@ -644,6 +735,60 @@
       .join("");
   }
 
+  function populateApprovedBudgetScopeOptions() {
+    if (!dom.approvedBudgetScope) {
+      return;
+    }
+    const selectedValue = state.approvedBudgetImport.scope || "RISE Corporate";
+    const options = [
+      { value: "RISE Corporate", label: "RISE Corporate only" },
+      ...getCommunityCatalog().map((community) => ({
+        value: community.name,
+        label: `${community.name}${community.units ? ` (${community.units} units)` : ""}`,
+      })),
+    ];
+    if (selectedValue && !options.find((entry) => entry.value === selectedValue)) {
+      options.push({ value: selectedValue, label: `${selectedValue} (selected)` });
+    }
+    dom.approvedBudgetScope.innerHTML = options
+      .map(
+        (entry) =>
+          `<option value="${escapeHtml(entry.value)}" ${entry.value === selectedValue ? "selected" : ""}>${escapeHtml(
+            entry.label,
+          )}</option>`,
+      )
+      .join("");
+  }
+
+  function getApprovedBudgetCoverage(records = state.approvedBudgets?.records || []) {
+    const safeRecords = Array.isArray(records) ? records : [];
+    const properties = Array.from(new Set(safeRecords.map((record) => record?.property).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const years = Array.from(
+      new Set(
+        safeRecords
+          .map((record) => String(record?.period || "").slice(0, 4))
+          .filter((year) => /^\d{4}$/.test(year)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+    const benchmarkYears = Array.from(
+      new Set(
+        (state.approvedBudgets?.benchmarks || [])
+          .map((record) => String(record?.period || "").slice(0, 4))
+          .filter((year) => /^\d{4}$/.test(year)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+    return {
+      rowCount: safeRecords.length,
+      entityCount: properties.length,
+      properties,
+      years,
+      benchmarkYears,
+      updatedAt: state.approvedBudgets?.updatedAt || null,
+    };
+  }
+
   function parseCsv(text) {
     const source = String(text ?? "").replace(/^\uFEFF/, "");
     const rows = [];
@@ -718,6 +863,242 @@
       return null;
     }
     return Math.abs(numeric) <= 1 ? numeric * 100 : numeric;
+  }
+
+  function columnRefToIndex(cellRef = "") {
+    const match = /^([A-Za-z]+)/.exec(String(cellRef));
+    if (!match) {
+      return -1;
+    }
+    const letters = match[1].toUpperCase();
+    let index = 0;
+    for (let i = 0; i < letters.length; i += 1) {
+      index = (index * 26) + (letters.charCodeAt(i) - 64);
+    }
+    return index - 1;
+  }
+
+  function readUInt16LE(buffer, offset) {
+    return buffer[offset] | (buffer[offset + 1] << 8);
+  }
+
+  function readUInt32LE(buffer, offset) {
+    return (
+      buffer[offset] |
+      (buffer[offset + 1] << 8) |
+      (buffer[offset + 2] << 16) |
+      (buffer[offset + 3] << 24)
+    ) >>> 0;
+  }
+
+  function findEocdOffset(buffer) {
+    // EOCD is located in the last 65,557 bytes max (ZIP spec).
+    const minOffset = Math.max(0, buffer.length - 65557);
+    for (let i = buffer.length - 22; i >= minOffset; i -= 1) {
+      if (
+        buffer[i] === 0x50 &&
+        buffer[i + 1] === 0x4b &&
+        buffer[i + 2] === 0x05 &&
+        buffer[i + 3] === 0x06
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  async function inflateRawBytes(compressedBytes) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("Browser does not support DecompressionStream for offline XLSX parsing.");
+    }
+    const stream = new DecompressionStream("deflate-raw");
+    const writer = stream.writable.getWriter();
+    await writer.write(compressedBytes);
+    await writer.close();
+    const decompressedBuffer = await new Response(stream.readable).arrayBuffer();
+    return new Uint8Array(decompressedBuffer);
+  }
+
+  async function unzipEntryBytes(zipBytes, entry) {
+    const localOffset = entry.localHeaderOffset;
+    if (
+      zipBytes[localOffset] !== 0x50 ||
+      zipBytes[localOffset + 1] !== 0x4b ||
+      zipBytes[localOffset + 2] !== 0x03 ||
+      zipBytes[localOffset + 3] !== 0x04
+    ) {
+      throw new Error(`Invalid ZIP local header for ${entry.name}`);
+    }
+    const localNameLen = readUInt16LE(zipBytes, localOffset + 26);
+    const localExtraLen = readUInt16LE(zipBytes, localOffset + 28);
+    const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+    const dataEnd = dataStart + entry.compressedSize;
+    const compressed = zipBytes.slice(dataStart, dataEnd);
+
+    if (entry.compressionMethod === 0) {
+      return compressed;
+    }
+    if (entry.compressionMethod === 8) {
+      return inflateRawBytes(compressed);
+    }
+    throw new Error(`Unsupported ZIP compression method ${entry.compressionMethod} for ${entry.name}`);
+  }
+
+  function xmlElementsByTag(root, tagName) {
+    if (!root) return [];
+    const direct = Array.from(root.getElementsByTagName(tagName) || []);
+    if (direct.length) return direct;
+    if (typeof root.getElementsByTagNameNS === "function") {
+      return Array.from(root.getElementsByTagNameNS("*", tagName) || []);
+    }
+    return [];
+  }
+
+  function firstXmlElementByTag(root, tagName) {
+    return xmlElementsByTag(root, tagName)[0] || null;
+  }
+
+  function xmlText(root, tagName) {
+    return String(firstXmlElementByTag(root, tagName)?.textContent ?? "");
+  }
+
+  function extractRowsFromSheetXml(sheetXml, parser, sharedStrings) {
+    if (!sheetXml) {
+      return [];
+    }
+    const sheetDoc = parser.parseFromString(sheetXml, "application/xml");
+    const rows = [];
+    xmlElementsByTag(sheetDoc, "row").forEach((rowNode) => {
+      const rowValues = [];
+      xmlElementsByTag(rowNode, "c").forEach((cellNode) => {
+        const cellRef = cellNode.getAttribute("r") || "";
+        const colIndex = columnRefToIndex(cellRef);
+        if (colIndex < 0) {
+          return;
+        }
+        const cellType = cellNode.getAttribute("t") || "";
+        let value = "";
+        if (cellType === "s") {
+          const idx = Number(xmlText(cellNode, "v"));
+          value = Number.isFinite(idx) ? String(sharedStrings[idx] ?? "") : "";
+        } else if (cellType === "inlineStr") {
+          value = xmlElementsByTag(cellNode, "t")
+            .map((node) => node.textContent || "")
+            .join("");
+        } else {
+          value = xmlText(cellNode, "v");
+        }
+        rowValues[colIndex] = value;
+      });
+      const normalized = rowValues.map((entry) => String(entry ?? "").trim());
+      if (normalized.some((entry) => entry !== "")) {
+        rows.push(normalized);
+      }
+    });
+    return rows;
+  }
+
+  async function parseXlsxRowsOffline(buffer) {
+    const zipBytes = new Uint8Array(buffer);
+    const decoder = new TextDecoder("utf-8");
+    const eocdOffset = findEocdOffset(zipBytes);
+    if (eocdOffset < 0) {
+      throw new Error("Invalid XLSX/ZIP file: EOCD not found.");
+    }
+    const centralDirectorySize = readUInt32LE(zipBytes, eocdOffset + 12);
+    const centralDirectoryOffset = readUInt32LE(zipBytes, eocdOffset + 16);
+    const centralEnd = centralDirectoryOffset + centralDirectorySize;
+
+    const entries = new Map();
+    let cursor = centralDirectoryOffset;
+    while (cursor < centralEnd) {
+      if (
+        zipBytes[cursor] !== 0x50 ||
+        zipBytes[cursor + 1] !== 0x4b ||
+        zipBytes[cursor + 2] !== 0x01 ||
+        zipBytes[cursor + 3] !== 0x02
+      ) {
+        break;
+      }
+      const compressionMethod = readUInt16LE(zipBytes, cursor + 10);
+      const compressedSize = readUInt32LE(zipBytes, cursor + 20);
+      const nameLen = readUInt16LE(zipBytes, cursor + 28);
+      const extraLen = readUInt16LE(zipBytes, cursor + 30);
+      const commentLen = readUInt16LE(zipBytes, cursor + 32);
+      const localHeaderOffset = readUInt32LE(zipBytes, cursor + 42);
+      const nameStart = cursor + 46;
+      const nameBytes = zipBytes.slice(nameStart, nameStart + nameLen);
+      const name = decoder.decode(nameBytes);
+      entries.set(name, {
+        name,
+        compressionMethod,
+        compressedSize,
+        localHeaderOffset,
+      });
+      cursor = nameStart + nameLen + extraLen + commentLen;
+    }
+
+    const readEntryXml = async (name) => {
+      const entry = entries.get(name);
+      if (!entry) return null;
+      const bytes = await unzipEntryBytes(zipBytes, entry);
+      return decoder.decode(bytes);
+    };
+
+    const workbookXml = await readEntryXml("xl/workbook.xml");
+    const relsXml = await readEntryXml("xl/_rels/workbook.xml.rels");
+    if (!workbookXml || !relsXml) {
+      throw new Error("Invalid XLSX file: workbook metadata not found.");
+    }
+
+    const parser = new DOMParser();
+    const workbookDoc = parser.parseFromString(workbookXml, "application/xml");
+    const relsDoc = parser.parseFromString(relsXml, "application/xml");
+
+    const relMap = new Map();
+    xmlElementsByTag(relsDoc, "Relationship").forEach((node) => {
+      relMap.set(node.getAttribute("Id"), node.getAttribute("Target"));
+    });
+
+    const sheetNodes = xmlElementsByTag(workbookDoc, "sheet");
+    if (!sheetNodes.length) {
+      return [];
+    }
+
+    const sharedStringsXml = await readEntryXml("xl/sharedStrings.xml");
+    const sharedStrings = [];
+    if (sharedStringsXml) {
+      const sstDoc = parser.parseFromString(sharedStringsXml, "application/xml");
+      xmlElementsByTag(sstDoc, "si").forEach((si) => {
+        const text = xmlElementsByTag(si, "t")
+          .map((node) => node.textContent || "")
+          .join("");
+        sharedStrings.push(text);
+      });
+    }
+
+    const normalizeSheetPath = (target = "") => {
+      if (target.startsWith("/")) {
+        return target.replace(/^\//, "");
+      }
+      const normalized = `xl/${target.replace(/^\.?\//, "")}`;
+      return normalized.replace(/\/\.\//g, "/").replace(/\/[^/]+\/\.\.\//g, "/");
+    };
+
+    for (const sheetNode of sheetNodes) {
+      const rid = sheetNode.getAttribute("r:id") || sheetNode.getAttribute("id");
+      const relTarget = relMap.get(rid);
+      if (!relTarget) {
+        continue;
+      }
+      const sheetPath = normalizeSheetPath(relTarget);
+      const sheetXml = await readEntryXml(sheetPath);
+      const rows = extractRowsFromSheetXml(sheetXml, parser, sharedStrings);
+      if (rows.length) {
+        return rows;
+      }
+    }
+    throw new Error("Invalid XLSX file: worksheet XML missing.");
   }
 
   function parsePeriod(value) {
@@ -1109,6 +1490,36 @@
     return `${Number(value).toFixed(digits)}%`;
   }
 
+  function formatSignedPercent(value, digits = 1) {
+    if (value == null || Number.isNaN(Number(value))) {
+      return "--";
+    }
+    const numeric = Number(value);
+    const prefix = numeric > 0 ? "+" : "";
+    return `${prefix}${numeric.toFixed(digits)}%`;
+  }
+
+  function calcPercentChange(delta, baseline) {
+    if (delta == null || baseline == null) {
+      return null;
+    }
+    const base = Math.abs(Number(baseline));
+    if (!Number.isFinite(base) || base === 0) {
+      return null;
+    }
+    return (Number(delta) / base) * 100;
+  }
+
+  function trendVerb(value, positive = "Improved", negative = "Declined", neutral = "Flat") {
+    if (value == null || Number.isNaN(Number(value))) {
+      return "--";
+    }
+    const numeric = Number(value);
+    if (numeric > 0) return positive;
+    if (numeric < 0) return negative;
+    return neutral;
+  }
+
   function formatNumber(value, digits = 0) {
     if (value == null) {
       return "--";
@@ -1227,8 +1638,17 @@
           required: { ...(FILE_SPECS[type].required || {}) },
           recommended: { ...(FILE_SPECS[type].recommended || {}) },
         };
+    const allowBudgetOnly = type === "financial" && Boolean(options.allowBudgetOnly);
     if (type === "financial" && !scopeOverride && !options._specOverride) {
       spec.required.property = FILE_SPECS.financial.recommended.property;
+    }
+    if (type === "financial" && allowBudgetOnly) {
+      delete spec.required.actual;
+      const budgetAliases = new Set([
+        ...(spec.required.budget || []),
+        ...(FILE_SPECS.financial.recommended?.annualBudget || []),
+      ]);
+      spec.required.budget = Array.from(budgetAliases);
     }
     if (type === "financial" && periodOverride && spec.required?.period) {
       delete spec.required.period;
@@ -1275,7 +1695,8 @@
         });
 
         if (type === "financial") {
-          const property = matchCommunityName(scopeOverride || getField(row, fieldInfo.detected, "property"));
+          // If the file doesn't contain an entity column, the import workspace scope acts as the entity source of truth.
+          const property = matchCommunityName(scopeOverride || getField(row, fieldInfo.detected, "property")) || matchCommunityName(scopeOverride);
           const rawPeriod = getField(row, fieldInfo.detected, "period");
           const period =
             periodOverride ||
@@ -1285,30 +1706,41 @@
             state.manualPeriod;
           const rawSection = getField(row, fieldInfo.detected, "section");
           const rawLineItem = getField(row, fieldInfo.detected, "lineItem");
-          const glCodeValue = getField(row, fieldInfo.detected, "glCode").trim();
-          const sectionHeaderCandidate = rawSection || rawLineItem;
+          const glCodeRaw = getField(row, fieldInfo.detected, "glCode").trim();
+          const glCodeCandidate = glCodeRaw && /^\d{3,}$/.test(glCodeRaw) ? glCodeRaw : "";
+          const sectionHeaderCandidate = rawSection || rawLineItem || glCodeRaw;
           const hasNumeric =
             parseAmount(getField(row, fieldInfo.detected, "actual")) != null ||
             parseAmount(getField(row, fieldInfo.detected, "budget")) != null;
 
           // For "Income Statement - Budget vs Actual" style exports, section headers appear as
-          // rows with no account code and no numeric values.
-          if (!glCodeValue && sectionHeaderCandidate && !hasNumeric) {
+          // rows with no numeric values. Some exports put the section label in the Account/GL column.
+          if (sectionHeaderCandidate && !hasNumeric && !rawLineItem) {
             currentSection = String(sectionHeaderCandidate).trim();
             continue;
           }
 
           const section = String(rawSection || currentSection || "Uncategorized").trim();
           const lineItem = String(rawLineItem).trim();
-          const actual = parseAmount(getField(row, fieldInfo.detected, "actual"));
-          const budget = parseAmount(getField(row, fieldInfo.detected, "budget"));
+          let actual = parseAmount(getField(row, fieldInfo.detected, "actual"));
+          let budget = parseAmount(getField(row, fieldInfo.detected, "budget"));
+          const annualBudgetCandidate = parseAmount(getField(row, fieldInfo.detected, "annualBudget"));
+          if (allowBudgetOnly) {
+            if (actual == null) {
+              actual = 0;
+            }
+            if (budget == null && annualBudgetCandidate != null) {
+              budget = annualBudgetCandidate / 12;
+            }
+          }
 
-          if (!property || !period || !section || !lineItem || (actual == null && budget == null)) {
+          const noBudgetValue = budget == null && annualBudgetCandidate == null;
+          if (!property || !period || !section || !lineItem || (!allowBudgetOnly && actual == null && budget == null) || (allowBudgetOnly && noBudgetValue)) {
             continue;
           }
 
           const annualBudget =
-            parseAmount(getField(row, fieldInfo.detected, "annualBudget")) ??
+            annualBudgetCandidate ??
             ((budget ?? 0) * 12);
 
           records.push({
@@ -1316,7 +1748,7 @@
             period,
             section: section.trim(),
             lineItem: lineItem.trim(),
-            glCode: glCodeValue,
+            glCode: glCodeCandidate,
             actual: actual ?? 0,
             budget: budget ?? 0,
             annualBudget,
@@ -1370,15 +1802,22 @@
     }
 
     const normalizedRecords = type === "financial" ? normalizeFinancialRecords(records) : records;
+    const finalRecords =
+      type === "financial" && scopeOverride
+        ? normalizedRecords.map((record) => ({
+            ...record,
+            property: record.property || matchCommunityName(scopeOverride),
+          }))
+        : normalizedRecords;
 
     return {
       type,
       fileName,
       sourceKind: "file",
       sourceText: String(options.sourceText ?? ""),
-      records: normalizedRecords,
+      records: finalRecords,
       diagnostics: {
-        parsedRows: normalizedRecords.length,
+        parsedRows: finalRecords.length,
         fileRows: Math.max(0, rows.length - 1),
         missingRequired: fieldInfo.missingRequired,
         missingRecommended: fieldInfo.missingRecommended,
@@ -1387,24 +1826,168 @@
     };
   }
 
+  function detectBudgetMonthColumns(rows = []) {
+    const monthLookup = {
+      jan: "01",
+      feb: "02",
+      mar: "03",
+      apr: "04",
+      may: "05",
+      jun: "06",
+      jul: "07",
+      aug: "08",
+      sep: "09",
+      oct: "10",
+      nov: "11",
+      dec: "12",
+    };
+    let monthHeaderIndex = -1;
+    let monthColumns = [];
+    let totalColumnIndex = -1;
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex] || [];
+      const mapped = [];
+      let monthHits = 0;
+      for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+        const token = String(row[colIndex] ?? "").trim().toLowerCase();
+        const key = token.slice(0, 3);
+        if (monthLookup[key]) {
+          mapped.push({ colIndex, month: monthLookup[key] });
+          monthHits += 1;
+        }
+        if (token === "total") {
+          totalColumnIndex = colIndex;
+        }
+      }
+      if (monthHits >= 6) {
+        monthHeaderIndex = rowIndex;
+        monthColumns = mapped.sort((a, b) => a.colIndex - b.colIndex);
+        break;
+      }
+    }
+    return { monthHeaderIndex, monthColumns, totalColumnIndex };
+  }
+
+  function parseFinalizedBudgetMatrixRows(rawRows, options = {}) {
+    const rows = Array.isArray(rawRows) ? rawRows : [];
+    if (!rows.length) {
+      return { records: [], benchmarks: [], yearsDetected: [] };
+    }
+    const scopeOverride = matchCommunityName(options.scopeOverride || "RISE Corporate");
+    const year = String(Number(options.year || new Date().getFullYear()) || new Date().getFullYear());
+    const { monthHeaderIndex, monthColumns, totalColumnIndex } = detectBudgetMonthColumns(rows);
+
+    if (monthHeaderIndex < 0 || !monthColumns.length) {
+      return { records: [], benchmarks: [], yearsDetected: [] };
+    }
+
+    const records = [];
+    const benchmarks = [];
+    const yearsDetected = new Set([year]);
+    let currentSection = "Uncategorized";
+    let currentContextLineItem = "";
+    for (const row of rows.slice(monthHeaderIndex + 1)) {
+      const first = String(row?.[0] ?? "").trim();
+      const second = String(row?.[1] ?? "").trim();
+      const label = second || first;
+      const lowerLabel = label.toLowerCase();
+      const monthlyValues = monthColumns.map(({ colIndex }) => parseAmount(row?.[colIndex]));
+      const hasMonthlyValues = monthlyValues.some((value) => value != null);
+      const glMatch = /^\d{3,}$/.test(first) ? first : "";
+      const isSectionHeader = !glMatch && !second && !hasMonthlyValues && first && !/total/i.test(first);
+      const isTotalRow = /total/i.test(first) || /total/i.test(second);
+      const isActualRow = /actual/i.test(first) || /actual/i.test(second);
+      const yearMatch = /\b(20\d{2})\b/.exec(`${first} ${second}`);
+      const isYearComparativeRow = Boolean(
+        yearMatch && /(actual|budget|forecast|prior|plan)/i.test(`${first} ${second}`),
+      );
+
+      if (isSectionHeader) {
+        currentSection = first;
+        continue;
+      }
+      if (!label || !hasMonthlyValues) {
+        continue;
+      }
+
+      if (isYearComparativeRow) {
+        const benchmarkYear = yearMatch?.[1];
+        if (benchmarkYear) {
+          yearsDetected.add(benchmarkYear);
+          const totalValue = totalColumnIndex >= 0 ? parseAmount(row?.[totalColumnIndex]) : null;
+          const contextLineItem = currentContextLineItem || currentSection || "Comparative";
+          monthColumns.forEach(({ colIndex, month }) => {
+            const amount = parseAmount(row?.[colIndex]);
+            if (amount == null) {
+              return;
+            }
+            benchmarks.push({
+              property: scopeOverride,
+              period: `${benchmarkYear}-${month}`,
+              year: benchmarkYear,
+              section: currentSection || "Uncategorized",
+              lineItem: contextLineItem,
+              benchmarkLabel: label,
+              amount,
+              totalAmount: totalValue,
+            });
+          });
+        }
+        continue;
+      }
+
+      if (isTotalRow || isActualRow) {
+        if (first) {
+          currentContextLineItem = first;
+        }
+        continue;
+      }
+
+      const totalValue = totalColumnIndex >= 0 ? parseAmount(row?.[totalColumnIndex]) : null;
+      const inferredAnnual = totalValue ?? monthlyValues.reduce((sum, value) => sum + (value ?? 0), 0);
+      if (first && !glMatch) {
+        currentContextLineItem = first;
+      } else if (label) {
+        currentContextLineItem = label;
+      }
+      monthColumns.forEach(({ colIndex, month }) => {
+        const budget = parseAmount(row?.[colIndex]);
+        if (budget == null) {
+          return;
+        }
+        records.push({
+          property: scopeOverride,
+          period: `${year}-${month}`,
+          section: currentSection || "Uncategorized",
+          lineItem: label,
+          glCode: glMatch,
+          actual: 0,
+          budget,
+          annualBudget: inferredAnnual || (budget * 12),
+        });
+      });
+    }
+    const dedupedBenchmarks = new Map();
+    benchmarks.forEach((entry) => {
+      const key = `${entry.property}::${entry.period}::${entry.section}::${entry.lineItem}::${entry.benchmarkLabel}`;
+      dedupedBenchmarks.set(key, entry);
+    });
+    return {
+      records: normalizeFinancialRecords(records),
+      benchmarks: Array.from(dedupedBenchmarks.values()),
+      yearsDetected: Array.from(yearsDetected).sort((a, b) => a.localeCompare(b)),
+    };
+  }
+
   function fileExt(name = "") {
     const match = /\.([a-z0-9]+)$/i.exec(String(name));
     return match ? match[1].toLowerCase() : "";
   }
 
-  async function readFileToRows(file) {
-    const ext = fileExt(file?.name || "");
-    const isWorkbook = ["xlsx", "xlsm", "xls"].includes(ext);
-    if (!isWorkbook) {
-      const text = await file.text();
-      return { rows: parseCsv(text), sourceText: text };
-    }
-
+  function readWorkbookRowsWithXlsx(buffer) {
     if (typeof window.XLSX === "undefined") {
-      throw new Error("Excel parser is not available. Ensure xlsx library is loaded.");
+      throw new Error("Excel parser is not loaded.");
     }
-
-    const buffer = await file.arrayBuffer();
     const workbook = window.XLSX.read(buffer, { type: "array" });
     const sheetNames = Array.isArray(workbook.SheetNames) ? workbook.SheetNames : [];
     const sheetName =
@@ -1416,13 +1999,231 @@
       }) || sheetNames[0];
     const sheet = sheetName ? workbook.Sheets?.[sheetName] : null;
     if (!sheet) {
-      return { rows: [], sourceText: "" };
+      return [];
     }
     const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
-    const normalized = (Array.isArray(rows) ? rows : [])
+    return (Array.isArray(rows) ? rows : [])
       .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "").trim()) : []))
       .filter((row) => row.some((cell) => cell !== ""));
-    return { rows: normalized, sourceText: "" };
+  }
+
+  async function readFileToRows(file) {
+    const ext = fileExt(file?.name || "");
+    const isWorkbook = ["xlsx", "xlsm", "xls"].includes(ext);
+    if (!isWorkbook) {
+      const text = await file.text();
+      return { rows: parseCsv(text), sourceText: text };
+    }
+
+    const buffer = await file.arrayBuffer();
+    let offlineError = null;
+    let xlsxError = null;
+
+    if (typeof window.XLSX !== "undefined") {
+      try {
+        return { rows: readWorkbookRowsWithXlsx(buffer), sourceText: "" };
+      } catch (error) {
+        xlsxError = error;
+        logDebug("xlsx-library-parse-failed", file?.name, error?.message || error);
+      }
+    }
+
+    if (typeof window.XLSX === "undefined") {
+      if (!xlsxLoaderPromise) {
+        const candidateUrls = [
+          "assets/xlsx.full.min.js",
+          "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+          "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+        ];
+        const loadScriptWithTimeout = (url, timeoutMs = 3500) =>
+          new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            let settled = false;
+            const timer = window.setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              try {
+                script.remove();
+              } catch (_error) {}
+              reject(new Error(`Timed out loading ${url}`));
+            }, timeoutMs);
+
+            const finish = (ok, error) => {
+              if (settled) return;
+              settled = true;
+              window.clearTimeout(timer);
+              if (ok) {
+                resolve(true);
+              } else {
+                reject(error || new Error(`Failed loading ${url}`));
+              }
+            };
+
+            script.src = url;
+            script.async = true;
+            script.onload = () => finish(true);
+            script.onerror = () => finish(false, new Error(`Failed loading ${url}`));
+            document.head.appendChild(script);
+          });
+        xlsxLoaderPromise = new Promise((resolve, reject) => {
+          const tryLoad = (index) => {
+            if (typeof window.XLSX !== "undefined") {
+              resolve(true);
+              return;
+            }
+            const nextUrl = candidateUrls[index];
+            if (!nextUrl) {
+              const suffix = offlineError ? ` Offline parser detail: ${offlineError?.message || String(offlineError)}` : "";
+              reject(new Error(`Excel parser could not be loaded from CDN.${suffix} Upload CSV, use .xlsx in a Chromium browser, or enable internet access for XLSX parsing.`));
+              return;
+            }
+            loadScriptWithTimeout(nextUrl)
+              .then(() => {
+                if (typeof window.XLSX !== "undefined") {
+                  resolve(true);
+                } else {
+                  tryLoad(index + 1);
+                }
+              })
+              .catch(() => {
+                tryLoad(index + 1);
+              });
+          };
+          tryLoad(0);
+        }).catch((error) => {
+          xlsxLoaderPromise = null;
+          throw error;
+        });
+      }
+      await xlsxLoaderPromise;
+    }
+
+    if (typeof window.XLSX !== "undefined") {
+      try {
+        return { rows: readWorkbookRowsWithXlsx(buffer), sourceText: "" };
+      } catch (error) {
+        xlsxError = error;
+        logDebug("xlsx-library-parse-after-load-failed", file?.name, error?.message || error);
+      }
+    }
+
+    if ((ext === "xlsx" || ext === "xlsm") && typeof window.XLSX === "undefined") {
+      try {
+        const offlineRows = await withTimeout(
+          parseXlsxRowsOffline(buffer),
+          4000,
+          `Offline XLSX parsing timed out for ${file?.name || "workbook"}.`,
+        );
+        if (Array.isArray(offlineRows) && offlineRows.length) {
+          return { rows: offlineRows, sourceText: "" };
+        }
+      } catch (error) {
+        offlineError = error;
+        logDebug("offline-xlsx-parse-failed", file?.name, error?.message || error);
+      }
+    }
+
+    if (typeof window.XLSX === "undefined") {
+      const suffix = offlineError ? ` Offline parser detail: ${offlineError?.message || String(offlineError)}` : "";
+      throw new Error(`Excel parser is not available.${suffix} Upload CSV, use .xlsx in a Chromium browser, or enable internet access for XLSX parsing.`);
+    }
+
+    const xlsxSuffix = xlsxError ? ` Parser detail: ${xlsxError?.message || String(xlsxError)}` : "";
+    const offlineSuffix = offlineError ? ` Offline parser detail: ${offlineError?.message || String(offlineError)}` : "";
+    throw new Error(`Excel workbook could not be parsed.${xlsxSuffix}${offlineSuffix}`);
+  }
+
+  async function parseApprovedBudgetFiles(fileList, options = {}) {
+    const scopeOverride = matchCommunityName(options.scopeOverride || "RISE Corporate");
+    const parsedYear = String(Number(options.year || "2026") || 2026);
+    const yearFallbackPeriod = `${parsedYear}-01`;
+    let staged = null;
+    const stagedFiles = [];
+    const benchmarkRows = [];
+    const detectedYears = new Set([parsedYear]);
+
+    for (const file of Array.from(fileList || []).filter(Boolean)) {
+      const { rows, sourceText } = await withTimeout(
+        readFileToRows(file),
+        12000,
+        `Timed out reading ${file?.name || "workbook"}. Try the file again or upload a CSV export for this budget.`,
+      );
+      let parsed = parseDatasetFromRows("financial", rows, file.name, {
+        scopeOverride,
+        replaceMode: "approved_budget",
+        period: yearFallbackPeriod,
+        periodOverride: yearFallbackPeriod,
+        sourceText,
+        allowBudgetOnly: true,
+      });
+      const matrixParsed = parseFinalizedBudgetMatrixRows(rows, {
+        scopeOverride,
+        year: parsedYear,
+      });
+      matrixParsed.yearsDetected?.forEach((yearToken) => detectedYears.add(String(yearToken)));
+      if (Array.isArray(matrixParsed.benchmarks) && matrixParsed.benchmarks.length) {
+        benchmarkRows.push(...matrixParsed.benchmarks);
+      }
+      if (matrixParsed.records.length) {
+        const mergedRecords = mergeDatasetRecords("financial", parsed.records || [], matrixParsed.records);
+        parsed = {
+          ...parsed,
+          records: mergedRecords,
+          diagnostics: {
+            ...(parsed.diagnostics || {}),
+            parsedRows: mergedRecords.length,
+            fileRows: Math.max(0, rows.length - 1),
+            detected: {
+              ...((parsed.diagnostics && parsed.diagnostics.detected) || {}),
+              source: "finalized-budget-matrix-with-comparatives",
+            },
+          },
+        };
+      }
+      if (!parsed.records?.length && matrixParsed.records.length) {
+        parsed = {
+          type: "financial",
+          fileName: file.name,
+          sourceKind: "file",
+          sourceText,
+          records: matrixParsed.records,
+          diagnostics: {
+            parsedRows: matrixParsed.records.length,
+            fileRows: Math.max(0, rows.length - 1),
+            missingRequired: [],
+            missingRecommended: [],
+            detected: { source: "finalized-budget-matrix-with-comparatives" },
+          },
+        };
+      }
+      staged = staged
+        ? {
+            ...parsed,
+            fileName: `${staged.fileName || "approved-budget-staged"} + ${parsed.fileName || file.name}`,
+            sourceKind: "staged",
+            records: mergeDatasetRecords("financial", staged.records || [], parsed.records || []),
+            diagnostics: {
+              ...(parsed.diagnostics || {}),
+              parsedRows: (staged.records?.length || 0) + (parsed.records?.length || 0),
+              fileRows: (staged.records?.length || 0) + (parsed.records?.length || 0),
+            },
+          }
+        : {
+            ...parsed,
+            sourceKind: "staged",
+          };
+      stagedFiles.push(file.name);
+    }
+
+    return {
+      staged,
+      stagedFiles,
+      scopeOverride,
+      parsedYear,
+      benchmarkRows,
+      detectedYears: Array.from(detectedYears).sort((a, b) => a.localeCompare(b)),
+    };
   }
 
   function recordKeyForType(type, record) {
@@ -1438,7 +2239,9 @@
       merged.set(recordKeyForType(type, record), record);
     });
     return Array.from(merged.values()).sort(
-      (left, right) => comparePeriod(left.period, right.period) || left.property.localeCompare(right.property),
+      (left, right) =>
+        comparePeriod(left?.period, right?.period) ||
+        String(left?.property ?? "").localeCompare(String(right?.property ?? "")),
     );
   }
 
@@ -1506,10 +2309,12 @@
   }
 
   function clearState() {
+    pendingApprovedBudgetFiles = [];
     state.selectedPeriod = null;
     state.selectedProperty = null;
     state.layer = "financial";
     state.pendingFinancial = null;
+    state.pendingApprovedBudget = null;
     state.financialImport = {
       scope: AUTO_IMPORT_SCOPE,
       mode: "merge",
@@ -1517,10 +2322,21 @@
       periodMonth: String(new Date().getMonth() + 1).padStart(2, "0"),
       periodYear: String(new Date().getFullYear()),
     };
+    state.approvedBudgetImport = {
+      scope: "RISE Corporate",
+      year: "2026",
+      expandAcrossYear: true,
+    };
+    state.lastApprovedBudgetNotice = null;
     state.snapshotScope = {
       mode: "all",
       search: "",
       selectedEntities: [],
+    };
+    state.financialLineFilter = {
+      period: "selected",
+      glCode: "all",
+      status: "all",
     };
     state.datasets = {
       financial: null,
@@ -1540,8 +2356,11 @@
       selectedProperty: state.selectedProperty,
       manualPeriod: state.manualPeriod,
       financialImport: state.financialImport,
+      approvedBudgetImport: state.approvedBudgetImport,
+      lastApprovedBudgetNotice: state.lastApprovedBudgetNotice,
       lastFinancialApplyNotice: state.lastFinancialApplyNotice,
       snapshotScope: state.snapshotScope,
+      financialLineFilter: state.financialLineFilter,
       datasets: Object.fromEntries(
         Object.entries(state.datasets).map(([key, dataset]) => [
           key,
@@ -1583,6 +2402,21 @@
       state.selectedProperty = parsed.selectedProperty || null;
       state.manualPeriod = parsePeriod(parsed.manualPeriod) || state.manualPeriod;
       state.lastFinancialApplyNotice = parsed.lastFinancialApplyNotice || null;
+      state.lastApprovedBudgetNotice = parsed.lastApprovedBudgetNotice || null;
+      if (isLegacyCdnParserErrorNotice(state.lastFinancialApplyNotice)) {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "approved_budget",
+          message: "Previous XLSX parser error cleared after build update. Re-upload the finalized budget file to test current parsing.",
+        };
+      }
+      if (isLegacyCdnParserErrorNotice(state.lastApprovedBudgetNotice)) {
+        state.lastApprovedBudgetNotice = {
+          at: new Date().toISOString(),
+          kind: "approved_budget",
+          message: "Previous XLSX parser error cleared after build update. Re-upload the finalized budget file to test current parsing.",
+        };
+      }
       state.financialImport = {
         scope: parsed.financialImport?.scope || AUTO_IMPORT_SCOPE,
         mode: parsed.financialImport?.mode || "merge",
@@ -1591,12 +2425,23 @@
           parsed.financialImport?.periodMonth || String(new Date().getMonth() + 1).padStart(2, "0"),
         periodYear: parsed.financialImport?.periodYear || String(new Date().getFullYear()),
       };
+      state.approvedBudgetImport = {
+        scope: parsed.approvedBudgetImport?.scope || "RISE Corporate",
+        year: parsed.approvedBudgetImport?.year || "2026",
+        expandAcrossYear:
+          parsed.approvedBudgetImport?.expandAcrossYear == null ? true : Boolean(parsed.approvedBudgetImport.expandAcrossYear),
+      };
       state.snapshotScope = {
         mode: parsed.snapshotScope?.mode || "all",
         search: parsed.snapshotScope?.search || "",
         selectedEntities: Array.isArray(parsed.snapshotScope?.selectedEntities)
           ? parsed.snapshotScope.selectedEntities
           : [],
+      };
+      state.financialLineFilter = {
+        period: parsed.financialLineFilter?.period || "selected",
+        glCode: parsed.financialLineFilter?.glCode || "all",
+        status: parsed.financialLineFilter?.status || "all",
       };
 
       for (const key of ["financial", "operations", "leasing"]) {
@@ -1828,29 +2673,64 @@
     };
   }
 
-  function approvedBudgetKey(record) {
-    const gl = String(record.glCode ?? "").trim();
-    const item = String(record.lineItem ?? "").trim();
-    return `${record.property}::${record.period}::${gl || item}`.toLowerCase();
+  function normalizeBudgetGlToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^0-9]/g, "")
+      .trim();
+  }
+
+  function normalizeBudgetLineToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
+  }
+
+  function approvedBudgetKeyCandidates(record, granularity = "period") {
+    const property = String(record?.property ?? "").trim();
+    const period = String(record?.period ?? "").trim();
+    const year = period.slice(0, 4);
+    const glToken = normalizeBudgetGlToken(record?.glCode);
+    const lineToken = normalizeBudgetLineToken(record?.lineItem);
+    const prefix = granularity === "year" ? `${property}::${year}` : `${property}::${period}`;
+    const keys = [];
+    if (glToken) keys.push(`${prefix}::gl:${glToken}`);
+    if (lineToken) keys.push(`${prefix}::line:${lineToken}`);
+    if (!keys.length) keys.push(`${prefix}::line:unknown`);
+    return keys;
   }
 
   function buildApprovedBudgetIndex(records = [], year, property) {
-    const index = new Map();
+    const exactIndex = new Map();
+    const yearIndex = new Map();
     for (const record of records) {
       if (!record?.property || !record?.period) continue;
       if (year && !String(record.period).startsWith(String(year))) continue;
       if (property && record.property !== property) continue;
-      index.set(approvedBudgetKey(record), record);
+      approvedBudgetKeyCandidates(record, "period").forEach((key) => exactIndex.set(key.toLowerCase(), record));
+      approvedBudgetKeyCandidates(record, "year").forEach((key) => yearIndex.set(key.toLowerCase(), record));
     }
-    return index;
+    return { exactIndex, yearIndex };
   }
 
   function applyApprovedBudgetToRecords(records = [], approvedIndex) {
-    if (!approvedIndex || approvedIndex.size === 0) {
+    if (!approvedIndex) {
+      return records;
+    }
+    const exactIndex = approvedIndex instanceof Map ? approvedIndex : approvedIndex.exactIndex;
+    const yearIndex = approvedIndex instanceof Map ? approvedIndex : approvedIndex.yearIndex;
+    const exactSize = exactIndex?.size || 0;
+    const yearSize = yearIndex?.size || 0;
+    if (!exactSize && !yearSize) {
       return records;
     }
     return records.map((record) => {
-      const approved = approvedIndex.get(approvedBudgetKey(record));
+      const exactCandidates = approvedBudgetKeyCandidates(record, "period").map((key) => key.toLowerCase());
+      const yearCandidates = approvedBudgetKeyCandidates(record, "year").map((key) => key.toLowerCase());
+      const approved =
+        exactCandidates.map((key) => exactIndex?.get(key)).find(Boolean) ||
+        yearCandidates.map((key) => yearIndex?.get(key)).find(Boolean);
       if (!approved) return record;
       return {
         ...record,
@@ -1858,6 +2738,274 @@
         annualBudget: Number(approved.annualBudget ?? record.annualBudget ?? 0),
       };
     });
+  }
+
+  function countApprovedBudgetMatches(records = [], approvedIndex) {
+    if (!records.length || !approvedIndex) return 0;
+    const exactIndex = approvedIndex instanceof Map ? approvedIndex : approvedIndex.exactIndex;
+    const yearIndex = approvedIndex instanceof Map ? approvedIndex : approvedIndex.yearIndex;
+    let matched = 0;
+    for (const record of records) {
+      const exactCandidates = approvedBudgetKeyCandidates(record, "period").map((key) => key.toLowerCase());
+      const yearCandidates = approvedBudgetKeyCandidates(record, "year").map((key) => key.toLowerCase());
+      const found =
+        exactCandidates.map((key) => exactIndex?.get(key)).find(Boolean) ||
+        yearCandidates.map((key) => yearIndex?.get(key)).find(Boolean);
+      if (found) matched += 1;
+    }
+    return matched;
+  }
+
+  function sumApprovedBudgetNoiForPeriod(property, period) {
+    if (!property || !period) return null;
+    const approvedRecords = (state.approvedBudgets?.records || []).filter(
+      (record) => record.property === property && record.period === period,
+    );
+    if (!approvedRecords.length) {
+      return null;
+    }
+    const rollup = buildFinancialRollup(approvedRecords, 1);
+    return rollup?.noiBudget ?? null;
+  }
+
+  function formatFilterGlValue(glCode) {
+    const normalized = String(glCode || "").trim();
+    return normalized || "unmapped";
+  }
+
+  function lineTrackStatus(line) {
+    if (!line) return "off_track";
+    return (line.favorableVariance ?? 0) >= 0 ? "on_track" : "off_track";
+  }
+
+  function normalizeNoiToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  function isNoiLineItem(value) {
+    const token = normalizeNoiToken(value);
+    return token.includes("netoperatingincome") || token === "noi" || token.endsWith("noi");
+  }
+
+  function summarizeNoiYear(property, year, throughMonth = 12) {
+    const monthValueMap = new Map();
+    const approvedRows = (state.approvedBudgets?.records || []).filter(
+      (row) =>
+        row.property === property &&
+        String(row.period || "").startsWith(`${year}-`) &&
+        isNoiLineItem(row.lineItem),
+    );
+    approvedRows.forEach((row) => {
+      monthValueMap.set(String(row.period), Number(row.budget || 0));
+    });
+
+    const benchmarkRows = (state.approvedBudgets?.benchmarks || []).filter(
+      (row) =>
+        row.property === property &&
+        String(row.period || "").startsWith(`${year}-`) &&
+        (isNoiLineItem(row.lineItem) || isNoiLineItem(row.section)),
+    );
+    benchmarkRows.forEach((row) => {
+      const period = String(row.period || "");
+      const nextValue = Number(row.amount || 0);
+      if (!monthValueMap.has(period)) {
+        monthValueMap.set(period, nextValue);
+        return;
+      }
+      // If duplicate NOI rows exist, keep the larger absolute value as the stronger signal.
+      const currentValue = Number(monthValueMap.get(period) || 0);
+      if (Math.abs(nextValue) > Math.abs(currentValue)) {
+        monthValueMap.set(period, nextValue);
+      }
+    });
+
+    const months = Array.from(monthValueMap.entries()).sort((left, right) => comparePeriod(left[0], right[0]));
+    const annualNoi = months.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+    const ytdNoi = months.reduce((sum, [period, value]) => {
+      const month = Number(String(period).slice(5, 7)) || 0;
+      return month > 0 && month <= throughMonth ? sum + Number(value || 0) : sum;
+    }, 0);
+    return {
+      year: String(year),
+      annualNoi,
+      ytdNoi,
+      monthsLoaded: months.length,
+    };
+  }
+
+  function buildNoiTrendSummary(property, asOf) {
+    const asOfYear = Number(String(asOf || "").slice(0, 4));
+    const throughMonth = Number(String(asOf || "").slice(5, 7)) || 12;
+    if (!asOfYear || !property) {
+      return null;
+    }
+    const years = [asOfYear, asOfYear - 1, asOfYear - 2];
+    const series = years.map((year) => summarizeNoiYear(property, year, throughMonth));
+    const current = series[0];
+    const prior = series[1];
+    const twoBack = series[2];
+    return {
+      asOfYear: String(asOfYear),
+      throughMonth,
+      series,
+      currentYtd: current?.monthsLoaded ? current.ytdNoi : null,
+      priorYtd: prior?.monthsLoaded ? prior.ytdNoi : null,
+      twoBackYtd: twoBack?.monthsLoaded ? twoBack.ytdNoi : null,
+      yoyImprovement:
+        current?.monthsLoaded && prior?.monthsLoaded ? current.ytdNoi - prior.ytdNoi : null,
+      twoYearImprovement:
+        current?.monthsLoaded && twoBack?.monthsLoaded ? current.ytdNoi - twoBack.ytdNoi : null,
+    };
+  }
+
+  function buildFilteredFinancialLines(summary, asOf, overrides = {}) {
+    if (!summary?.property || !asOf) {
+      return {
+        lines: [],
+        optionPeriods: [],
+        optionGlCodes: [],
+        selectedPeriodLabel: "--",
+        includedPeriodCount: 0,
+      };
+    }
+
+    const dataset = state.datasets.financial;
+    if (!dataset?.records?.length) {
+      return {
+        lines: [],
+        optionPeriods: [],
+        optionGlCodes: [],
+        selectedPeriodLabel: "--",
+        includedPeriodCount: 0,
+      };
+    }
+
+    const selectedYear = String(asOf).slice(0, 4);
+    const approvedIndex = buildApprovedBudgetIndex(state.approvedBudgets?.records || [], selectedYear, summary.property);
+    const sourceRecords = applyApprovedBudgetToRecords(
+      dataset.records.filter(
+        (record) =>
+          record.property === summary.property &&
+          String(record.period || "").startsWith(selectedYear) &&
+          comparePeriod(record.period, asOf) <= 0,
+      ),
+      approvedIndex,
+    );
+
+    const optionPeriods = Array.from(new Set(sourceRecords.map((record) => record.period).filter(Boolean))).sort(comparePeriod);
+    const optionGlCodes = Array.from(
+      new Set(
+        sourceRecords.map((record) => formatFilterGlValue(record.glCode)).filter(Boolean),
+      ),
+    ).sort((left, right) => {
+      if (left === "unmapped") return 1;
+      if (right === "unmapped") return -1;
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+    });
+
+    const periodFilter = overrides.period ?? state.financialLineFilter.period ?? "selected";
+    const allowedPeriods = (() => {
+      if (periodFilter === "selected") return new Set([asOf]);
+      if (periodFilter === "ytd") return new Set(optionPeriods);
+      if (periodFilter.startsWith("period:")) return new Set([periodFilter.slice(7)]);
+      return new Set(optionPeriods);
+    })();
+
+    const glFilter = overrides.glCode ?? state.financialLineFilter.glCode ?? "all";
+    const statusFilter = overrides.status ?? state.financialLineFilter.status ?? "all";
+
+    const lineMap = new Map();
+    sourceRecords
+      .filter((record) => allowedPeriods.has(record.period))
+      .forEach((record) => {
+        const key = `${record.section}::${record.lineItem}::${record.glCode || ""}`;
+        const current =
+          lineMap.get(key) ||
+          {
+            section: record.section,
+            lineItem: record.lineItem,
+            glCode: record.glCode || "",
+            ytdActual: 0,
+            ytdBudget: 0,
+            annualBudget: 0,
+          };
+        current.ytdActual += Number(record.actual || 0);
+        current.ytdBudget += Number(record.budget || 0);
+        current.annualBudget = Math.max(current.annualBudget, Number(record.annualBudget || 0));
+        lineMap.set(key, current);
+      });
+
+    const lines = Array.from(lineMap.values())
+      .map((line) => {
+        const favorableVariance = isIncomeSection(line.section)
+          ? line.ytdActual - line.ytdBudget
+          : line.ytdBudget - line.ytdActual;
+        const unfavorableAmount = Math.max(0, -favorableVariance);
+        const railWidth = Math.min(100, (unfavorableAmount / Math.max(Math.abs(line.ytdBudget), 1)) * 250);
+        return {
+          ...line,
+          favorableVariance,
+          unfavorableAmount,
+          railWidth,
+          status: lineTrackStatus({ favorableVariance }),
+        };
+      })
+      .filter((line) => (glFilter === "all" ? true : formatFilterGlValue(line.glCode) === glFilter))
+      .filter((line) => (statusFilter === "all" ? true : line.status === statusFilter))
+      .sort((left, right) => right.unfavorableAmount - left.unfavorableAmount);
+
+    const selectedPeriodLabel =
+      periodFilter === "selected"
+        ? formatPeriodLabel(asOf)
+        : periodFilter === "ytd"
+          ? `YTD through ${formatPeriodLabel(asOf)}`
+          : periodFilter.startsWith("period:")
+            ? formatPeriodLabel(periodFilter.slice(7))
+            : "Filtered period";
+
+    return {
+      lines,
+      optionPeriods,
+      optionGlCodes,
+      selectedPeriodLabel,
+      includedPeriodCount: allowedPeriods.size,
+    };
+  }
+
+  function buildBudgetRecommendations(summary, filteredLines) {
+    const recommendations = [];
+    if (summary?.financial?.projectedGap < 0 && summary.financial.remainingMonths > 0) {
+      recommendations.push(
+        `Close ${formatCurrency(summary.financial.projectedGap)} projected gap by improving NOI ${formatCurrency(
+          summary.financial.requiredMonthlyLift,
+        )} per remaining month.`,
+      );
+    }
+    if (summary?.financial?.momNoiChange != null && summary.financial.momNoiChange < 0) {
+      recommendations.push(
+        `Month-over-month NOI softened ${formatCurrency(summary.financial.momNoiChange)}. Prioritize expense controls before next close.`,
+      );
+    }
+    filteredLines
+      .filter((line) => line.unfavorableAmount > 0)
+      .slice(0, 3)
+      .forEach((line) => {
+        const bucket = `${line.section} ${line.lineItem}`.toLowerCase();
+        let suggestion = "Audit posted charges and recode one-time items so recurring spend tracks true run-rate.";
+        if (/payroll|overtime/.test(bucket)) {
+          suggestion = "Rebalance staffing and overtime schedules; enforce weekly labor variance reviews by GL.";
+        } else if (/utilit/.test(bucket)) {
+          suggestion = "Review utility spikes by meter and tighten vacant-unit consumption controls.";
+        } else if (/repair|maintenance|turn/.test(bucket)) {
+          suggestion = "Prioritize make-ready scope discipline and pre-approve high-cost work orders before posting.";
+        } else if (/concession|rent|income|bad debt|delinquency/.test(bucket)) {
+          suggestion = "Protect rent collections and pricing strategy to recover NOI while limiting concession exposure.";
+        }
+        recommendations.push(`${line.lineItem}: ${suggestion}`);
+      });
+    return recommendations.slice(0, 4);
   }
 
   function summarizeFinancial(property, asOf) {
@@ -1882,9 +3030,15 @@
     const periodsObserved = Array.from(new Set(records.map((record) => record.period))).sort(comparePeriod);
     const elapsedMonths = periodsObserved.length || Number(String(asOf).slice(5, 7)) || 1;
     const ytdRollup = buildFinancialRollup(records, elapsedMonths);
+    const currentMonthRawRecords = dataset.records.filter((record) => record.property === property && record.period === asOf);
+    const currentMonthBudgetMatches = countApprovedBudgetMatches(currentMonthRawRecords, approvedIndex);
+    const currentMonthBudgetTotalLines = currentMonthRawRecords.length;
+    const currentMonthApprovedBudgetNoi = sumApprovedBudgetNoiForPeriod(property, asOf);
+    const budgetSourceLabel =
+      currentMonthApprovedBudgetNoi != null ? `Approved budget library ${year}` : "Uploaded actual-vs-budget file";
     const currentMonthRollup = buildFinancialRollup(
       applyApprovedBudgetToRecords(
-        dataset.records.filter((record) => record.property === property && record.period === asOf),
+        currentMonthRawRecords,
         approvedIndex,
       ),
       1,
@@ -1909,6 +3063,8 @@
           1,
         )
       : null;
+    const priorYearBudgetNoi = priorYearPeriod ? sumApprovedBudgetNoiForPeriod(property, priorYearPeriod) : null;
+    const noiTrend = buildNoiTrendSummary(property, asOf);
 
     const revenueActual = ytdRollup.revenueActual;
     const revenueBudget = ytdRollup.revenueBudget;
@@ -1963,13 +3119,26 @@
       priorMonthLabel: priorMonthPeriod,
       priorYearNoi: priorYearRollup?.noiActual ?? null,
       priorYearLabel: priorYearPeriod,
+      priorYearBudgetNoi,
       momNoiChange:
         currentMonthRollup && priorMonthRollup ? currentMonthRollup.noiActual - priorMonthRollup.noiActual : null,
       yoyNoiChange:
         currentMonthRollup && priorYearRollup ? currentMonthRollup.noiActual - priorYearRollup.noiActual : null,
+      yoyBudgetNoiChange:
+        currentMonthRollup && priorYearBudgetNoi != null ? currentMonthRollup.noiActual - priorYearBudgetNoi : null,
       requiredMonthlyLift,
       remainingMonths,
       score: financialScore,
+      budgetSourceLabel,
+      currentMonthBudgetMatches,
+      currentMonthBudgetTotalLines,
+      currentMonthApprovedBudgetNoi,
+      noiTrend,
+      noiYtdCurrent: noiTrend?.currentYtd ?? null,
+      noiYtdPrior: noiTrend?.priorYtd ?? null,
+      noiYtdTwoBack: noiTrend?.twoBackYtd ?? null,
+      noiYoYImprovement: noiTrend?.yoyImprovement ?? null,
+      noiTwoYearImprovement: noiTrend?.twoYearImprovement ?? null,
     };
   }
 
@@ -2155,12 +3324,12 @@
     return null;
   }
 
-  function buildCrosswalkRows(financial, operations, leasing) {
-    if (!financial) {
+  function buildCrosswalkRowsFromLines(lines, operations, leasing) {
+    if (!lines?.length) {
       return [];
     }
 
-    return financial.lines
+    return lines
       .filter((line) => line.unfavorableAmount > 0)
       .slice(0, 5)
       .map((line) => {
@@ -2197,6 +3366,13 @@
           evidence,
         };
       });
+  }
+
+  function buildCrosswalkRows(financial, operations, leasing) {
+    if (!financial) {
+      return [];
+    }
+    return buildCrosswalkRowsFromLines(financial.lines, operations, leasing);
   }
 
   function buildPropertySummary(property, asOf) {
@@ -2272,9 +3448,23 @@
       priorYearNoi: financialSummaries.some((entry) => entry.priorYearNoi != null)
         ? financialSummaries.reduce((sum, entry) => sum + (entry.priorYearNoi || 0), 0)
         : null,
+      priorYearBudgetNoi: financialSummaries.some((entry) => entry.priorYearBudgetNoi != null)
+        ? financialSummaries.reduce((sum, entry) => sum + (entry.priorYearBudgetNoi || 0), 0)
+        : null,
       projectedNoi: financialSummaries.reduce((sum, entry) => sum + entry.projectedNoi, 0),
       annualBudgetNoi: financialSummaries.reduce((sum, entry) => sum + entry.annualBudgetNoi, 0),
       requiredMonthlyLift: financialSummaries.reduce((sum, entry) => sum + (entry.requiredMonthlyLift || 0), 0),
+      currentMonthBudgetMatches: financialSummaries.reduce((sum, entry) => sum + (entry.currentMonthBudgetMatches || 0), 0),
+      currentMonthBudgetTotalLines: financialSummaries.reduce((sum, entry) => sum + (entry.currentMonthBudgetTotalLines || 0), 0),
+      noiYtdCurrent: financialSummaries.some((entry) => entry.noiYtdCurrent != null)
+        ? financialSummaries.reduce((sum, entry) => sum + (entry.noiYtdCurrent || 0), 0)
+        : null,
+      noiYtdPrior: financialSummaries.some((entry) => entry.noiYtdPrior != null)
+        ? financialSummaries.reduce((sum, entry) => sum + (entry.noiYtdPrior || 0), 0)
+        : null,
+      noiYtdTwoBack: financialSummaries.some((entry) => entry.noiYtdTwoBack != null)
+        ? financialSummaries.reduce((sum, entry) => sum + (entry.noiYtdTwoBack || 0), 0)
+        : null,
       remainingMonths,
       priorMonthLabel: financialSummaries.find((entry) => entry.priorMonthLabel)?.priorMonthLabel || shiftPeriod(asOf, -1),
       priorYearLabel: financialSummaries.find((entry) => entry.priorYearLabel)?.priorYearLabel || shiftPeriod(asOf, -12),
@@ -2301,6 +3491,16 @@
       portfolio.priorMonthNoi != null ? portfolio.currentMonthNoi - portfolio.priorMonthNoi : null;
     portfolio.yoyNoiChange =
       portfolio.priorYearNoi != null ? portfolio.currentMonthNoi - portfolio.priorYearNoi : null;
+    portfolio.yoyBudgetNoiChange =
+      portfolio.priorYearBudgetNoi != null ? portfolio.currentMonthNoi - portfolio.priorYearBudgetNoi : null;
+    portfolio.noiYoYImprovement =
+      portfolio.noiYtdCurrent != null && portfolio.noiYtdPrior != null
+        ? portfolio.noiYtdCurrent - portfolio.noiYtdPrior
+        : null;
+    portfolio.noiTwoYearImprovement =
+      portfolio.noiYtdCurrent != null && portfolio.noiYtdTwoBack != null
+        ? portfolio.noiYtdCurrent - portfolio.noiYtdTwoBack
+        : null;
 
     return portfolio;
   }
@@ -2355,6 +3555,9 @@
   }
 
   function renderCrosswalkLibrary() {
+    if (!dom.crosswalkLibrary) {
+      return;
+    }
     dom.crosswalkLibrary.innerHTML = CROSSWALKS.map(
       (crosswalk) => `
         <div class="line-item">
@@ -2412,12 +3615,15 @@
     const modeLabel = getFinancialImportModeLabel(modeValue);
     const storedHistory = loadFinancialHistoryStore();
     const storedCoverage = getDatasetCoverage(storedHistory?.dataset);
+    const stagedCount = Number(state.pendingFinancial?.dataset?.records?.length || 0);
 
     if (dom.financialImportWorkspaceChip) {
-      dom.financialImportWorkspaceChip.className = `chip ${coverage.recordCount ? "good" : "warn"}`;
-      dom.financialImportWorkspaceChip.textContent = coverage.recordCount
-        ? `${coverage.recordCount} rows loaded`
-        : "Ready to import";
+      dom.financialImportWorkspaceChip.className = `chip ${stagedCount ? "warn" : coverage.recordCount ? "good" : "warn"}`;
+      dom.financialImportWorkspaceChip.textContent = stagedCount
+        ? `${formatNumber(stagedCount)} rows staged`
+        : coverage.recordCount
+          ? `${formatNumber(coverage.recordCount)} rows loaded`
+          : "Ready to import";
     }
 
     if (dom.financialImportSummary) {
@@ -2489,6 +3695,87 @@
     }
     if (dom.clearFinancialHistory) {
       dom.clearFinancialHistory.disabled = !storedCoverage.recordCount;
+    }
+  }
+
+  function renderApprovedBudgetWorkspace() {
+    populateApprovedBudgetScopeOptions();
+    if (dom.approvedBudgetScope && dom.approvedBudgetScope.value !== (state.approvedBudgetImport.scope || "RISE Corporate")) {
+      dom.approvedBudgetScope.value = state.approvedBudgetImport.scope || "RISE Corporate";
+    }
+    if (dom.approvedBudgetYear) {
+      const nextYear = String(state.approvedBudgetImport.year || "2026");
+      if (dom.approvedBudgetYear.value !== nextYear) {
+        dom.approvedBudgetYear.value = nextYear;
+      }
+    }
+    if (dom.approvedBudgetExpandYear) {
+      const mode = state.approvedBudgetImport.expandAcrossYear ? "yes" : "no";
+      if (dom.approvedBudgetExpandYear.value !== mode) {
+        dom.approvedBudgetExpandYear.value = mode;
+      }
+    }
+
+    const coverage = getApprovedBudgetCoverage();
+    const stagedRows = Number(state.pendingApprovedBudget?.dataset?.records?.length || 0);
+    const selectedBudgetFileCount = Number(pendingApprovedBudgetFiles.length || state.pendingApprovedBudget?.files?.length || 0);
+    if (dom.approvedBudgetChip) {
+      dom.approvedBudgetChip.className = `chip ${stagedRows || selectedBudgetFileCount ? "warn" : coverage.rowCount ? "good" : ""}`;
+      dom.approvedBudgetChip.textContent = stagedRows
+        ? `${formatNumber(stagedRows)} budget rows staged`
+        : selectedBudgetFileCount
+          ? `${formatNumber(selectedBudgetFileCount)} budget file${selectedBudgetFileCount === 1 ? "" : "s"} selected`
+        : coverage.rowCount
+          ? `${formatNumber(coverage.rowCount)} budget rows stored`
+          : "No budget staged";
+    }
+
+    if (dom.approvedBudgetSummary) {
+      const yearsText = coverage.years.length ? coverage.years.join(", ") : "--";
+      const benchmarkYearsText = coverage.benchmarkYears?.length ? coverage.benchmarkYears.join(", ") : "--";
+      const statusText = coverage.rowCount
+        ? `Approved budget library: <strong>${formatNumber(coverage.rowCount)}</strong> rows across <strong>${formatNumber(
+            coverage.entityCount,
+          )}</strong> entities for year(s) <span class="mono">${escapeHtml(yearsText)}</span>. Comparative rows: <span class="mono">${escapeHtml(
+            benchmarkYearsText,
+          )}</span>. Last updated ${escapeHtml(
+            formatStoredTimestamp(coverage.updatedAt),
+          )}.`
+        : "No finalized budget baseline stored yet. Upload approved budgets here first, then upload monthly actuals.";
+      const notice = state.lastApprovedBudgetNotice;
+      const noticeText = notice?.message
+        ? `<div style="margin-top:8px;padding:9px 11px;border-radius:10px;background:${
+            notice.kind === "error" ? "var(--red-soft)" : "var(--green-soft)"
+          };border:1px solid ${notice.kind === "error" ? "#e6c8c8" : "#c8dcae"};color:${
+            notice.kind === "error" ? "var(--red)" : "var(--green)"
+          };">${escapeHtml(notice.message)} <span style="color:var(--muted)">(${escapeHtml(formatStoredTimestamp(notice.at))})</span></div>`
+        : "";
+      dom.approvedBudgetSummary.innerHTML = `${statusText}${noticeText}`;
+    }
+
+    if (dom.approvedBudgetMeta) {
+      if (stagedRows || selectedBudgetFileCount) {
+        const files = state.pendingApprovedBudget?.files || [];
+        const options = state.pendingApprovedBudget?.options || {};
+        const detectedYears = state.pendingApprovedBudget?.detectedYears || [];
+        dom.approvedBudgetMeta.innerHTML = `
+          <div class="status-line">
+            <strong>${stagedRows ? "Finalized budget staged" : "Finalized budget selected"}</strong><br />
+            Files: ${escapeHtml(files.slice(0, 4).join(", ") || "—")}${files.length > 4 ? ` (+${formatNumber(files.length - 4)} more)` : ""}<br />
+            ${stagedRows ? `Rows staged: ${formatNumber(stagedRows)} · ` : ""}Entity: <strong>${escapeHtml(options.scopeOverride || "RISE Corporate")}</strong><br />
+            Budget year: <span class="mono">${escapeHtml(options.year || state.approvedBudgetImport.year || "2026")}</span> · Apply across year: <strong>${
+              options.expandAcrossYear ? "Yes" : "No"
+            }</strong><br />
+            Comparative years detected: <span class="mono">${escapeHtml(detectedYears.join(", ") || "--")}</span>
+          </div>
+        `;
+      } else {
+        dom.approvedBudgetMeta.innerHTML = `
+          <div class="status-line">
+            Upload finalized budgets by entity. These rows become the source-of-truth budget baseline used when scoring monthly income statement actuals.
+          </div>
+        `;
+      }
     }
   }
 
@@ -2568,6 +3855,10 @@
     if (type === "financial" && state.pendingFinancial?.dataset) {
       const staged = state.pendingFinancial.dataset;
       const coverage = getDatasetCoverage(staged);
+      const stagedOptions = state.pendingFinancial.options || {};
+      const stagedPeriod = parsePeriod(stagedOptions.periodOverride || stagedOptions.period || state.manualPeriod);
+      const stagedScopeLabel = getFinancialImportScopeLabel(stagedOptions.scopeOverride);
+      const stagedModeLabel = getFinancialImportModeLabel(stagedOptions.replaceMode);
       if (chip) {
         chip.className = `chip warn`;
         chip.textContent = coverage.recordCount ? `${formatNumber(coverage.recordCount)} staged` : "Staged";
@@ -2580,8 +3871,9 @@
               (state.pendingFinancial.files || []).length > 4 ? ` (+${formatNumber((state.pendingFinancial.files || []).length - 4)} more)` : ""
             }<br />
             Records staged: ${formatNumber(coverage.recordCount)}<br />
-            Target period override: <span class="mono">${escapeHtml(state.pendingFinancial.options?.period || state.manualPeriod)}</span><br />
-            Scope: <strong>${escapeHtml(getFinancialImportScopeLabel(state.pendingFinancial.options?.scopeOverride))}</strong> · Mode: <strong>${escapeHtml(getFinancialImportModeLabel(state.pendingFinancial.options?.replaceMode))}</strong>
+            Upload period: <span class="mono">${escapeHtml(stagedPeriod || "--")}</span><br />
+            Scope: <strong>${escapeHtml(stagedScopeLabel)}</strong> · Mode: <strong>${escapeHtml(stagedModeLabel)}</strong><br />
+            <span style="color:var(--muted)">Click <strong>Apply To Ledger</strong> to store and refresh the Portfolio Snapshot.</span>
           </div>
         `;
       }
@@ -2670,6 +3962,32 @@
       dom.dataReadiness.innerHTML = hasDashboardDrivers
         ? "Operations and leasing history are synced from the main dashboard. Import historical financials to activate community accountability, MoM pacing, and YoY trend tracking."
         : "Sync the main dashboard history for community drivers, then import historical financials to activate pacing, trend, and recovery views.";
+      if (dom.ledgerDebug) {
+        const dataset = state.datasets.financial;
+        const pendingCount = Number(state.pendingFinancial?.rowCount || 0);
+        const pendingRecordsLen = Number(state.pendingFinancial?.dataset?.records?.length || 0);
+        if (!dataset?.records?.length) {
+          dom.ledgerDebug.innerHTML = `
+            <span class="chip">0 ledger rows</span>
+            <span class="chip">${pendingCount ? `${formatNumber(pendingCount)} staged` : "No staged upload"}</span>
+            <span class="chip">${pendingRecordsLen ? `${formatNumber(pendingRecordsLen)} staged records` : "0 staged records"}</span>
+            <span class="chip">${dom.applyFinancialUpload?.disabled ? "Apply disabled" : "Apply enabled"}</span>
+            <span class="chip">build ${escapeHtml(BUILD_ID)}</span>
+          `;
+          return;
+        }
+        const coverage = getDatasetCoverage(dataset);
+        const entities = Array.from(new Set(dataset.records.map((r) => r.property).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        const periods = Array.from(new Set(dataset.records.map((r) => r.period).filter(Boolean))).sort(comparePeriod);
+      dom.ledgerDebug.innerHTML = `
+        <span class="chip good">${formatNumber(coverage.recordCount)} ledger rows</span>
+        <span class="chip">${formatNumber(entities.length)} entities</span>
+        <span class="chip">${escapeHtml(periods[0] || "--")} to ${escapeHtml(periods[periods.length - 1] || "--")}</span>
+        <span class="chip">${pendingCount ? `${formatNumber(pendingCount)} staged` : "No staged upload"}</span>
+        <span class="chip">${dom.applyFinancialUpload?.disabled ? "Apply disabled" : "Apply enabled"}</span>
+        <span class="chip">build ${escapeHtml(BUILD_ID)}</span>
+      `;
+    }
       return;
     }
 
@@ -2689,7 +4007,25 @@
       <span class="mono">${escapeHtml(view.portfolio.asOf)}</span>. MoM is compared to
       <span class="mono">${escapeHtml(view.portfolio.priorMonthLabel || "--")}</span> and YoY to
       <span class="mono">${escapeHtml(view.portfolio.priorYearLabel || "--")}</span> when history exists.
+      Approved budget mapping is currently <strong>${formatNumber(view.portfolio.currentMonthBudgetMatches || 0)}/${formatNumber(
+        view.portfolio.currentMonthBudgetTotalLines || 0,
+      )}</strong> current-month rows.
     `;
+    if (dom.ledgerDebug) {
+      const dataset = state.datasets.financial;
+      const coverage = getDatasetCoverage(dataset);
+      const entities = Array.from(new Set(dataset.records.map((r) => r.property).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      const periods = Array.from(new Set(dataset.records.map((r) => r.period).filter(Boolean))).sort(comparePeriod);
+      const selected = state.selectedPeriod || periods[periods.length - 1] || "";
+      const selectedEntity = state.snapshotScope?.mode === "corporate" ? "RISE Corporate" : state.selectedProperty || entities[0] || "";
+      const selectedRows = dataset.records.filter((r) => r.period === selected && (!selectedEntity || r.property === selectedEntity));
+      dom.ledgerDebug.innerHTML = `
+        <span class="chip good">${formatNumber(coverage.recordCount)} ledger rows</span>
+        <span class="chip">${formatNumber(entities.length)} entities</span>
+        <span class="chip">${escapeHtml(periods[0] || "--")} to ${escapeHtml(periods[periods.length - 1] || "--")}</span>
+        <span class="chip">${escapeHtml(selectedEntity || "--")} @ ${escapeHtml(selected || "--")} = ${formatNumber(selectedRows.length)} rows</span>
+      `;
+    }
   }
 
   function renderPeriodOptions(view) {
@@ -2711,6 +4047,72 @@
           }>${escapeHtml(formatPeriodLabel(period))}</option>`,
       )
       .join("");
+  }
+
+  function renderFinancialFilterControls(view) {
+    if (!dom.financialFilterPeriod || !dom.financialFilterGl || !dom.financialFilterStatus || !dom.financialFilterNote) {
+      return;
+    }
+
+    if (!view?.selectedSummary) {
+      dom.financialFilterPeriod.innerHTML = `<option value="selected">Selected month</option>`;
+      dom.financialFilterPeriod.disabled = true;
+      dom.financialFilterGl.innerHTML = `<option value="all">All GL codes</option>`;
+      dom.financialFilterGl.disabled = true;
+      dom.financialFilterStatus.value = "all";
+      dom.financialFilterStatus.disabled = true;
+      dom.financialFilterNote.textContent = "Filters will unlock after a financial entity is loaded.";
+      return;
+    }
+
+    const baseFiltered = buildFilteredFinancialLines(view.selectedSummary, view.portfolio.asOf, {
+      period: "ytd",
+      glCode: "all",
+      status: "all",
+    });
+    const periodOptions = baseFiltered.optionPeriods || [];
+    const glOptions = baseFiltered.optionGlCodes || [];
+
+    const validPeriodValues = new Set(["selected", "ytd", ...periodOptions.map((period) => `period:${period}`)]);
+    if (!validPeriodValues.has(state.financialLineFilter.period || "")) {
+      state.financialLineFilter.period = "selected";
+    }
+    const validGlValues = new Set(["all", ...glOptions]);
+    if (!validGlValues.has(state.financialLineFilter.glCode || "")) {
+      state.financialLineFilter.glCode = "all";
+    }
+    if (!["all", "off_track", "on_track"].includes(state.financialLineFilter.status || "")) {
+      state.financialLineFilter.status = "all";
+    }
+
+    dom.financialFilterPeriod.disabled = false;
+    dom.financialFilterPeriod.innerHTML = [
+      `<option value="selected">Selected month (${escapeHtml(formatPeriodLabel(view.portfolio.asOf))})</option>`,
+      `<option value="ytd">Year-to-date (through ${escapeHtml(formatPeriodLabel(view.portfolio.asOf))})</option>`,
+      ...periodOptions.map(
+        (period) => `<option value="period:${escapeHtml(period)}">Only ${escapeHtml(formatPeriodLabel(period))}</option>`,
+      ),
+    ].join("");
+    dom.financialFilterPeriod.value = state.financialLineFilter.period || "selected";
+
+    dom.financialFilterGl.disabled = false;
+    dom.financialFilterGl.innerHTML = [
+      `<option value="all">All GL codes</option>`,
+      ...glOptions.map((glCode) =>
+        `<option value="${escapeHtml(glCode)}">${escapeHtml(
+          glCode === "unmapped" ? "Unmapped GL code" : `GL ${glCode}`,
+        )}</option>`,
+      ),
+    ].join("");
+    dom.financialFilterGl.value = state.financialLineFilter.glCode || "all";
+
+    dom.financialFilterStatus.disabled = false;
+    dom.financialFilterStatus.value = state.financialLineFilter.status || "all";
+
+    const activeFiltered = buildFilteredFinancialLines(view.selectedSummary, view.portfolio.asOf);
+    const offTrackCount = activeFiltered.lines.filter((line) => line.status === "off_track").length;
+    const onTrackCount = activeFiltered.lines.filter((line) => line.status === "on_track").length;
+    dom.financialFilterNote.textContent = `${view.selectedSummary.property}: ${activeFiltered.selectedPeriodLabel} · ${offTrackCount} off track · ${onTrackCount} on track`;
   }
 
   function renderSnapshot(view) {
@@ -2736,21 +4138,54 @@
       view.portfolio.projectedGap < 0 && view.portfolio.remainingMonths > 0
         ? formatCurrency(view.portfolio.requiredMonthlyLift)
         : "On plan";
+    const budgetMatched = Number(view.portfolio.currentMonthBudgetMatches || 0);
+    const budgetTotal = Number(view.portfolio.currentMonthBudgetTotalLines || 0);
+    const selectedFiltered = view.selectedSummary
+      ? buildFilteredFinancialLines(view.selectedSummary, view.portfolio.asOf)
+      : { lines: [], selectedPeriodLabel: "--" };
+    const filteredUnfavorable = selectedFiltered.lines
+      .filter((line) => line.unfavorableAmount > 0)
+      .reduce((sum, line) => sum + line.unfavorableAmount, 0);
+    const filteredOnTrack = selectedFiltered.lines.filter((line) => line.status === "on_track").length;
+    const filteredOffTrack = selectedFiltered.lines.filter((line) => line.status === "off_track").length;
+    const budgetMatchText =
+      budgetTotal > 0
+        ? `${formatNumber(budgetMatched)} / ${formatNumber(budgetTotal)} mapped`
+        : "No current-month ledger rows";
+    const ytdPctVsBudget = calcPercentChange(view.portfolio.noiVariance, view.portfolio.noiBudget);
+    const monthVariance = (view.portfolio.currentMonthNoi ?? 0) - (view.portfolio.currentMonthBudgetNoi ?? 0);
+    const monthPctVsBudget = calcPercentChange(monthVariance, view.portfolio.currentMonthBudgetNoi);
+    const projectedPctVsPlan = calcPercentChange(view.portfolio.projectedGap, view.portfolio.annualBudgetNoi);
+    const momPctChange = calcPercentChange(view.portfolio.momNoiChange, view.portfolio.priorMonthNoi);
+    const yoyPctChange = calcPercentChange(view.portfolio.yoyNoiChange, view.portfolio.priorYearNoi);
+    const yoyBudgetPctChange = calcPercentChange(view.portfolio.yoyBudgetNoiChange, view.portfolio.priorYearBudgetNoi);
+    const noiYoYPct = calcPercentChange(view.portfolio.noiYoYImprovement, view.portfolio.noiYtdPrior);
+    const noiTwoYearPct = calcPercentChange(view.portfolio.noiTwoYearImprovement, view.portfolio.noiYtdTwoBack);
     const stats = [
       {
         label: "YTD NOI",
-        value: formatCurrency(view.portfolio.noiActual),
-        sub: `Budget ${formatCurrency(view.portfolio.noiBudget)} · Variance ${formatCurrency(view.portfolio.noiVariance)}`,
+        value: formatSignedPercent(ytdPctVsBudget),
+        sub: `${trendVerb(view.portfolio.noiVariance)} · ${formatCurrency(view.portfolio.noiActual)} vs budget ${formatCurrency(
+          view.portfolio.noiBudget,
+        )} · Δ ${formatCurrency(view.portfolio.noiVariance)}`,
       },
       {
         label: `${view.portfolio.asOf} NOI`,
-        value: formatCurrency(view.portfolio.currentMonthNoi),
-        sub: `Budget ${formatCurrency(view.portfolio.currentMonthBudgetNoi)} · Pace ${formatPercent(view.portfolio.currentMonthPacePct)}`,
+        value: formatSignedPercent(monthPctVsBudget),
+        sub: `${trendVerb(monthVariance)} · Actual ${formatCurrency(view.portfolio.currentMonthNoi)} vs budget ${formatCurrency(
+          view.portfolio.currentMonthBudgetNoi,
+        )} · Δ ${formatCurrency(monthVariance)} · Pace ${formatPercent(
+          view.portfolio.currentMonthPacePct,
+        )} · ${budgetMatchText}`,
       },
       {
         label: "Projected FY NOI",
-        value: formatCurrency(view.portfolio.projectedNoi),
-        sub: `Annual plan ${formatCurrency(view.portfolio.annualBudgetNoi)} · Gap ${formatCurrency(view.portfolio.projectedGap)}`,
+        value: formatSignedPercent(projectedPctVsPlan),
+        sub: `${trendVerb(
+          view.portfolio.projectedGap,
+        )} · Projected ${formatCurrency(view.portfolio.projectedNoi)} vs annual plan ${formatCurrency(
+          view.portfolio.annualBudgetNoi,
+        )} · Gap ${formatCurrency(view.portfolio.projectedGap)}`,
       },
       {
         label: "Recovery Needed / Month",
@@ -2762,24 +4197,69 @@
       },
       {
         label: "MoM NOI Change",
-        value: formatCurrency(view.portfolio.momNoiChange),
+        value: formatSignedPercent(momPctChange),
         sub:
           view.portfolio.priorMonthNoi != null
-            ? `vs ${escapeHtml(view.portfolio.priorMonthLabel)} actual ${formatCurrency(view.portfolio.priorMonthNoi)}`
+            ? `${trendVerb(view.portfolio.momNoiChange)} · ${formatCurrency(view.portfolio.momNoiChange)} vs ${escapeHtml(
+                view.portfolio.priorMonthLabel,
+              )} actual ${formatCurrency(view.portfolio.priorMonthNoi)}`
             : "Need prior-month history",
       },
       {
         label: "YoY NOI Change",
-        value: formatCurrency(view.portfolio.yoyNoiChange),
+        value: formatSignedPercent(yoyPctChange),
         sub:
           view.portfolio.priorYearNoi != null
-            ? `vs ${escapeHtml(view.portfolio.priorYearLabel)} actual ${formatCurrency(view.portfolio.priorYearNoi)}`
-            : "Need same-month prior-year history",
+            ? `${trendVerb(view.portfolio.yoyNoiChange)} · ${formatCurrency(view.portfolio.yoyNoiChange)} vs ${escapeHtml(
+                view.portfolio.priorYearLabel,
+              )} actual ${formatCurrency(view.portfolio.priorYearNoi)}`
+            : view.portfolio.priorYearBudgetNoi != null
+              ? `No prior actuals loaded · vs prior-year budget ${formatCurrency(view.portfolio.priorYearBudgetNoi)}`
+              : "Need same-month prior-year history",
+      },
+      {
+        label: "YoY vs Prior-Year Budget",
+        value: formatSignedPercent(yoyBudgetPctChange),
+        sub:
+          view.portfolio.priorYearBudgetNoi != null
+            ? `${trendVerb(view.portfolio.yoyBudgetNoiChange)} · Δ ${formatCurrency(
+                view.portfolio.yoyBudgetNoiChange,
+              )} vs ${escapeHtml(view.portfolio.priorYearLabel || "--")} budget baseline ${formatCurrency(
+                view.portfolio.priorYearBudgetNoi,
+              )}`
+            : "Upload prior-year approved budget to unlock YoY budget tracking",
       },
       {
         label: "Avg Portfolio Score",
         value: formatNumber(view.portfolio.score, 0),
         sub: `${view.portfolio.atRiskCount} at risk · ${view.portfolio.watchCount} on watch`,
+      },
+      {
+        label: "NOI YTD Trend (2024/2025/2026)",
+        value: `${formatCurrency(view.portfolio.noiYtdTwoBack)} / ${formatCurrency(view.portfolio.noiYtdPrior)} / ${formatCurrency(
+          view.portfolio.noiYtdCurrent,
+        )}`,
+        sub: `Through ${escapeHtml(formatPeriodLabel(view.portfolio.asOf))} using approved budget benchmark history`,
+      },
+      {
+        label: "NOI YoY Improvement",
+        value: formatSignedPercent(noiYoYPct),
+        sub:
+          view.portfolio.noiYoYImprovement != null
+            ? `${trendVerb(view.portfolio.noiYoYImprovement)} · ${formatCurrency(
+                view.portfolio.noiYoYImprovement,
+              )} versus prior year YTD`
+            : "Load prior-year benchmark rows to activate",
+      },
+      {
+        label: "NOI Two-Year Improvement",
+        value: formatSignedPercent(noiTwoYearPct),
+        sub:
+          view.portfolio.noiTwoYearImprovement != null
+            ? `${trendVerb(view.portfolio.noiTwoYearImprovement)} · ${formatCurrency(
+                view.portfolio.noiTwoYearImprovement,
+              )} versus two-year baseline`
+            : "Load two-year benchmark rows to activate",
       },
       {
         label: "Average Occupancy",
@@ -2790,6 +4270,21 @@
         label: "Turns / 100",
         value: formatNumber(view.portfolio.turnsPer100, 1),
         sub: `Physical stress at ${escapeHtml(view.portfolio.asOf)}`,
+      },
+      {
+        label: "Budget Baseline Status",
+        value: budgetMatchText,
+        sub:
+          budgetMatched > 0
+            ? "Current month actuals are actively comparing to approved baseline rows"
+            : "Approved budget baseline is not mapped to current rows yet",
+      },
+      {
+        label: "Filtered GL Variance",
+        value: formatCurrency(-filteredUnfavorable),
+        sub: `${selectedFiltered.selectedPeriodLabel} · ${formatNumber(filteredOffTrack)} off track · ${formatNumber(
+          filteredOnTrack,
+        )} on track`,
       },
     ];
 
@@ -2882,6 +4377,14 @@
             Budget ${formatCurrency(summary.financial?.currentMonthBudgetNoi)} ·
             MoM ${formatCurrency(summary.financial?.momNoiChange)} ·
             YoY ${formatCurrency(summary.financial?.yoyNoiChange)}
+            <br />
+            ${escapeHtml(summary.financial?.budgetSourceLabel || "Budget source unavailable")} · ${formatNumber(
+              summary.financial?.currentMonthBudgetMatches || 0,
+            )}/${formatNumber(summary.financial?.currentMonthBudgetTotalLines || 0)} rows mapped
+            <br />
+            NOI trend YTD: 2024 ${formatCurrency(summary.financial?.noiYtdTwoBack)} · 2025 ${formatCurrency(
+              summary.financial?.noiYtdPrior,
+            )} · 2026 ${formatCurrency(summary.financial?.noiYtdCurrent)}
           </div>
         </div>
         <div class="metric-block">
@@ -2897,34 +4400,65 @@
     `;
   }
 
-  function renderFinancialLayer(summary) {
+  function renderFinancialLayer(summary, view) {
     if (!summary?.financial) {
       return `<div class="empty-state">Financial data is required for this layer.</div>`;
     }
+    const asOf = view?.portfolio?.asOf || state.selectedPeriod;
+    const filtered = buildFilteredFinancialLines(summary, asOf);
+    const lines = filtered.lines.slice(0, 8);
+    const offTrackCount = filtered.lines.filter((line) => line.status === "off_track").length;
+    const onTrackCount = filtered.lines.filter((line) => line.status === "on_track").length;
+    const revenueActual = filtered.lines
+      .filter((line) => isIncomeSection(line.section))
+      .reduce((sum, line) => sum + line.ytdActual, 0);
+    const revenueBudget = filtered.lines
+      .filter((line) => isIncomeSection(line.section))
+      .reduce((sum, line) => sum + line.ytdBudget, 0);
+    const expenseActual = filtered.lines
+      .filter((line) => !isIncomeSection(line.section))
+      .reduce((sum, line) => sum + line.ytdActual, 0);
+    const expenseBudget = filtered.lines
+      .filter((line) => !isIncomeSection(line.section))
+      .reduce((sum, line) => sum + line.ytdBudget, 0);
+    const filteredNoiActual = revenueActual - expenseActual;
+    const filteredNoiBudget = revenueBudget - expenseBudget;
+    const filteredPace = filteredNoiBudget ? (filteredNoiActual / filteredNoiBudget) * 100 : null;
+    const glFilterLabel =
+      state.financialLineFilter.glCode === "all"
+        ? "All GL codes"
+        : state.financialLineFilter.glCode === "unmapped"
+          ? "Unmapped GL code"
+          : `GL ${state.financialLineFilter.glCode}`;
+    const recommendations = buildBudgetRecommendations(summary, filtered.lines);
 
-    const lines = summary.financial.lines.slice(0, 6);
+    if (!filtered.lines.length) {
+      return `<div class="empty-state">No financial lines match the current month/GL/status filters.</div>`;
+    }
+
     return `
       <div class="layer-grid">
         <div class="line-list">
           ${lines
             .map((line) => {
               const lineClass = line.favorableVariance >= 0 ? "good" : "bad";
-              const railWidth = Math.min(100, (line.unfavorableAmount / Math.max(Math.abs(line.ytdBudget), 1)) * 250);
               return `
                 <div class="line-item">
                   <div class="line-top">
                     <div>
                       <strong>${escapeHtml(line.lineItem)}</strong>
-                      <span>${escapeHtml(line.section)} · YTD ${formatCurrency(line.ytdActual)} vs ${formatCurrency(line.ytdBudget)}</span>
+                      <span>${escapeHtml(line.section)} · ${
+                        line.glCode ? `GL ${escapeHtml(line.glCode)}` : "GL unmapped"
+                      } · ${escapeHtml(filtered.selectedPeriodLabel)} ${formatCurrency(line.ytdActual)} vs ${formatCurrency(line.ytdBudget)}</span>
                     </div>
                     <div class="variance">
                       <div class="amt ${lineClass}">${formatCurrency(line.favorableVariance)}</div>
                       <span>Favorable variance</span>
                     </div>
                   </div>
-                  <div class="rail ${lineClass === "good" ? "good" : "bad"}"><span style="width:${railWidth}%"></span></div>
+                  <div class="rail ${lineClass === "good" ? "good" : "bad"}"><span style="width:${line.railWidth}%"></span></div>
                   <div class="metric-foot">
-                    <span>Projection ${formatCurrency(line.projection)}</span>
+                    <span>${line.status === "off_track" ? "Off track" : "On track"} · ${glFilterLabel}</span>
                     <span>Annual plan ${formatCurrency(line.annualBudget)}</span>
                   </div>
                 </div>
@@ -2937,7 +4471,7 @@
             <div class="line-top">
               <div>
                 <strong>Accountability Summary</strong>
-                <span>Core financial signals through ${escapeHtml(state.selectedPeriod)}</span>
+                <span>Core financial signals (${escapeHtml(filtered.selectedPeriodLabel)})</span>
               </div>
             </div>
             <div class="metric-list" style="margin-top:10px">
@@ -2945,25 +4479,25 @@
                 <div class="metric-top">
                   <div>
                     <strong>Revenue vs budget</strong>
-                    <span>${formatCurrency(summary.financial.revenueActual)} vs ${formatCurrency(summary.financial.revenueBudget)}</span>
+                    <span>${formatCurrency(revenueActual)} vs ${formatCurrency(revenueBudget)}</span>
                   </div>
-                  <strong>${formatCurrency(summary.financial.revenueActual - summary.financial.revenueBudget)}</strong>
+                  <strong>${formatCurrency(revenueActual - revenueBudget)}</strong>
                 </div>
               </div>
               <div class="metric-rail">
                 <div class="metric-top">
                   <div>
                     <strong>Expense vs budget</strong>
-                    <span>${formatCurrency(summary.financial.expenseActual)} vs ${formatCurrency(summary.financial.expenseBudget)}</span>
+                    <span>${formatCurrency(expenseActual)} vs ${formatCurrency(expenseBudget)}</span>
                   </div>
-                  <strong>${formatCurrency(summary.financial.expenseBudget - summary.financial.expenseActual)}</strong>
+                  <strong>${formatCurrency(expenseBudget - expenseActual)}</strong>
                 </div>
               </div>
               <div class="metric-rail">
                 <div class="metric-top">
                   <div>
-                    <strong>NOI pace to plan</strong>
-                    <span>${formatPercent(summary.financial.pacePct)}</span>
+                    <strong>NOI pace (filtered lines)</strong>
+                    <span>${formatPercent(filteredPace)}</span>
                   </div>
                   <strong>${formatNumber(summary.financial.score, 0)}</strong>
                 </div>
@@ -2971,7 +4505,7 @@
               <div class="metric-rail">
                 <div class="metric-top">
                   <div>
-                    <strong>${escapeHtml(state.selectedPeriod)} NOI</strong>
+                    <strong>${escapeHtml(filtered.selectedPeriodLabel)} NOI</strong>
                     <span>${formatCurrency(summary.financial.currentMonthNoi)} vs ${formatCurrency(summary.financial.currentMonthBudgetNoi)}</span>
                   </div>
                   <strong>${formatCurrency(summary.financial.currentMonthVariance)}</strong>
@@ -2980,7 +4514,7 @@
               <div class="metric-rail">
                 <div class="metric-top">
                   <div>
-                    <strong>MoM / YoY</strong>
+                    <strong>MoM / YoY actual</strong>
                     <span>${escapeHtml(summary.financial.priorMonthLabel || "--")} and ${escapeHtml(summary.financial.priorYearLabel || "--")}</span>
                   </div>
                   <strong>${formatCurrency(summary.financial.momNoiChange)} / ${formatCurrency(summary.financial.yoyNoiChange)}</strong>
@@ -2989,20 +4523,33 @@
               <div class="metric-rail">
                 <div class="metric-top">
                   <div>
-                    <strong>Recovery required</strong>
-                    <span>${formatNumber(summary.financial.remainingMonths)} months remaining</span>
+                    <strong>YoY vs prior-year budget</strong>
+                    <span>Budget baseline ${formatCurrency(summary.financial.priorYearBudgetNoi)}</span>
                   </div>
-                  <strong>${
-                    summary.financial.projectedGap < 0 && summary.financial.remainingMonths > 0
-                      ? formatCurrency(summary.financial.requiredMonthlyLift)
-                      : "On plan"
-                  }</strong>
+                  <strong>${formatCurrency(summary.financial.yoyBudgetNoiChange)}</strong>
+                </div>
+              </div>
+              <div class="metric-rail">
+                <div class="metric-top">
+                  <div>
+                    <strong>Filter coverage</strong>
+                    <span>${formatNumber(filtered.lines.length)} GL line(s) · ${formatNumber(filtered.includedPeriodCount)} month(s)</span>
+                  </div>
+                  <strong>${formatNumber(offTrackCount)} off · ${formatNumber(onTrackCount)} on</strong>
                 </div>
               </div>
             </div>
             <p class="footnote" style="margin-top:12px">
-              Financial score weights both current NOI variance and the projected year-end gap so pace issues do not hide in a favorable month.
+              Budget source: ${escapeHtml(summary.financial.budgetSourceLabel || "Unknown")} · current-month mapping ${formatNumber(
+                summary.financial.currentMonthBudgetMatches || 0,
+              )}/${formatNumber(summary.financial.currentMonthBudgetTotalLines || 0)} lines.
             </p>
+            <div class="crosswalk-body" style="margin-top:8px">
+              <strong>Trend and recommendations:</strong>
+              <ul style="margin:8px 0 0;padding-left:18px">
+                ${recommendations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -3065,7 +4612,7 @@
     }
 
     if (state.layer === "financial") {
-      dom.layerContent.innerHTML = renderFinancialLayer(summary);
+      dom.layerContent.innerHTML = renderFinancialLayer(summary, view);
       return;
     }
 
@@ -3086,9 +4633,14 @@
   }
 
   function renderCrosswalkContent(view) {
-    const rows = view?.selectedSummary?.crosswalkRows || [];
+    const summary = view?.selectedSummary;
+    const asOf = view?.portfolio?.asOf || state.selectedPeriod;
+    const filtered = summary ? buildFilteredFinancialLines(summary, asOf) : { lines: [] };
+    const rows = summary
+      ? buildCrosswalkRowsFromLines(filtered.lines, summary.operations, summary.leasing)
+      : [];
     if (!rows.length) {
-      dom.crosswalkContent.innerHTML = `<div class="empty-state">Crosswalk narratives appear once a property has an unfavorable financial variance.</div>`;
+      dom.crosswalkContent.innerHTML = `<div class="empty-state">No unfavorable lines for the selected month/GL/status filter. Switch filters to review additional driver narratives.</div>`;
       return;
     }
 
@@ -3101,7 +4653,7 @@
                 <div class="crosswalk-top">
                   <div>
                     <strong>${escapeHtml(row.lineItem)}</strong>
-                    <span>${escapeHtml(row.group)} driver set</span>
+                    <span>${escapeHtml(row.group)} driver set · ${escapeHtml(filtered.selectedPeriodLabel)}</span>
                   </div>
                   <div class="variance">
                     <div class="amt bad">${formatCurrency(row.unfavorableAmount)}</div>
@@ -3151,6 +4703,11 @@
       `${selected.property} posted ${formatCurrency(selected.financial?.currentMonthNoi)} in ${view.portfolio.asOf}, a ${formatCurrency(
         selected.financial?.momNoiChange,
       )} MoM move and ${formatCurrency(selected.financial?.yoyNoiChange)} YoY change.`,
+      selected.financial?.priorYearBudgetNoi != null
+        ? `${selected.property} is ${formatCurrency(selected.financial?.yoyBudgetNoiChange)} versus prior-year budget baseline (${formatCurrency(
+            selected.financial?.priorYearBudgetNoi,
+          )}).`
+        : `Load prior-year approved budget rows for ${selected.property} to activate YoY budget baseline comparisons.`,
       selected.financial?.projectedGap < 0 && selected.financial?.remainingMonths > 0
         ? `To recover the current projected gap, ${selected.property} needs roughly ${formatCurrency(
             selected.financial?.requiredMonthlyLift,
@@ -3179,6 +4736,16 @@
       )} budget, with ${formatCurrency(portfolio.momNoiChange)} MoM movement and ${formatCurrency(
         portfolio.yoyNoiChange,
       )} YoY change.`,
+      portfolio.priorYearBudgetNoi != null
+        ? `${portfolio.asOf} NOI is ${formatCurrency(portfolio.yoyBudgetNoiChange)} versus prior-year budget baseline ${formatCurrency(
+            portfolio.priorYearBudgetNoi,
+          )}.`
+        : "Prior-year approved budget baseline has not been loaded for YoY budget comparisons.",
+      portfolio.noiYoYImprovement != null
+        ? `NOI YTD improvement is ${formatCurrency(portfolio.noiYoYImprovement)} versus last year and ${formatCurrency(
+            portfolio.noiTwoYearImprovement,
+          )} versus two years ago.`
+        : "NOI YTD trend will populate after prior-year benchmark rows are loaded.",
       `Projected full-year NOI is ${formatCurrency(portfolio.projectedNoi)} versus annual plan of ${formatCurrency(
         portfolio.annualBudgetNoi,
       )}, creating a projected gap of ${formatCurrency(portfolio.projectedGap)}.`,
@@ -3266,85 +4833,446 @@
   }
 
   function applyStagedFinancialUpload() {
-    const staged = state.pendingFinancial?.dataset;
-    if (!staged || !Array.isArray(staged.records) || staged.records.length === 0) {
-      window.alert("No staged financial upload found. Upload a CSV first.");
-      return;
-    }
+    try {
+      const staged = state.pendingFinancial?.dataset;
+      if (!staged || !Array.isArray(staged.records) || staged.records.length === 0) {
+        window.alert("No staged financial upload found. Upload a CSV first.");
+        return;
+      }
 
-    const options = state.pendingFinancial.options || {};
-    const replaceMode = options.replaceMode || "merge";
-    const scopeOverride = options.scopeOverride || AUTO_IMPORT_SCOPE;
-    const periodOverride = options.periodOverride || null;
+      const options = state.pendingFinancial.options || {};
+      const replaceMode = options.replaceMode || "merge";
+      const scopeOverride = options.scopeOverride || AUTO_IMPORT_SCOPE;
+      const periodOverride = options.periodOverride || null;
 
-    if (replaceMode === "approved_budget") {
-      const approvedAt = new Date().toISOString();
-      const existing = Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [];
-      const stagedRecords = staged.records.map((record) => ({
-        ...record,
-        actual: 0,
-        source: "approved_budget",
-        updatedAt: approvedAt,
-      }));
+      logDebug("apply start", {
+        stagedRecords: staged?.records?.length || 0,
+        replaceMode,
+        scopeOverride,
+        periodOverride,
+      });
+      // Expose lightweight state for console inspection without leaking huge blobs.
+      window.__riseFinancialDebug = {
+        build: BUILD_ID,
+        pendingRowCount: state.pendingFinancial?.rowCount || 0,
+        pendingRecordsLen: state.pendingFinancial?.dataset?.records?.length || 0,
+        selectedPeriod: state.selectedPeriod,
+        manualPeriod: state.manualPeriod,
+        importScope: scopeOverride,
+        importMode: replaceMode,
+        periodOverride,
+        ledgerLoaded: Boolean(state.datasets.financial?.records?.length),
+        ledgerRowCount: state.datasets.financial?.records?.length || 0,
+      };
 
-      state.approvedBudgets = {
-        records: mergeDatasetRecords("financial", existing, stagedRecords).map((record) => ({
+      const sanitizedStagedRecords = staged.records
+        .map((record) => ({
+          ...record,
+          property: matchCommunityName(record?.property || scopeOverride),
+          period: parsePeriod(record?.period) || periodOverride || state.selectedPeriod || state.manualPeriod,
+        }))
+        .filter((record) => Boolean(record.property) && Boolean(record.period));
+
+      if (!sanitizedStagedRecords.length) {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message:
+            "No usable ledger rows were detected after mapping. Confirm the report has line item + actual/budget columns, and that Upload Scope is set correctly.",
+        };
+        persistState();
+        render();
+        return;
+      }
+
+      if (replaceMode === "approved_budget") {
+        const approvedAt = new Date().toISOString();
+        const existing = Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [];
+        const stagedRecords = sanitizedStagedRecords.map((record) => ({
           ...record,
           actual: 0,
           source: "approved_budget",
-        })),
-        updatedAt: approvedAt,
-      };
-      persistApprovedBudgets();
+          updatedAt: approvedAt,
+        }));
 
+        state.approvedBudgets = {
+          records: mergeDatasetRecords("financial", existing, stagedRecords).map((record) => ({
+            ...record,
+            actual: 0,
+            source: "approved_budget",
+          })),
+          updatedAt: approvedAt,
+        };
+        persistApprovedBudgets();
+
+        state.pendingFinancial = null;
+        state.lastFinancialApplyNotice = {
+          at: approvedAt,
+          kind: "approved_budget",
+          message: `Approved budget baseline saved: ${formatNumber(sanitizedStagedRecords.length)} rows applied to ${getFinancialImportScopeLabel(
+            scopeOverride,
+          )}${periodOverride ? ` for ${periodOverride}` : ""}.`,
+        };
+        if (periodOverride) {
+          state.selectedPeriod = periodOverride;
+        }
+        if (scopeOverride === "RISE Corporate") {
+          state.snapshotScope.mode = "corporate";
+          state.snapshotScope.selectedEntities = [];
+          state.selectedProperty = "RISE Corporate";
+        } else if (scopeOverride && scopeOverride !== AUTO_IMPORT_SCOPE) {
+          state.snapshotScope.mode = "custom";
+          state.snapshotScope.selectedEntities = [matchCommunityName(scopeOverride)];
+          state.selectedProperty = matchCommunityName(scopeOverride);
+        }
+        persistState();
+        render();
+        return;
+      }
+
+      let baseRecords = state.datasets.financial?.records || [];
+      if (replaceMode === "replace_all") {
+        baseRecords = [];
+      } else if (replaceMode === "replace_scope") {
+        baseRecords = pruneFinancialRecords(baseRecords, scopeOverride, sanitizedStagedRecords);
+      }
+
+      const mergedRecords = mergeDatasetRecords("financial", baseRecords, sanitizedStagedRecords);
+      state.datasets.financial = {
+        type: "financial",
+        fileName: staged.fileName || "Financial CSV",
+        sourceKind: "file",
+        sourceText: "",
+        records: mergedRecords,
+        diagnostics: {
+          parsedRows: mergedRecords.length,
+          fileRows: mergedRecords.length,
+          missingRequired: [],
+          missingRecommended: [],
+          detected: { source: "staged" },
+        },
+      };
+      // Keep a stored ledger copy for trend comparisons across sessions.
+      saveFinancialHistoryStore(state.datasets.financial);
+
+      applyFinancialRecordsToOpsStore(sanitizedStagedRecords);
+
+      const afterCoverage = getDatasetCoverage(state.datasets.financial);
       state.pendingFinancial = null;
+      const appliedAt = new Date().toISOString();
       state.lastFinancialApplyNotice = {
-        at: approvedAt,
+        at: appliedAt,
+        kind: "actuals",
+        message: `Upload applied: ${formatNumber(
+          sanitizedStagedRecords.length,
+        )} mapped row(s) stored for ${getFinancialImportScopeLabel(scopeOverride)}${
+          periodOverride ? ` (${periodOverride})` : ""
+        }. Ledger now has ${formatNumber(afterCoverage.recordCount)} row(s) across ${formatNumber(
+          afterCoverage.entityCount,
+        )} entit${afterCoverage.entityCount === 1 ? "y" : "ies"} (${afterCoverage.periodStart || "--"} to ${
+          afterCoverage.periodEnd || "--"
+        }).`,
+      };
+      if (periodOverride) {
+        state.selectedPeriod = periodOverride;
+      }
+      if (scopeOverride === "RISE Corporate") {
+        state.snapshotScope.mode = "corporate";
+        state.snapshotScope.selectedEntities = [];
+        state.selectedProperty = "RISE Corporate";
+      } else if (scopeOverride && scopeOverride !== AUTO_IMPORT_SCOPE) {
+        state.snapshotScope.mode = "custom";
+        state.snapshotScope.selectedEntities = [matchCommunityName(scopeOverride)];
+        state.selectedProperty = matchCommunityName(scopeOverride);
+      }
+      persistState();
+      render();
+
+      // Update the debug handle post-apply.
+      window.__riseFinancialDebug = {
+        ...(window.__riseFinancialDebug || {}),
+        appliedAt,
+        ledgerLoaded: Boolean(state.datasets.financial?.records?.length),
+        ledgerRowCount: state.datasets.financial?.records?.length || 0,
+        ledgerEntities: afterCoverage.properties,
+        ledgerPeriods: [afterCoverage.periodStart, afterCoverage.periodEnd],
+      };
+      logDebug("apply done", window.__riseFinancialDebug);
+    } catch (error) {
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message: `Apply To Ledger failed: ${error?.message || String(error)}`,
+      };
+      persistState();
+      render();
+      window.alert(state.lastFinancialApplyNotice.message);
+    }
+  }
+
+  function pruneApprovedBudgetRecords(existingRecords = [], scopeOverride = "RISE Corporate", year = "", incomingRecords = []) {
+    const normalizedYear = String(year || "").trim();
+    const targetEntities = new Set();
+    if (scopeOverride) {
+      targetEntities.add(matchCommunityName(scopeOverride));
+    }
+    incomingRecords.forEach((record) => {
+      if (record?.property) {
+        targetEntities.add(matchCommunityName(record.property));
+      }
+    });
+    if (!targetEntities.size) {
+      return existingRecords;
+    }
+    return existingRecords.filter((record) => {
+      const sameEntity = targetEntities.has(matchCommunityName(record?.property));
+      const sameYear = normalizedYear ? String(record?.period || "").startsWith(normalizedYear) : true;
+      return !(sameEntity && sameYear);
+    });
+  }
+
+  function mergeApprovedBudgetBenchmarks(existingRows = [], incomingRows = []) {
+    const merged = new Map();
+    [...(existingRows || []), ...(incomingRows || [])].forEach((row) => {
+      const key = [
+        matchCommunityName(row?.property || ""),
+        String(row?.period || "").slice(0, 7),
+        String(row?.section || "").trim().toLowerCase(),
+        String(row?.lineItem || "").trim().toLowerCase(),
+        String(row?.benchmarkLabel || "").trim().toLowerCase(),
+      ].join("::");
+      merged.set(key, {
+        property: matchCommunityName(row?.property || ""),
+        period: String(row?.period || "").slice(0, 7),
+        year: String(row?.period || "").slice(0, 4),
+        section: String(row?.section || "").trim(),
+        lineItem: String(row?.lineItem || "").trim(),
+        benchmarkLabel: String(row?.benchmarkLabel || "").trim(),
+        amount: Number(row?.amount || 0),
+        totalAmount: row?.totalAmount == null ? null : Number(row.totalAmount),
+      });
+    });
+    return Array.from(merged.values()).sort(
+      (left, right) =>
+        comparePeriod(left?.period, right?.period) ||
+        String(left?.property || "").localeCompare(String(right?.property || "")) ||
+        String(left?.lineItem || "").localeCompare(String(right?.lineItem || "")),
+    );
+  }
+
+  function pruneApprovedBudgetBenchmarks(existingRows = [], scopeOverride = "RISE Corporate", incomingRows = []) {
+    const targetProperty = matchCommunityName(scopeOverride);
+    const incomingYears = new Set(
+      (incomingRows || [])
+        .map((row) => String(row?.period || "").slice(0, 4))
+        .filter((token) => /^\d{4}$/.test(token)),
+    );
+    return (existingRows || []).filter((row) => {
+      const sameProperty = matchCommunityName(row?.property || "") === targetProperty;
+      const sameYear = incomingYears.size ? incomingYears.has(String(row?.period || "").slice(0, 4)) : true;
+      return !(sameProperty && sameYear);
+    });
+  }
+
+  async function handleApprovedBudgetUpload(files) {
+    const fileList = Array.from(files || []).filter(Boolean);
+    if (!fileList.length) {
+      return;
+    }
+    const scopeOverride = matchCommunityName(dom.approvedBudgetScope?.value || state.approvedBudgetImport.scope || "RISE Corporate");
+    const parsedYear = String(Number(dom.approvedBudgetYear?.value || state.approvedBudgetImport.year || "2026") || 2026);
+    const expandAcrossYear = (dom.approvedBudgetExpandYear?.value || "yes") !== "no";
+
+    state.approvedBudgetImport.scope = scopeOverride;
+    state.approvedBudgetImport.year = parsedYear;
+    state.approvedBudgetImport.expandAcrossYear = expandAcrossYear;
+    pendingApprovedBudgetFiles = fileList;
+
+    state.pendingApprovedBudget = {
+      dataset: null,
+      benchmarkRows: [],
+      detectedYears: [parsedYear],
+      files: fileList.map((file) => file.name),
+      options: {
+        scopeOverride,
+        year: parsedYear,
+        expandAcrossYear,
+      },
+      stagedAt: new Date().toISOString(),
+    };
+    state.lastApprovedBudgetNotice = {
+      at: new Date().toISOString(),
+      kind: "approved_budget",
+      message: `Selected ${formatNumber(fileList.length)} finalized budget file(s) for ${scopeOverride} (${parsedYear}). Click Apply Finalized Budget to parse and store.`,
+    };
+    state.lastFinancialApplyNotice = {
+      at: new Date().toISOString(),
+      kind: "approved_budget",
+      message: `Finalized budget file ready: ${formatNumber(fileList.length)} file(s) selected for ${scopeOverride} (${parsedYear}). Click Apply Finalized Budget.`,
+    };
+    persistState();
+    render();
+  }
+
+  async function applyStagedApprovedBudgetUpload() {
+    let staged = state.pendingApprovedBudget?.dataset;
+    const options = state.pendingApprovedBudget?.options || {};
+
+    if (!staged?.records?.length && pendingApprovedBudgetFiles.length) {
+      const scopeOverride = matchCommunityName(options.scopeOverride || state.approvedBudgetImport.scope || "RISE Corporate");
+      const year = String(options.year || state.approvedBudgetImport.year || "2026");
+      state.lastApprovedBudgetNotice = {
+        at: new Date().toISOString(),
         kind: "approved_budget",
-        message: `Approved budget baseline saved: ${formatNumber(staged.records.length)} rows applied to ${getFinancialImportScopeLabel(
-          scopeOverride,
-        )}${periodOverride ? ` for ${periodOverride}` : ""}.`,
+        message: `Parsing ${formatNumber(pendingApprovedBudgetFiles.length)} finalized budget file(s) for ${scopeOverride} (${year})...`,
+      };
+      persistState();
+      render();
+
+      try {
+        const parsedStage = await parseApprovedBudgetFiles(pendingApprovedBudgetFiles, { scopeOverride, year });
+        staged = parsedStage.staged;
+        state.pendingApprovedBudget = {
+          dataset: staged,
+          benchmarkRows: parsedStage.benchmarkRows || [],
+          detectedYears: parsedStage.detectedYears || [parsedStage.parsedYear],
+          files: parsedStage.stagedFiles,
+          options: {
+            scopeOverride: parsedStage.scopeOverride,
+            year: parsedStage.parsedYear,
+            expandAcrossYear: Boolean(options.expandAcrossYear ?? state.approvedBudgetImport.expandAcrossYear),
+          },
+          stagedAt: new Date().toISOString(),
+        };
+        if (!staged?.records?.length) {
+          state.lastApprovedBudgetNotice = {
+            at: new Date().toISOString(),
+            kind: "error",
+            message: "Finalized budget file was read, but 0 rows mapped. Check that the workbook includes line items and monthly budget values.",
+          };
+          persistState();
+          render();
+          return;
+        }
+      } catch (error) {
+        state.lastApprovedBudgetNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget parse failed: ${error?.message || String(error)}`,
+        };
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget parse failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+        return;
+      }
+    }
+
+    staged = state.pendingApprovedBudget?.dataset;
+    if (!staged?.records?.length) {
+      state.lastApprovedBudgetNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message: "No finalized budget rows are staged. Upload a finalized budget first.",
+      };
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message: "No finalized budget rows are staged. Upload a finalized budget first.",
       };
       persistState();
       render();
       return;
     }
 
-    let baseRecords = state.datasets.financial?.records || [];
-    if (replaceMode === "replace_all") {
-      baseRecords = [];
-    } else if (replaceMode === "replace_scope") {
-      baseRecords = pruneFinancialRecords(baseRecords, scopeOverride, staged.records);
-    }
+    const scopeOverride = matchCommunityName(options.scopeOverride || state.approvedBudgetImport.scope || "RISE Corporate");
+    const year = String(options.year || state.approvedBudgetImport.year || "2026");
+    const expandAcrossYear = Boolean(options.expandAcrossYear ?? state.approvedBudgetImport.expandAcrossYear);
+    const stagedBenchmarkRows = Array.isArray(state.pendingApprovedBudget?.benchmarkRows)
+      ? state.pendingApprovedBudget.benchmarkRows
+      : [];
+    const detectedYears = Array.isArray(state.pendingApprovedBudget?.detectedYears)
+      ? state.pendingApprovedBudget.detectedYears
+      : [year];
+    const sanitized = staged.records
+      .map((record) => ({
+        ...record,
+        property: matchCommunityName(record?.property || scopeOverride),
+        period: parsePeriod(record?.period) || `${year}-01`,
+        actual: 0,
+        source: "approved_budget",
+        updatedAt: new Date().toISOString(),
+      }))
+      .filter((record) => Boolean(record.property) && Boolean(record.period));
 
-    const mergedRecords = mergeDatasetRecords("financial", baseRecords, staged.records);
-    state.datasets.financial = {
-      type: "financial",
-      fileName: staged.fileName || "Financial CSV",
-      sourceKind: "file",
-      sourceText: "",
-      records: mergedRecords,
-      diagnostics: {
-        parsedRows: mergedRecords.length,
-        fileRows: mergedRecords.length,
-        missingRequired: [],
-        missingRecommended: [],
-        detected: { source: "staged" },
-      },
+    const uniquePeriods = Array.from(new Set(sanitized.map((record) => String(record.period).slice(0, 7)).filter(Boolean)));
+    const shouldExpandAcrossYear = expandAcrossYear && uniquePeriods.length <= 1;
+    const expandedRecords = shouldExpandAcrossYear
+      ? sanitized.flatMap((record) =>
+          Array.from({ length: 12 }, (_, monthIndex) => ({
+            ...record,
+            period: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+          })),
+        )
+      : sanitized.map((record) => ({ ...record, period: String(record.period).startsWith(year) ? record.period : `${year}-01` }));
+
+    const existing = Array.isArray(state.approvedBudgets.records) ? state.approvedBudgets.records : [];
+    const pruned = pruneApprovedBudgetRecords(existing, scopeOverride, year, expandedRecords);
+    const merged = mergeDatasetRecords("financial", pruned, expandedRecords).map((record) => ({
+      ...record,
+      actual: 0,
+      source: "approved_budget",
+    }));
+    const existingBenchmarks = Array.isArray(state.approvedBudgets.benchmarks) ? state.approvedBudgets.benchmarks : [];
+    const sanitizedBenchmarkRows = stagedBenchmarkRows
+      .map((row) => ({
+        ...row,
+        property: matchCommunityName(row?.property || scopeOverride),
+        period: parsePeriod(row?.period),
+      }))
+      .filter((row) => Boolean(row.property) && Boolean(row.period));
+    const prunedBenchmarks = pruneApprovedBudgetBenchmarks(existingBenchmarks, scopeOverride, sanitizedBenchmarkRows);
+    const mergedBenchmarks = mergeApprovedBudgetBenchmarks(prunedBenchmarks, sanitizedBenchmarkRows);
+    state.approvedBudgets = {
+      records: merged,
+      benchmarks: mergedBenchmarks,
+      updatedAt: new Date().toISOString(),
     };
-    // Keep a stored ledger copy for trend comparisons across sessions.
-    saveFinancialHistoryStore(state.datasets.financial);
+    persistApprovedBudgets();
 
-    applyFinancialRecordsToOpsStore(staged.records);
-
-    state.pendingFinancial = null;
-    const appliedAt = new Date().toISOString();
+    pendingApprovedBudgetFiles = [];
+    state.pendingApprovedBudget = null;
+    const coverage = getApprovedBudgetCoverage(merged);
+    const ledgerRecords = Array.isArray(state.datasets.financial?.records) ? state.datasets.financial.records : [];
+    const scopedLedgerRows = ledgerRecords.filter(
+      (record) =>
+        matchCommunityName(record?.property) === scopeOverride &&
+        String(record?.period || "").startsWith(year),
+    );
+    const approvedIndex = buildApprovedBudgetIndex(merged, year, scopeOverride);
+    const matchedRows = countApprovedBudgetMatches(scopedLedgerRows, approvedIndex);
     state.lastFinancialApplyNotice = {
-      at: appliedAt,
-      kind: "actuals",
-      message: `Upload applied: ${formatNumber(staged.records.length)} mapped row(s) stored for ${getFinancialImportScopeLabel(
-        scopeOverride,
-      )}${periodOverride ? ` (${periodOverride})` : ""}.`,
+      at: new Date().toISOString(),
+      kind: "approved_budget",
+      message: `Finalized budget applied: ${formatNumber(expandedRecords.length)} row(s) stored for ${scopeOverride} (${year}). Budget library now has ${formatNumber(
+        coverage.rowCount,
+      )} rows across ${formatNumber(coverage.entityCount)} entities (benchmark years: ${escapeHtml(
+        (coverage.benchmarkYears || []).join(", ") || "--",
+      )}). Snapshot mapping matched ${formatNumber(matchedRows)} of ${formatNumber(
+        scopedLedgerRows.length,
+      )} loaded ledger rows for ${scopeOverride} ${year}.`,
+    };
+    state.lastApprovedBudgetNotice = {
+      at: new Date().toISOString(),
+      kind: "approved_budget",
+      message: `Finalized budget applied: ${formatNumber(expandedRecords.length)} row(s) stored for ${scopeOverride} (${year})${
+        shouldExpandAcrossYear ? " across all 12 months" : ""
+      }. Snapshot mapping: ${formatNumber(matchedRows)} / ${formatNumber(scopedLedgerRows.length)} rows matched. Comparative years detected: ${escapeHtml(
+        (detectedYears || []).join(", "),
+      )}.`,
     };
     persistState();
     render();
@@ -3353,12 +5281,14 @@
   function render() {
     renderCrosswalkLibrary();
     renderFinancialImportWorkspace();
+    renderApprovedBudgetWorkspace();
     ["financial"].forEach(renderUploadMeta);
 
     const view = computeViewModel();
     renderWorkspaceBridge();
     renderSnapshotScopeControls(view);
     renderPeriodOptions(view);
+    renderFinancialFilterControls(view);
     if (dom.manualPeriodInput) {
       dom.manualPeriodInput.value = state.manualPeriod;
     }
@@ -3371,11 +5301,19 @@
     renderBoardSummary(view);
     updateExportButtons(Boolean(view?.propertySummaries?.length));
     if (dom.applyFinancialUpload) {
-      const hasStaged = Boolean(state.pendingFinancial?.dataset?.records?.length);
+      const hasStaged = Boolean(state.pendingFinancial?.rowCount || state.pendingFinancial?.dataset?.records?.length);
       dom.applyFinancialUpload.disabled = !hasStaged;
     }
     if (dom.clearFinancialStaging) {
       dom.clearFinancialStaging.disabled = !Boolean(state.pendingFinancial);
+    }
+    if (dom.applyApprovedBudgetUpload) {
+      dom.applyApprovedBudgetUpload.disabled = !Boolean(
+        state.pendingApprovedBudget?.dataset?.records?.length || pendingApprovedBudgetFiles.length,
+      );
+    }
+    if (dom.clearApprovedBudgetStaging) {
+      dom.clearApprovedBudgetStaging.disabled = !Boolean(state.pendingApprovedBudget);
     }
 
     document.querySelectorAll(".tab-btn").forEach((button) => {
@@ -3812,6 +5750,14 @@
     const stagedFiles = state.pendingFinancial?.files ? [...state.pendingFinancial.files] : [];
     let stagedRowCount = state.pendingFinancial?.rowCount || 0;
 
+    state.lastFinancialApplyNotice = {
+      at: new Date().toISOString(),
+      kind: "actuals",
+      message: `Reading ${formatNumber(fileList.length)} file(s)…`,
+    };
+    persistState();
+    render();
+
     for (const file of fileList) {
       const { rows, sourceText } = await readFileToRows(file);
       const parsed = parseDatasetFromRows("financial", rows, file.name, {
@@ -3848,8 +5794,24 @@
       options: { scopeOverride, replaceMode, period: manualPeriodOverride, periodOverride },
       stagedAt: new Date().toISOString(),
     };
+    state.lastFinancialApplyNotice = {
+      at: new Date().toISOString(),
+      kind: staged?.records?.length ? "actuals" : "error",
+      message: staged?.records?.length
+        ? `Staged ${formatNumber(staged.records.length)} row(s). Click Apply To Ledger.`
+        : "Upload read completed, but 0 rows were mapped. Check that the file contains Account Name, Actual, and Budget columns.",
+    };
     persistState();
     render();
+
+    // Belt + suspenders: ensure the Apply button becomes clickable immediately after staging,
+    // even if some downstream render code changes.
+    if (dom.applyFinancialUpload) {
+      dom.applyFinancialUpload.disabled = false;
+    }
+    if (dom.clearFinancialStaging) {
+      dom.clearFinancialStaging.disabled = false;
+    }
   }
 
   function loadStoredFinancialHistoryIntoPage() {
@@ -3867,8 +5829,41 @@
   function bindDropzone(type) {
     const dropzone = document.getElementById(`${type}-dropzone`);
     const input = document.getElementById(`${type}-input`);
+    if (!dropzone || !input) {
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "error",
+        message: `Upload controls missing in DOM for ${type}. Refresh the page.`,
+      };
+      persistState();
+      return;
+    }
 
-    input.addEventListener("change", (event) => handleDatasetUpload(type, event.target.files || []));
+    input.addEventListener("change", (event) => {
+      logDebug("input change", type, event?.target?.files?.length || 0);
+      try {
+        const fileNames = Array.from(event?.target?.files || [])
+          .map((file) => file?.name)
+          .filter(Boolean);
+        if (fileNames.length) {
+          dropzone.querySelector("strong").textContent = `Selected: ${fileNames.slice(0, 2).join(", ")}${fileNames.length > 2 ? ` (+${fileNames.length - 2} more)` : ""}`;
+        }
+      } catch (_error) {}
+      Promise.resolve(handleDatasetUpload(type, event.target.files || [])).catch((error) => {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Upload failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+        window.alert(state.lastFinancialApplyNotice.message);
+      });
+      // Allow re-selecting the same file twice (browser won't fire change otherwise).
+      try {
+        event.target.value = "";
+      } catch (_error) {}
+    });
 
     ["dragenter", "dragover"].forEach((eventName) => {
       dropzone.addEventListener(eventName, (event) => {
@@ -3886,12 +5881,107 @@
 
     dropzone.addEventListener("drop", (event) => {
       const files = event.dataTransfer?.files || [];
-      handleDatasetUpload(type, files);
+      logDebug("drop", type, files?.length || 0);
+      try {
+        const fileNames = Array.from(files || [])
+          .map((file) => file?.name)
+          .filter(Boolean);
+        if (fileNames.length) {
+          dropzone.querySelector("strong").textContent = `Dropped: ${fileNames.slice(0, 2).join(", ")}${fileNames.length > 2 ? ` (+${fileNames.length - 2} more)` : ""}`;
+        }
+      } catch (_error) {}
+      Promise.resolve(handleDatasetUpload(type, files)).catch((error) => {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Upload failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+        window.alert(state.lastFinancialApplyNotice.message);
+      });
+    });
+  }
+
+  function bindApprovedBudgetDropzone() {
+    const dropzone = document.getElementById("approved-budget-dropzone");
+    const input = dom.approvedBudgetInput;
+    if (!dropzone || !input) {
+      return;
+    }
+
+    input.addEventListener("change", (event) => {
+      try {
+        const fileNames = Array.from(event?.target?.files || [])
+          .map((file) => file?.name)
+          .filter(Boolean);
+        if (fileNames.length) {
+          dropzone.querySelector("strong").textContent = `Selected: ${fileNames.slice(0, 2).join(", ")}${fileNames.length > 2 ? ` (+${fileNames.length - 2} more)` : ""}`;
+        }
+      } catch (_error) {}
+      Promise.resolve(handleApprovedBudgetUpload(event.target.files || [])).catch((error) => {
+        state.lastApprovedBudgetNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget upload failed: ${error?.message || String(error)}`,
+        };
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget upload failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+      });
+      try {
+        event.target.value = "";
+      } catch (_error) {}
+    });
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropzone.classList.add("dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("dragging");
+      });
+    });
+
+    dropzone.addEventListener("drop", (event) => {
+      const files = event.dataTransfer?.files || [];
+      try {
+        const fileNames = Array.from(files || [])
+          .map((file) => file?.name)
+          .filter(Boolean);
+        if (fileNames.length) {
+          dropzone.querySelector("strong").textContent = `Dropped: ${fileNames.slice(0, 2).join(", ")}${fileNames.length > 2 ? ` (+${fileNames.length - 2} more)` : ""}`;
+        }
+      } catch (_error) {}
+      Promise.resolve(handleApprovedBudgetUpload(files)).catch((error) => {
+        state.lastApprovedBudgetNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget upload failed: ${error?.message || String(error)}`,
+        };
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget upload failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+      });
     });
   }
 
   function bindEvents() {
     populateFinancialImportScopeOptions();
+    populateApprovedBudgetScopeOptions();
     if (dom.financialImportMode) {
       dom.financialImportMode.value = state.financialImport.mode || "merge";
     }
@@ -3912,13 +6002,106 @@
     }
 
     bindDropzone("financial");
+    bindApprovedBudgetDropzone();
+
+    // Make the import workspace act as a drop target too, so it's obvious the page is "alive".
+    const importWorkspace = document.querySelector(".import-workspace");
+    if (importWorkspace) {
+      ["dragenter", "dragover"].forEach((eventName) => {
+        importWorkspace.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          importWorkspace.classList.add("dragging");
+        });
+      });
+      ["dragleave", "drop"].forEach((eventName) => {
+        importWorkspace.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          importWorkspace.classList.remove("dragging");
+        });
+      });
+      importWorkspace.addEventListener("drop", (event) => {
+        const files = event.dataTransfer?.files || [];
+        if (files?.length) {
+          Promise.resolve(handleDatasetUpload("financial", files)).catch((error) => {
+            state.lastFinancialApplyNotice = {
+              at: new Date().toISOString(),
+              kind: "error",
+              message: `Upload failed: ${error?.message || String(error)}`,
+            };
+            persistState();
+            render();
+            window.alert(state.lastFinancialApplyNotice.message);
+          });
+        }
+      });
+    }
 
     [dom.openFinancialImport, dom.openFinancialImportHeader].filter(Boolean).forEach((button) => {
-      button.addEventListener("click", () => dom.financialInput?.click());
+      button.addEventListener("click", () => {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "actuals",
+          message: "Opening file picker…",
+        };
+        persistState();
+        render();
+        document.getElementById("financial-dropzone")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        dom.financialInput?.click();
+      });
     });
 
     dom.financialImportScope?.addEventListener("change", (event) => {
       state.financialImport.scope = event.target.value || AUTO_IMPORT_SCOPE;
+      persistState();
+      render();
+    });
+
+    dom.approvedBudgetScope?.addEventListener("change", (event) => {
+      state.approvedBudgetImport.scope = matchCommunityName(event.target.value || "RISE Corporate");
+      persistState();
+      render();
+    });
+    dom.approvedBudgetYear?.addEventListener("input", (event) => {
+      const next = String(Number(event.target.value || state.approvedBudgetImport.year || "2026") || 2026);
+      state.approvedBudgetImport.year = next;
+      persistState();
+      render();
+    });
+    dom.approvedBudgetExpandYear?.addEventListener("change", (event) => {
+      state.approvedBudgetImport.expandAcrossYear = (event.target.value || "yes") !== "no";
+      persistState();
+      render();
+    });
+    dom.openApprovedBudgetImport?.addEventListener("click", () => {
+      state.lastApprovedBudgetNotice = {
+        at: new Date().toISOString(),
+        kind: "approved_budget",
+        message: "Opening finalized budget file picker…",
+      };
+      persistState();
+      render();
+      dom.approvedBudgetInput?.click();
+    });
+    dom.applyApprovedBudgetUpload?.addEventListener("click", (event) => {
+      event.preventDefault();
+      Promise.resolve(applyStagedApprovedBudgetUpload()).catch((error) => {
+        state.lastApprovedBudgetNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget apply failed: ${error?.message || String(error)}`,
+        };
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message: `Finalized budget apply failed: ${error?.message || String(error)}`,
+        };
+        persistState();
+        render();
+      });
+    });
+    dom.clearApprovedBudgetStaging?.addEventListener("click", () => {
+      pendingApprovedBudgetFiles = [];
+      state.pendingApprovedBudget = null;
       persistState();
       render();
     });
@@ -4009,19 +6192,41 @@
       render();
     });
 
-    document.getElementById("load-sample-pack").addEventListener("click", () => {
+    dom.financialFilterPeriod?.addEventListener("change", (event) => {
+      state.financialLineFilter.period = event.target.value || "selected";
+      persistState();
+      render();
+    });
+
+    dom.financialFilterGl?.addEventListener("change", (event) => {
+      state.financialLineFilter.glCode = event.target.value || "all";
+      persistState();
+      render();
+    });
+
+    dom.financialFilterStatus?.addEventListener("change", (event) => {
+      state.financialLineFilter.status = event.target.value || "all";
+      persistState();
+      render();
+    });
+
+    const loadSamplePackButton = document.getElementById("load-sample-pack");
+    loadSamplePackButton?.addEventListener("click", () => {
       setDataset("financial", samplePack.financial, "sample-financial.csv", "sample");
       setDataset("operations", samplePack.operations, "sample-operations.csv", "sample");
       setDataset("leasing", samplePack.leasing, "sample-leasing.csv", "sample");
     });
-    document.getElementById("clear-all").addEventListener("click", clearState);
-    dom.syncDashboardHistory.addEventListener("click", () => {
+
+    const clearAllButton = document.getElementById("clear-all");
+    clearAllButton?.addEventListener("click", clearState);
+
+    dom.syncDashboardHistory?.addEventListener("click", () => {
       syncDashboardDriverDatasets();
       persistState();
       render();
     });
 
-    dom.periodSelect.addEventListener("change", (event) => {
+    dom.periodSelect?.addEventListener("change", (event) => {
       state.selectedPeriod = event.target.value;
       syncWorkspaceContextFromCurrentSelection();
       persistState();
@@ -4035,7 +6240,29 @@
       }
     });
 
-    dom.applyFinancialUpload?.addEventListener("click", () => applyStagedFinancialUpload());
+    dom.applyFinancialUpload?.addEventListener("click", (event) => {
+      event?.preventDefault?.();
+      state.lastFinancialApplyNotice = {
+        at: new Date().toISOString(),
+        kind: "actuals",
+        message: "Apply To Ledger clicked…",
+      };
+      persistState();
+      render();
+      if (!state.pendingFinancial?.dataset?.records?.length) {
+        state.lastFinancialApplyNotice = {
+          at: new Date().toISOString(),
+          kind: "error",
+          message:
+            "Nothing is staged yet. Click “Choose Financial CSVs” and select a file first, then click Apply To Ledger.",
+        };
+        persistState();
+        render();
+        window.alert(state.lastFinancialApplyNotice.message);
+        return;
+      }
+      applyStagedFinancialUpload();
+    });
     dom.clearFinancialStaging?.addEventListener("click", () => {
       state.pendingFinancial = null;
       persistState();
@@ -4061,10 +6288,10 @@
       render();
     });
 
-    dom.exportScorecards.addEventListener("click", exportScorecardsCsv);
-    dom.exportSummary.addEventListener("click", exportBoardSummary);
-    dom.exportReport.addEventListener("click", exportOwnershipReport);
-    dom.exportPptx.addEventListener("click", exportBoardDeck);
+    dom.exportScorecards?.addEventListener("click", exportScorecardsCsv);
+    dom.exportSummary?.addEventListener("click", exportBoardSummary);
+    dom.exportReport?.addEventListener("click", exportOwnershipReport);
+    dom.exportPptx?.addEventListener("click", exportBoardDeck);
   }
 
   function handleSharedStorageSync(event) {
@@ -4083,6 +6310,7 @@
   }
 
   const restored = restoreState();
+  logDebug("boot", { build: BUILD_ID, restored });
   state.approvedBudgets = loadApprovedBudgets();
   if (!restored) {
     applyWorkspaceContext(loadWorkspaceContextFromStorage(), { forceSelection: true, updateImportScope: true });
