@@ -1,5 +1,5 @@
 (() => {
-  const BUILD_ID = "2026-04-10.1";
+  const BUILD_ID = "2026-04-10.2";
   const STORAGE_KEY = "rise_financial_accountability_page_v1";
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
@@ -270,6 +270,7 @@
   };
 
   let xlsxLoaderPromise = null;
+  let pdfLoaderPromise = null;
   let pendingApprovedBudgetFiles = [];
 
   function logDebug(...args) {
@@ -1140,6 +1141,231 @@
       }
     }
     throw new Error("Invalid XLSX file: worksheet XML missing.");
+  }
+
+  async function ensurePdfJsLoaded() {
+    if (typeof window.pdfjsLib !== "undefined") {
+      return true;
+    }
+    if (!pdfLoaderPromise) {
+      const candidateUrls = [
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+        "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js",
+      ];
+      const loadScriptWithTimeout = (url, timeoutMs = 3500) =>
+        new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          let settled = false;
+          const timer = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            try {
+              script.remove();
+            } catch (_error) {}
+            reject(new Error(`Timed out loading ${url}`));
+          }, timeoutMs);
+          const finish = (ok, error) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            if (ok) resolve(true);
+            else reject(error || new Error(`Failed loading ${url}`));
+          };
+          script.src = url;
+          script.async = true;
+          script.onload = () => finish(true);
+          script.onerror = () => finish(false, new Error(`Failed loading ${url}`));
+          document.head.appendChild(script);
+        });
+      pdfLoaderPromise = new Promise((resolve, reject) => {
+        const tryLoad = (index) => {
+          if (typeof window.pdfjsLib !== "undefined") {
+            resolve(true);
+            return;
+          }
+          const nextUrl = candidateUrls[index];
+          if (!nextUrl) {
+            reject(new Error("PDF parser could not be loaded. Upload CSV/XLSX instead or enable internet access for PDF parsing."));
+            return;
+          }
+          loadScriptWithTimeout(nextUrl)
+            .then(() => {
+              if (typeof window.pdfjsLib !== "undefined") resolve(true);
+              else tryLoad(index + 1);
+            })
+            .catch(() => tryLoad(index + 1));
+        };
+        tryLoad(0);
+      }).catch((error) => {
+        pdfLoaderPromise = null;
+        throw error;
+      });
+    }
+    await pdfLoaderPromise;
+    return true;
+  }
+
+  function monthNameToPeriodToken(token) {
+    const normalized = String(token || "").trim().toLowerCase();
+    const months = {
+      jan: "01",
+      january: "01",
+      feb: "02",
+      february: "02",
+      mar: "03",
+      march: "03",
+      apr: "04",
+      april: "04",
+      may: "05",
+      jun: "06",
+      june: "06",
+      jul: "07",
+      july: "07",
+      aug: "08",
+      august: "08",
+      sep: "09",
+      sept: "09",
+      september: "09",
+      oct: "10",
+      october: "10",
+      nov: "11",
+      november: "11",
+      dec: "12",
+      december: "12",
+    };
+    return months[normalized] || "";
+  }
+
+  function normalizePdfLine(line) {
+    return String(line ?? "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function isFinancialPdfSectionLine(line) {
+    if (!line) return false;
+    if (/\d/.test(line)) return false;
+    if (/^(property:|account|actual|budget|variance|accrual basis|page \d+|ytd\b|rise - )/i.test(line)) return false;
+    return /^[A-Za-z&/,\- ]+$/.test(line);
+  }
+
+  function extractFinancialPdfMetadata(lines, fallbackProperty = "", fallbackPeriod = "") {
+    let property = matchCommunityName(fallbackProperty || "");
+    let period = parsePeriod(fallbackPeriod || "");
+    for (const rawLine of lines) {
+      const line = normalizePdfLine(rawLine);
+      if (!line) continue;
+      if (!property) {
+        const propertyMatch = line.match(/^Property:\s*(.+)$/i);
+        if (propertyMatch) {
+          property = matchCommunityName(propertyMatch[1]);
+        } else {
+          const risePropertyMatch = line.match(/^RISE\s+(.+)$/i);
+          if (risePropertyMatch && !/balance sheet|income statement|budget comparison/i.test(line)) {
+            property = matchCommunityName(risePropertyMatch[1]);
+          }
+        }
+      }
+      if (!period) {
+        const monthMatch = line.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+(20\d{2})\b/i);
+        if (monthMatch) {
+          const month = monthNameToPeriodToken(monthMatch[1]);
+          if (month) {
+            period = `${monthMatch[2]}-${month}`;
+          }
+        }
+      }
+      if (property && period) break;
+    }
+    return { property, period };
+  }
+
+  function parseFinancialPdfLine(line, context = {}) {
+    const normalized = normalizePdfLine(line);
+    if (!normalized) return null;
+    const rowMatch = normalized.match(
+      /^(?:(\d{3,5})\s+)?(.+?)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(-?[\d,]+\.\d+%)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(\(?-?[\d,]+\.\d{2}\)?)\s+(-?[\d,]+\.\d+%)\s+(\(?-?[\d,]+\.\d{2}\)?)$/,
+    );
+    if (!rowMatch) return null;
+    return [
+      rowMatch[1] || "",
+      rowMatch[2] || "",
+      rowMatch[3] || "",
+      rowMatch[4] || "",
+      rowMatch[10] || "",
+      context.section || "",
+      context.property || "",
+      context.period || "",
+    ];
+  }
+
+  async function readPdfToRows(file, options = {}) {
+    await ensurePdfJsLoaded();
+    const buffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise;
+    const lines = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const grouped = new Map();
+      Array.from(textContent.items || []).forEach((item) => {
+        const text = normalizePdfLine(item?.str || "");
+        if (!text) return;
+        const transform = item?.transform || [];
+        const y = Math.round(Number(transform[5] || 0));
+        const x = Number(transform[4] || 0);
+        const bucket = grouped.get(y) || [];
+        bucket.push({ x, text });
+        grouped.set(y, bucket);
+      });
+      Array.from(grouped.entries())
+        .sort((left, right) => right[0] - left[0])
+        .forEach(([, entries]) => {
+          const line = normalizePdfLine(
+            entries
+              .sort((left, right) => left.x - right.x)
+              .map((entry) => entry.text)
+              .join(" "),
+          );
+          if (line) lines.push(line);
+        });
+    }
+
+    const sourceText = lines.join("\n");
+    const fallbackScope =
+      options.scopeOverride && options.scopeOverride !== AUTO_IMPORT_SCOPE ? options.scopeOverride : "";
+    const metadata = extractFinancialPdfMetadata(lines, fallbackScope, options.periodOverride || options.period);
+    const rows = [["Account", "Account Name", "Actual", "Budget", "Annual Budget", "Section", "Property", "Period"]];
+    let inIncomeStatement = false;
+    let currentSection = "";
+    lines.forEach((line) => {
+      if (/budget comparison - income statement|income statement - budget vs actual/i.test(line)) {
+        inIncomeStatement = true;
+        return;
+      }
+      if (!inIncomeStatement) return;
+      if (/^Account\s+Account Name\s+Actual\s+Budget/i.test(line)) return;
+      if (/^Property:/i.test(line) || /^Accrual Basis$/i.test(line) || /generated .* page \d+/i.test(line)) return;
+      const parsedRow = parseFinancialPdfLine(line, {
+        section: currentSection,
+        property: metadata.property,
+        period: metadata.period,
+      });
+      if (parsedRow) {
+        rows.push(parsedRow);
+        return;
+      }
+      if (isFinancialPdfSectionLine(line)) {
+        currentSection = line;
+      }
+    });
+
+    if (rows.length <= 1) {
+      throw new Error(`No financial statement rows were detected in ${file?.name || "PDF"}.`);
+    }
+    return { rows, sourceText };
   }
 
   function parsePeriod(value) {
@@ -2048,9 +2274,13 @@
       .filter((row) => row.some((cell) => cell !== ""));
   }
 
-  async function readFileToRows(file) {
+  async function readFileToRows(file, options = {}) {
     const ext = fileExt(file?.name || "");
     const isWorkbook = ["xlsx", "xlsm", "xls"].includes(ext);
+    const isPdf = ext === "pdf";
+    if (isPdf) {
+      return readPdfToRows(file, options);
+    }
     if (!isWorkbook) {
       const text = await file.text();
       return { rows: parseCsv(text), sourceText: text };
@@ -2186,7 +2416,11 @@
 
     for (const file of Array.from(fileList || []).filter(Boolean)) {
       const { rows, sourceText } = await withTimeout(
-        readFileToRows(file),
+        readFileToRows(file, {
+          scopeOverride,
+          periodOverride: yearFallbackPeriod,
+          period: yearFallbackPeriod,
+        }),
         12000,
         `Timed out reading ${file?.name || "workbook"}. Try the file again or upload a CSV export for this budget.`,
       );
@@ -5800,7 +6034,11 @@
     render();
 
     for (const file of fileList) {
-      const { rows, sourceText } = await readFileToRows(file);
+      const { rows, sourceText } = await readFileToRows(file, {
+        scopeOverride,
+        periodOverride,
+        period: manualPeriodOverride,
+      });
       const parsed = parseDatasetFromRows("financial", rows, file.name, {
         scopeOverride,
         replaceMode,
@@ -6295,7 +6533,7 @@
           at: new Date().toISOString(),
           kind: "error",
           message:
-            "Nothing is staged yet. Click “Choose Financial CSVs” and select a file first, then click Apply To Ledger.",
+            "Nothing is staged yet. Click “Choose Financial Files” and select a CSV, Excel, or PDF file first, then click Apply To Ledger.",
         };
         persistState();
         render();

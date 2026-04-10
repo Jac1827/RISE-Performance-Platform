@@ -990,7 +990,7 @@
         <div class="header-actions">
           <a class="btn" id="back-to-operations" href="index.html">← Back To Operations Dashboard</a>
           <a class="btn btn-soft" id="open-selected-ops" href="index.html">Open Selected Community In Ops</a>
-          <button class="btn btn-primary" id="open-financial-import-header">Import Financial CSVs</button>
+          <button class="btn btn-primary" id="open-financial-import-header">Import Financial Files</button>
           <button class="btn btn-soft" id="sync-dashboard-history">Sync Ops Dashboard History</button>
           <button class="btn" id="clear-all">Clear</button>
           <button class="btn btn-green" id="export-scorecards" disabled>Export Scorecards CSV</button>
@@ -1038,7 +1038,7 @@
                 </div>
                 <div class="button-row">
                   <span class="chip" id="financial-import-workspace-chip">Ready to import</span>
-                  <button class="btn btn-primary" id="open-financial-import">Choose Financial CSVs</button>
+                  <button class="btn btn-primary" id="open-financial-import">Choose Financial Files</button>
                 </div>
               </div>
               <div class="import-grid">
@@ -1112,7 +1112,7 @@
                 </div>
                 <div class="button-row">
                   <span class="chip" id="approved-budget-chip">No budget staged</span>
-                  <button class="btn btn-primary" id="open-approved-budget-import">Choose Finalized Budget</button>
+                  <button class="btn btn-primary" id="open-approved-budget-import">Choose Finalized Budget Files</button>
                 </div>
               </div>
               <div class="import-grid">
@@ -1133,9 +1133,9 @@
                 </div>
               </div>
               <label class="dropzone" id="approved-budget-dropzone" style="margin-top: 10px">
-                <input id="approved-budget-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls" multiple />
+                <input id="approved-budget-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls,.pdf,application/pdf" multiple />
                 <strong>Drop or choose finalized budget file(s)</strong>
-                <span>Supported: CSV, XLSX, XLSM, XLS (approved/final budget reports)</span>
+                <span>Supported: CSV, XLSX, XLSM, XLS, PDF (approved/final budget reports)</span>
               </label>
               <div class="button-row" style="margin-top: 10px">
                 <button class="btn btn-primary" id="apply-approved-budget-upload" disabled>Apply Finalized Budget</button>
@@ -1157,9 +1157,9 @@
                 <span class="chip" id="financial-chip">Awaiting file</span>
               </div>
               <label class="dropzone" id="financial-dropzone">
-                <input id="financial-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls" multiple />
+                <input id="financial-input" type="file" accept=".csv,text/csv,.xlsx,.xlsm,.xls,.pdf,application/pdf" multiple />
                 <strong>Drop or choose one or more financial files</strong>
-                <span>Supported: CSV, XLSX, XLSM, XLS (Budget vs Actual, final budgets, income statement exports)</span>
+                <span>Supported: CSV, XLSX, XLSM, XLS, PDF (Budget vs Actual, final budgets, income statement exports)</span>
               </label>
               <div class="button-row" style="margin-top: 10px">
                 <button class="btn btn-primary" id="apply-financial-upload" disabled>Apply To Ledger</button>
@@ -1317,6 +1317,6 @@
       </div>
     </div>
 
-    <script src="financial-accountability.js?v=2026-04-10.1"></script>
+    <script src="financial-accountability.js?v=2026-04-10.2"></script>
   </body>
 </html>
