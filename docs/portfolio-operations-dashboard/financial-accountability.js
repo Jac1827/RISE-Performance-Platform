@@ -1,5 +1,5 @@
 (() => {
-  const BUILD_ID = "2026-04-09.9";
+  const BUILD_ID = "2026-04-10.1";
   const STORAGE_KEY = "rise_financial_accountability_page_v1";
   const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
@@ -7,6 +7,19 @@
   const FINANCIAL_HISTORY_STORAGE_KEY = "rise_financial_history_v1";
   const AUTO_IMPORT_SCOPE = "__AUTO__";
   const APPROVED_BUDGET_STORAGE_KEY = "rise_financial_accountability_approved_budgets_v1";
+  const FALLBACK_COMMUNITIES = [
+    { name: "Bartram Park", units: 297 },
+    { name: "Baymeadows", units: 331 },
+    { name: "Nocatee", units: 178 },
+    { name: "Doro", units: 247 },
+    { name: "St Augustine", units: null },
+    { name: "Sutton House", units: null },
+    { name: "Viera", units: 166 },
+    { name: "Florence Villa", units: 224 },
+    { name: "Citrus Ridge", units: 222 },
+    { name: "Sereno", units: 320 },
+    { name: "Glen Kernan Park", units: 308 },
+  ];
 
   const FINANCIAL_LINES = [
     { key: "rentalIncome", label: "Rental Income", glCode: "4000", section: "Operating Income" },
@@ -329,6 +342,20 @@
     }
   }
 
+  function loadSavedCommunityCatalog() {
+    try {
+      const store = loadDashboardCommunityStore();
+      return Object.entries(store || {})
+        .map(([name, record]) => ({
+          name: String(name ?? "").trim(),
+          units: parseAmount(record?.totalUnitsOverride ?? record?.totalUnits ?? record?.unitCount ?? null),
+        }))
+        .filter((entry) => Boolean(entry.name));
+    } catch (_error) {
+      return [];
+    }
+  }
+
   function loadOpsPropertyCatalog() {
     try {
       const raw = window.localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
@@ -456,17 +483,31 @@
 
   function getCommunityCatalog() {
     // IMPORTANT:
-    // This page must ONLY show entities from the Operations Dashboard property catalog
-    // plus "RISE Corporate". We intentionally do not merge in the leasing dashboard
-    // community store here because it can contain demo/sample communities and photo blobs.
-    const catalog = loadOpsPropertyCatalog();
-    return catalog
-      .map((entry) => ({
-        name: String(entry?.name ?? "").trim(),
-        units: parseAmount(entry?.units) ?? null,
-      }))
-      .filter((entry) => Boolean(entry.name))
-      .sort((left, right) => left.name.localeCompare(right.name));
+    // This page should prioritize the Operations Dashboard catalog, but it also needs
+    // resilient fallbacks when the live origin has not refreshed that catalog yet.
+    // We therefore merge the ops catalog first, then saved ops community records,
+    // then any already-loaded financial entities, and finally a safe portfolio seed.
+    const merged = new Map();
+    const collect = (entries = []) => {
+      entries.forEach((entry) => {
+        const name = String(entry?.name ?? entry?.property ?? "").trim();
+        if (!name || /^rise corporate$/i.test(name)) return;
+        const existing = merged.get(name) || { name, units: null };
+        const units = parseAmount(entry?.units ?? entry?.totalUnits ?? entry?.unitCount ?? null);
+        merged.set(name, {
+          name,
+          units: existing.units ?? units ?? null,
+        });
+      });
+    };
+
+    collect(loadOpsPropertyCatalog());
+    collect(loadSavedCommunityCatalog());
+    collect((state.datasets.financial?.records || []).map((record) => ({ name: record?.property })));
+    collect((state.approvedBudgets?.records || []).map((record) => ({ name: record?.property })));
+    collect(FALLBACK_COMMUNITIES);
+
+    return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name));
   }
 
   function matchCommunityName(rawName) {
