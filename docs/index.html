@@ -1368,6 +1368,66 @@ function isPlanHrApproved(plan){
   return Boolean(plan && plan.hrApprovedAt);
 }
 
+function isAdminUser(user){
+  return Boolean(user && user.role === 'admin');
+}
+
+function canUserEditPlanCore(user, plan){
+  if(!user || !plan) return false;
+  if(isAdminUser(user)) return true;
+  if(!canUserAccessPlan(user, plan)) return false;
+  // Managers can edit core plan data only before HR approval AND before the plan is presented.
+  return !plan.hrApprovedAt && !plan.presentedAt;
+}
+
+function canUserDeletePlan(user, plan){
+  if(!user || !plan) return false;
+  if(isAdminUser(user)) return true;
+  if(!canUserAccessPlan(user, plan)) return false;
+  // Same rule as edit: managers can delete only before HR approval AND before presentation.
+  return !plan.hrApprovedAt && !plan.presentedAt;
+}
+
+function canUserMarkPlanPresented(user, plan){
+  if(!user || !plan) return false;
+  if(isAdminUser(user)) return true;
+  if(!canUserAccessPlan(user, plan)) return false;
+  // Managers can mark as presented once (cannot change the date later).
+  return !plan.presentedAt && isPlanHrApproved(plan) && !isPlanLocked(plan);
+}
+
+function canUserUploadSignedPlan(user, plan){
+  if(!user || !plan) return false;
+  if(isAdminUser(user)) return true;
+  if(!canUserAccessPlan(user, plan)) return false;
+  // Managers can upload the signed plan once after HR approval + presentation.
+  // Replacing an upload is admin-only.
+  return isPlanHrApproved(plan) && Boolean(plan.presentedAt) && !plan.signedDocData && !isPlanLocked(plan);
+}
+
+function isWriteupLocked(writeup){
+  // Treat an uploaded acknowledgement as the “presented/signed” confirmation.
+  return Boolean(writeup && writeup.acknowledgementData);
+}
+
+function canUserEditWriteup(user, writeup){
+  if(!user || !writeup) return false;
+  if(isAdminUser(user)) return true;
+  const employee = STATE.employees.find(item => item.id === writeup.employeeId);
+  if(!canUserAccessEmployee(user, employee)) return false;
+  // Managers can edit only until acknowledgement is uploaded.
+  return !isWriteupLocked(writeup);
+}
+
+function canUserUploadWriteupAcknowledgement(user, writeup){
+  if(!user || !writeup) return false;
+  if(isAdminUser(user)) return true;
+  const employee = STATE.employees.find(item => item.id === writeup.employeeId);
+  if(!canUserAccessEmployee(user, employee)) return false;
+  // Managers can upload acknowledgement once; replacement is admin-only.
+  return !writeup.acknowledgementData;
+}
+
 function logCorrespondence(entry){
   const record = normalizeCorrespondence(entry);
   if(!STATE.correspondence) STATE.correspondence = [];
@@ -2372,21 +2432,23 @@ function renderPlans(){
         </div>
       </div>
 
-      <div class="card" style="margin-top:16px">
-        <div class="section-title">
-          <div>
-            <h2>Admin data controls</h2>
-            <p>Only admin access can replace the saved company roster or clear locked platform data from this browser.</p>
-          </div>
-        </div>
-        <div class="alert alert-warn">Manager passcodes can work inside the platform, but destructive data reset actions stay restricted to admins only.</div>
-        <div class="inline" style="margin-top:14px">
-          <button class="btn btn-soft" onclick="reloadCompanyRoster()">Reload company roster</button>
-          <button class="btn btn-danger" onclick="resetAllData()">Reset platform data</button>
-        </div>
-      </div>
-    </div>
-  `;
+	      ${STATE.currentUser && STATE.currentUser.role === 'admin' ? `
+	        <div class="card" style="margin-top:16px">
+	          <div class="section-title">
+	            <div>
+	              <h2>Admin data controls</h2>
+	              <p>Only admin access can replace the saved company roster or clear locked platform data from this browser.</p>
+	            </div>
+	          </div>
+	          <div class="alert alert-warn">Manager passcodes can work inside the platform, but destructive data reset actions stay restricted to admins only.</div>
+	          <div class="inline" style="margin-top:14px">
+	            <button class="btn btn-soft" onclick="reloadCompanyRoster()">Reload company roster</button>
+	            <button class="btn btn-danger" onclick="resetAllData()">Reset platform data</button>
+	          </div>
+	        </div>
+	      ` : ''}
+	    </div>
+	  `;
 }
 
 function setPlanFilter(filter){
@@ -4319,8 +4381,8 @@ function renderEmployeeProfile(){
                   <div class="small" style="margin-bottom:8px">${escapeHtml(writeup.details)}</div>
                   <div class="inline">
                     <button class="btn btn-sm btn-soft" onclick="openWriteupDocument('${writeup.id}')">Open document</button>
-                    <button class="btn btn-sm btn-primary" onclick="openEditWriteupModal('${writeup.id}')">Edit write-up</button>
-                    <button class="btn btn-sm btn-accent" onclick="openWriteupAcknowledgementUpload('${writeup.id}')">${writeup.acknowledgementData ? 'Replace acknowledgement' : 'Upload acknowledgement'}</button>
+                    ${canUserEditWriteup(STATE.currentUser, writeup) ? `<button class="btn btn-sm btn-primary" onclick="openEditWriteupModal('${writeup.id}')">Edit write-up</button>` : ''}
+                    ${canUserUploadWriteupAcknowledgement(STATE.currentUser, writeup) ? `<button class="btn btn-sm btn-accent" onclick="openWriteupAcknowledgementUpload('${writeup.id}')">${writeup.acknowledgementData ? 'Replace acknowledgement' : 'Upload acknowledgement'}</button>` : ''}
                   </div>
                 </div>
               `).join('')}
@@ -5304,6 +5366,10 @@ function previewWriteup(){
 function openWriteupAcknowledgementUpload(writeupId){
   const writeup = getWriteup(writeupId);
   if(!writeup) return;
+  if(!canUserUploadWriteupAcknowledgement(STATE.currentUser, writeup)){
+    alert('Only admins can replace a write-up acknowledgement once it has been uploaded.');
+    return;
+  }
   openModal(`
     <div class="modal narrow">
       <button class="close-btn" onclick="closeModal()">x</button>
@@ -5328,6 +5394,10 @@ function openWriteupAcknowledgementUpload(writeupId){
 function openEditWriteupModal(writeupId){
   const writeup = getWriteup(writeupId);
   if(!writeup) return;
+  if(!canUserEditWriteup(STATE.currentUser, writeup)){
+    alert('Only admins can edit a write-up after the acknowledgement has been uploaded.');
+    return;
+  }
   openModal(`
     <div class="modal">
       <button class="close-btn" onclick="closeModal()">x</button>
@@ -5373,6 +5443,10 @@ function openEditWriteupModal(writeupId){
 function saveEditedWriteup(writeupId){
   const writeup = getWriteup(writeupId);
   if(!writeup) return;
+  if(!canUserEditWriteup(STATE.currentUser, writeup)){
+    alert('Only admins can edit a write-up after the acknowledgement has been uploaded.');
+    return;
+  }
   const details = String(document.getElementById('edit-wu-details').value || '').trim();
   if(!details){
     alert('Incident details are required.');
@@ -5397,6 +5471,10 @@ async function handleSavedWriteupAcknowledgementUpload(writeupId, event){
   const writeup = getWriteup(writeupId);
   const file = event.target.files && event.target.files[0];
   if(!writeup || !file) return;
+  if(!canUserUploadWriteupAcknowledgement(STATE.currentUser, writeup)){
+    alert('Only admins can replace a write-up acknowledgement once it has been uploaded.');
+    return;
+  }
   const status = document.getElementById('saved-writeup-ack-status');
   if(status) status.innerHTML = `<div class="alert alert-info">Saving ${escapeHtml(file.name)} to the write-up record...</div>`;
 
@@ -5611,8 +5689,8 @@ function renderWriteups(){
                 ${writeup.acknowledgementName ? `<div class="tiny muted" style="margin-bottom:8px">Acknowledgement saved: ${escapeHtml(writeup.acknowledgementName)}${writeup.acknowledgementDate ? ` · ${escapeHtml(formatDate(writeup.acknowledgementDate))}` : ''}</div>` : '<div class="tiny muted" style="margin-bottom:8px">Acknowledgement not uploaded yet.</div>'}
                 <div class="inline">
                   <button class="btn btn-sm btn-soft" onclick="openWriteupDocument('${writeup.id}')">Open document</button>
-                  <button class="btn btn-sm btn-primary" onclick="openEditWriteupModal('${writeup.id}')">Edit write-up</button>
-                  <button class="btn btn-sm btn-accent" onclick="openWriteupAcknowledgementUpload('${writeup.id}')">${writeup.acknowledgementData ? 'Replace acknowledgement' : 'Upload acknowledgement'}</button>
+                  ${canUserEditWriteup(STATE.currentUser, writeup) ? `<button class="btn btn-sm btn-primary" onclick="openEditWriteupModal('${writeup.id}')">Edit write-up</button>` : ''}
+                  ${canUserUploadWriteupAcknowledgement(STATE.currentUser, writeup) ? `<button class="btn btn-sm btn-accent" onclick="openWriteupAcknowledgementUpload('${writeup.id}')">${writeup.acknowledgementData ? 'Replace acknowledgement' : 'Upload acknowledgement'}</button>` : ''}
                   ${writeup.sourceDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadWriteupAttachment('${writeup.id}','source')">Download support doc</button>` : ''}
                   ${writeup.acknowledgementData ? `<button class="btn btn-sm btn-soft" onclick="downloadWriteupAttachment('${writeup.id}','ack')">Download acknowledgement</button>` : ''}
                 </div>
@@ -6686,6 +6764,8 @@ function openPlanDetail(planId){
   const alerts = getPlanAlerts(plan);
   const locked = isPlanLocked(plan);
   const hrApproved = isPlanHrApproved(plan);
+  const canEditCore = canUserEditPlanCore(STATE.currentUser, plan);
+  const canDelete = canUserDeletePlan(STATE.currentUser, plan);
   openModal(`
     <div class="modal">
       <button class="close-btn" onclick="closeModal()">x</button>
@@ -6730,13 +6810,22 @@ function openPlanDetail(planId){
             <div class="history-card">
               <strong>Presentation status</strong>
               <div class="small muted" style="margin:6px 0 10px">${plan.presentedAt ? 'Presented on ' + formatDate(plan.presentedAt) : 'Not yet presented to employee'}${!hrApproved ? ' · Presentation is blocked until HR approval is recorded.' : ''}${locked ? ' · Plan is locked after the signed upload.' : ''}</div>
-              ${locked ? '<span class="badge badge-completed">Locked after signed upload</span>' : `<button class="btn btn-sm ${plan.presentedAt ? 'btn-soft' : 'btn-primary'}" onclick="markPlanPresented('${plan.id}')">${plan.presentedAt ? 'Update presentation date' : 'Mark as presented'}</button>`}
+              ${locked ? '<span class="badge badge-completed">Locked after signed upload</span>' : `
+                ${canUserMarkPlanPresented(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="markPlanPresented('${plan.id}')">Mark as presented</button>` : ''}
+                ${plan.presentedAt && STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-soft" onclick="markPlanPresented('${plan.id}')">Update presentation date</button>` : ''}
+                ${!canUserMarkPlanPresented(STATE.currentUser, plan) && !plan.presentedAt && hrApproved ? '<div class="tiny muted" style="margin-top:8px">Only admins can change plan details after HR approval. Marking as presented is still allowed for managers.</div>' : ''}
+              `}
             </div>
             <div class="history-card">
               <strong>Signed presented coaching / PIP plan</strong>
               <div class="small muted" style="margin:6px 0 10px">${plan.signedDocData ? 'Uploaded ' + formatDate(plan.signedDocDate) + ' · ' + (plan.signedDocName || 'Signed plan') : 'No signed plan uploaded yet'}${locked ? ' · Core plan fields are now locked.' : ''}</div>
               <div class="inline">
-                ${locked ? '' : `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">${plan.signedDocData ? 'Replace upload' : 'Upload signed plan'}</button>`}
+                ${locked ? '' : `
+                  ${plan.signedDocData
+                    ? (STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Replace upload</button>` : '')
+                    : (canUserUploadSignedPlan(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Upload signed plan</button>` : '')
+                  }
+                `}
                 ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Download</button>` : ''}
               </div>
             </div>
@@ -6804,6 +6893,8 @@ function openPlanDetail(planId){
 
       <div class="inline" style="justify-content:flex-end;margin-top:18px">
         ${employee ? `<button class="btn btn-soft" onclick="closeModal();openEmployeeProfile('${employee.id}')">Employee profile</button>` : ''}
+        ${canEditCore ? `<button class="btn btn-soft" onclick="closeModal();openEditPlanModal('${plan.id}')">Edit plan</button>` : ''}
+        ${canDelete ? `<button class="btn btn-danger" onclick="deletePlan('${plan.id}')">Delete plan</button>` : ''}
         <button class="btn btn-soft" onclick="closeModal()">Close</button>
         <button class="btn btn-primary" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Go to Weekly Updates</button>
       </div>
@@ -6811,9 +6902,123 @@ function openPlanDetail(planId){
   `);
 }
 
+function openEditPlanModal(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  if(!canUserEditPlanCore(STATE.currentUser, plan)){
+    alert('Only admins can edit this plan after HR approval or employee presentation.');
+    return;
+  }
+  const employee = getEmployee(plan.employeeId);
+  const itemsText = formatActionItemsForTextarea(plan.actionItems || []);
+  openModal(`
+    <div class="modal">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Edit plan</h3>
+      <div class="sub">${employee ? escapeHtml(employee.name) : 'Employee'} · ${plan.type.toUpperCase()} · Created ${formatDate(plan.createdAt)}</div>
+
+      <div class="form-grid cols-3" style="margin-top:12px">
+        <div><label>Review date</label><input type="date" id="edit-plan-review" value="${escapeHtml(plan.reviewDate || '')}"></div>
+        <div><label>Shop date</label><input type="date" id="edit-plan-shop-date" value="${escapeHtml(plan.shopDate || '')}"></div>
+        <div>
+          <label>Post-plan shop trigger</label>
+          <select id="edit-plan-requires-shop">
+            <option value="no" ${plan.requiresUpdatedShop ? '' : 'selected'}>No</option>
+            <option value="yes" ${plan.requiresUpdatedShop ? 'selected' : ''}>Yes</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid cols-4" style="margin-top:12px">
+        <div><label>Overall %</label><input type="number" id="edit-plan-overall" min="0" max="100" step="0.1" value="${plan.overallScore != null ? plan.overallScore : ''}"></div>
+        <div><label>MSOE %</label><input type="number" id="edit-plan-msoe" min="0" max="100" step="0.1" value="${plan.msoeScore != null ? plan.msoeScore : ''}"></div>
+        <div><label>Telephone %</label><input type="number" id="edit-plan-telephone" min="0" max="100" step="0.1" value="${plan.telScore != null ? plan.telScore : ''}"></div>
+        <div><label>On-site %</label><input type="number" id="edit-plan-onsite" min="0" max="100" step="0.1" value="${plan.onsiteScore != null ? plan.onsiteScore : ''}"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Notes / context</label>
+        <textarea id="edit-plan-notes">${escapeHtml(plan.notes || '')}</textarea>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Action items</label>
+        <textarea id="edit-plan-items">${escapeHtml(itemsText)}</textarea>
+        <div class="tiny muted" style="margin-top:6px">One per line. Use <span class="mono">Area | Action item</span> to group items.</div>
+      </div>
+
+      <div class="inline" style="justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-soft" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditedPlan('${plan.id}')">Save changes</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveEditedPlan(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  if(!canUserEditPlanCore(STATE.currentUser, plan)){
+    alert('Only admins can edit this plan after HR approval or employee presentation.');
+    return;
+  }
+  const reviewDate = String(document.getElementById('edit-plan-review').value || '').trim();
+  if(!reviewDate){
+    alert('Review date is required.');
+    return;
+  }
+  plan.reviewDate = reviewDate;
+  plan.shopDate = String(document.getElementById('edit-plan-shop-date').value || '').trim();
+  plan.requiresUpdatedShop = (document.getElementById('edit-plan-requires-shop').value === 'yes');
+  plan.notes = String(document.getElementById('edit-plan-notes').value || '').trim();
+  plan.actionItems = dedupeActionItems(parseActionItems(String(document.getElementById('edit-plan-items').value || '')));
+
+  plan.overallScore = (() => {
+    const value = String(document.getElementById('edit-plan-overall').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.msoeScore = (() => {
+    const value = String(document.getElementById('edit-plan-msoe').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.telScore = (() => {
+    const value = String(document.getElementById('edit-plan-telephone').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.onsiteScore = (() => {
+    const value = String(document.getElementById('edit-plan-onsite').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+
+  saveState();
+  closeModal();
+  render();
+  openPlanDetail(planId);
+}
+
+function deletePlan(planId){
+  const plan = getPlan(planId);
+  if(!plan) return;
+  if(!canUserDeletePlan(STATE.currentUser, plan)){
+    alert('Only admins can delete this plan after HR approval or employee presentation.');
+    return;
+  }
+  const employee = getEmployee(plan.employeeId);
+  const label = employee ? `${employee.name} · ${plan.type.toUpperCase()} · ${formatDate(plan.createdAt)}` : plan.type.toUpperCase();
+  if(!confirm(`Delete this plan?\\n\\n${label}`)) return;
+  STATE.plans = STATE.plans.filter(item => item.id !== planId);
+  saveState();
+  closeModal();
+  render();
+}
+
 function markPlanPresented(planId){
   const plan = getPlan(planId);
   if(!plan) return;
+  if(!canUserMarkPlanPresented(STATE.currentUser, plan) && !(STATE.currentUser && STATE.currentUser.role === 'admin')){
+    alert('Only admins can change presentation details after the plan is presented.');
+    return;
+  }
   if(!isPlanHrApproved(plan)){
     alert('Record HR approval before presenting this plan to the employee.');
     return;
@@ -6840,6 +7045,11 @@ function markPlanPresented(planId){
 function confirmPresentation(planId){
   const plan = getPlan(planId);
   if(!plan) return;
+  // Managers can only set the date once; admins can update.
+  if(plan.presentedAt && !(STATE.currentUser && STATE.currentUser.role === 'admin')){
+    alert('Only admins can update the presentation date after it has been set.');
+    return;
+  }
   const value = document.getElementById('presented-date').value;
   if(!value){
     alert('Choose a presentation date.');
@@ -6872,6 +7082,10 @@ function openSignedUpload(planId){
     alert('This plan is locked after the signed document upload.');
     return;
   }
+  if(!(canUserUploadSignedPlan(STATE.currentUser, plan) || (STATE.currentUser && STATE.currentUser.role === 'admin'))){
+    alert('Only admins can upload or replace signed plans after the plan is presented.');
+    return;
+  }
   openModal(`
     <div class="modal narrow">
       <button class="close-btn" onclick="closeModal()">x</button>
@@ -6896,6 +7110,14 @@ function handleSignedUpload(planId, event){
   if(!plan) return;
   if(isPlanLocked(plan)){
     alert('This plan is locked after the signed document upload.');
+    return;
+  }
+  if(plan.signedDocData && !(STATE.currentUser && STATE.currentUser.role === 'admin')){
+    alert('Only admins can replace a signed plan upload.');
+    return;
+  }
+  if(!plan.signedDocData && !(canUserUploadSignedPlan(STATE.currentUser, plan) || (STATE.currentUser && STATE.currentUser.role === 'admin'))){
+    alert('Only admins can upload signed plans after the plan is presented.');
     return;
   }
   const reader = new FileReader();
