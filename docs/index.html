@@ -294,7 +294,8 @@ const STORAGE_KEY = 'rise_performance_platform_github_v1';
 const COMPANY_ROSTER_ASSET = './company-active-employee-roster.xlsx';
 const COMPANY_ROSTER_VERSION = '2026-03-31';
 const HR_ALERT_EMAIL = 'hr@risere.com';
-const RISE_LOGO_DATA_URI = './assets/rise-logo.png';
+// Keep this as a simple relative path so GitHub Pages + local file runs both work.
+const RISE_LOGO_DATA_URI = './assets/rise_logo.png';
 const ROLE_OPTIONS = ['Leasing Professional','Leasing Manager','Assistant Manager','Community Manager','Maintenance Technician','Maintenance Supervisor','Regional Manager','Administrative Assistant','Leasing Consultant','Property Manager'];
 const COMMUNITY_OPTIONS = ['Anthem House','Bartram Park','Baymeadows','Beacon Hall','Citrus Ridge','Doro','Florence Villa','Glen Kernan Park','Ivy & Elm','Maple Hall - NJIT','Nicholson Gateway','Nocatee','Pilots Pointe','Poplar Hall','Prosper on Fayette','RISE 34th','RISE St. Augustine','Sereno','The Preserve at Tech','Viera'];
 const REGIONS = {
@@ -6917,7 +6918,7 @@ function openEditPlanModal(planId){
       <h3>Edit plan</h3>
       <div class="sub">${employee ? escapeHtml(employee.name) : 'Employee'} · ${plan.type.toUpperCase()} · Created ${formatDate(plan.createdAt)}</div>
 
-      <div class="form-grid cols-3" style="margin-top:12px">
+      <div class="form-grid cols-4" style="margin-top:12px">
         <div><label>Review date</label><input type="date" id="edit-plan-review" value="${escapeHtml(plan.reviewDate || '')}"></div>
         <div><label>Shop date</label><input type="date" id="edit-plan-shop-date" value="${escapeHtml(plan.shopDate || '')}"></div>
         <div>
@@ -6927,6 +6928,10 @@ function openEditPlanModal(planId){
             <option value="yes" ${plan.requiresUpdatedShop ? 'selected' : ''}>Yes</option>
           </select>
         </div>
+        <div>
+          <label>Manager</label>
+          <input id="edit-plan-manager" value="${escapeHtml(plan.manager || (employee ? managerDisplayName(employee) : '') || (STATE.currentUser ? STATE.currentUser.name : '') || '')}">
+        </div>
       </div>
 
       <div class="form-grid cols-4" style="margin-top:12px">
@@ -6934,6 +6939,23 @@ function openEditPlanModal(planId){
         <div><label>MSOE %</label><input type="number" id="edit-plan-msoe" min="0" max="100" step="0.1" value="${plan.msoeScore != null ? plan.msoeScore : ''}"></div>
         <div><label>Telephone %</label><input type="number" id="edit-plan-telephone" min="0" max="100" step="0.1" value="${plan.telScore != null ? plan.telScore : ''}"></div>
         <div><label>On-site %</label><input type="number" id="edit-plan-onsite" min="0" max="100" step="0.1" value="${plan.onsiteScore != null ? plan.onsiteScore : ''}"></div>
+      </div>
+
+      <div class="form-grid cols-4" style="margin-top:12px">
+        <div><label>Follow-up %</label><input type="number" id="edit-plan-followup" min="0" max="100" step="0.1" value="${plan.followupScore != null ? plan.followupScore : ''}"></div>
+        <div><label>Greeting %</label><input type="number" id="edit-plan-greeting" min="0" max="100" step="0.1" value="${plan.greetScore != null ? plan.greetScore : ''}"></div>
+        <div><label>Needs %</label><input type="number" id="edit-plan-needs" min="0" max="100" step="0.1" value="${plan.needsScore != null ? plan.needsScore : ''}"></div>
+        <div><label>Demonstrating / closing %</label><input type="number" id="edit-plan-demo" min="0" max="100" step="0.1" value="${plan.demoScore != null ? plan.demoScore : ''}"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="checkbox-row">
+          <input type="checkbox" id="edit-plan-consequences" ${plan.consequences ? 'checked' : ''} ${plan.type === 'pip' ? 'disabled' : ''}>
+          <div>
+            <div style="font-weight:600">Include consequence language</div>
+            <div class="tiny muted" style="margin-top:4px">PIP plans always include formal consequences language.</div>
+          </div>
+        </div>
       </div>
 
       <div style="margin-top:12px">
@@ -6970,6 +6992,7 @@ function saveEditedPlan(planId){
   plan.reviewDate = reviewDate;
   plan.shopDate = String(document.getElementById('edit-plan-shop-date').value || '').trim();
   plan.requiresUpdatedShop = (document.getElementById('edit-plan-requires-shop').value === 'yes');
+  plan.manager = String(document.getElementById('edit-plan-manager').value || '').trim() || plan.manager || '';
   plan.notes = String(document.getElementById('edit-plan-notes').value || '').trim();
   plan.actionItems = dedupeActionItems(parseActionItems(String(document.getElementById('edit-plan-items').value || '')));
 
@@ -6989,6 +7012,30 @@ function saveEditedPlan(planId){
     const value = String(document.getElementById('edit-plan-onsite').value || '').trim();
     return value === '' ? null : Number(value);
   })();
+
+  plan.followupScore = (() => {
+    const value = String(document.getElementById('edit-plan-followup').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.greetScore = (() => {
+    const value = String(document.getElementById('edit-plan-greeting').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.needsScore = (() => {
+    const value = String(document.getElementById('edit-plan-needs').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+  plan.demoScore = (() => {
+    const value = String(document.getElementById('edit-plan-demo').value || '').trim();
+    return value === '' ? null : Number(value);
+  })();
+
+  if(plan.type !== 'pip'){
+    const checkbox = document.getElementById('edit-plan-consequences');
+    plan.consequences = checkbox ? Boolean(checkbox.checked) : Boolean(plan.consequences);
+  }else{
+    plan.consequences = true;
+  }
 
   saveState();
   closeModal();
