@@ -1319,6 +1319,88 @@ function latestMsoeSnapshotForEmployee(employeeId, excludePlanId){
   return {score: history[0].score, date: history[0].date, planId: history[0].planId};
 }
 
+function callReviewHistoryForEmployee(employeeId, excludePlanId){
+  const keys = SHOP_SCORE_FIELDS.map(field => field.key);
+  return (STATE.plans || [])
+    .filter(plan => plan && plan.employeeId === employeeId && plan.id !== excludePlanId)
+    .map(plan => {
+      const scores = {};
+      let any = false;
+      keys.forEach(key => {
+        const value = plan[key];
+        if(value == null) return;
+        const numeric = Number(value);
+        if(Number.isNaN(numeric)) return;
+        scores[key] = numeric;
+        any = true;
+      });
+      if(!any) return null;
+      return {
+        planId: plan.id,
+        date: plan.createdAt || '',
+        type: plan.type || '',
+        scores
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right.date || '').localeCompare(left.date || '') || (right.planId || '').localeCompare(left.planId || ''));
+}
+
+function latestCallReviewSnapshotForEmployee(employeeId, excludePlanId){
+  const history = callReviewHistoryForEmployee(employeeId, excludePlanId);
+  if(!history.length) return null;
+  return history[0];
+}
+
+function titleCaseLabel(value){
+  return String(value || '').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function formatScoreDisplay(value){
+  if(value == null) return 'N/A';
+  const numeric = Number(value);
+  if(Number.isNaN(numeric)) return 'N/A';
+  return `${numeric}%`;
+}
+
+function renderCallReviewScoresInline(scores){
+  const parts = SHOP_SCORE_FIELDS
+    .map(field => {
+      const value = scores ? scores[field.key] : null;
+      if(value == null || Number.isNaN(Number(value))) return null;
+      const label = field.key === 'overallScore' ? 'Overall' : titleCaseLabel(field.label);
+      return `${label} ${formatScoreDisplay(value)}`;
+    })
+    .filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No call review scores recorded yet.';
+}
+
+function renderHistoricalCallReviewCard(employeeId, options){
+  const mode = options && options.mode ? options.mode : 'view';
+  const title = options && options.title ? options.title : 'Historical call review scores';
+  if(!employeeId){
+    return `<div class="history-card"><h4>${escapeHtml(title)}</h4><div class="small muted">Select an employee to pull the most recent call review scores into this workflow.</div></div>`;
+  }
+  const snapshot = latestCallReviewSnapshotForEmployee(employeeId);
+  if(!snapshot){
+    return `<div class="history-card"><h4>${escapeHtml(title)}</h4><div class="small muted">No saved call review scores yet. Upload a shop report or save a prior plan to start building score history.</div></div>`;
+  }
+  const subtitle = `Latest saved scores: ${formatDate(snapshot.date || '')}${snapshot.type ? ` · ${escapeHtml(String(snapshot.type).toUpperCase())}` : ''}`;
+  return `
+    <div class="history-card">
+      <h4>${escapeHtml(title)}</h4>
+      <div class="small muted" style="margin-top:6px">${subtitle}</div>
+      <div class="alert alert-info" style="margin-top:10px">${escapeHtml(renderCallReviewScoresInline(snapshot.scores))}</div>
+      ${mode === 'newplan' ? `
+        <div class="inline" style="margin-top:10px">
+          <button class="btn btn-soft btn-sm" onclick="applyHistoricalCallReviewScoresToNewPlan(false)">Apply to empty fields</button>
+          <span class="small muted">Won't overwrite fields you already filled.</span>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function evaluateWriteupRecommendation(employeeId){
   const settings = writeupSettings();
   const writeups = writeupsForEmployee(employeeId);
@@ -1816,12 +1898,44 @@ function syncNewPlanWriteupTools(){
   if(host) host.innerHTML = renderNewPlanWriteupTools();
 }
 
+function renderNewPlanScoreHistory(){
+  return renderHistoricalCallReviewCard(UI.newPlanDraft.employeeId || '', {mode:'newplan'});
+}
+
+function syncNewPlanScoreHistory(){
+  const host = document.getElementById('np-score-history');
+  if(host) host.innerHTML = renderNewPlanScoreHistory();
+}
+
+function applyHistoricalCallReviewScoresToNewPlan(overwriteExisting){
+  const employeeId = UI.newPlanDraft.employeeId || '';
+  if(!employeeId) return;
+  const snapshot = latestCallReviewSnapshotForEmployee(employeeId);
+  if(!snapshot || !snapshot.scores) return;
+
+  SHOP_SCORE_FIELDS.forEach(field => {
+    const input = document.getElementById(field.inputId);
+    if(!input) return;
+    const current = String(input.value || '').trim();
+    if(current && !overwriteExisting) return;
+    const value = snapshot.scores[field.key];
+    if(value == null || Number.isNaN(Number(value))) return;
+    input.value = String(value);
+  });
+
+  updatePlanTypeSuggestion(false);
+  syncNewPlanScoreHistory();
+}
+
 function setNewPlanEmployee(employeeId){
   UI.newPlanDraft.employeeId = String(employeeId || '');
   seedNewPlanHistoricalSelections(UI.newPlanDraft.employeeId);
   syncNewPlanManager();
+  // Pull forward the last saved call review scorecard if the new plan form is empty.
+  applyHistoricalCallReviewScoresToNewPlan(false);
   updatePlanTypeSuggestion(false);
   syncNewPlanWriteupTools();
+  syncNewPlanScoreHistory();
 }
 
 function toggleNewPlanWriteup(writeupId, checked){
@@ -3385,6 +3499,7 @@ function renderNewPlan(){
               </div>
             </div>
           </div>
+          <div id="np-score-history" style="margin-top:12px">${renderNewPlanScoreHistory()}</div>
         </div>
 
         <div class="card">
@@ -5815,6 +5930,18 @@ function syncWriteupManager(){
   if(!managerField) return;
   const manager = employee ? managerDisplayName(employee) : '';
   managerField.value = manager || (STATE.currentUser ? STATE.currentUser.name : '');
+  syncWriteupScoreHistory();
+}
+
+function renderWriteupScoreHistory(employeeId){
+  return renderHistoricalCallReviewCard(employeeId || '', {mode:'view', title:'Historical call review scores'});
+}
+
+function syncWriteupScoreHistory(){
+  const host = document.getElementById('wu-score-history');
+  if(!host) return;
+  const employeeId = String((document.getElementById('wu-employee') && document.getElementById('wu-employee').value) || '');
+  host.innerHTML = renderWriteupScoreHistory(employeeId);
 }
 
 function buildWriteupFromForm(){
@@ -6171,6 +6298,7 @@ function renderWriteups(){
               <input id="wu-manager" value="${escapeHtml(generatorManager)}">
             </div>
           </div>
+          <div id="wu-score-history" style="margin-top:12px">${renderWriteupScoreHistory(generatorEmployeeId)}</div>
 
           <div class="form-grid cols-3" style="margin-top:12px">
             <div><label>Write-up date</label><input type="date" id="wu-date" value="${today()}"></div>
