@@ -142,6 +142,7 @@
   }
   .badge-pip{background:#fdeeee;color:#8e1d1d}
   .badge-coaching{background:#fff3df;color:#905f11}
+  .badge-call-review{background:#eaf2ff;color:#25537a}
   .badge-active{background:#e8f4ec;color:#205432}
   .badge-completed{background:#e8f0f8;color:#25537a}
   .badge-shop{background:#eef5f8;color:#023046}
@@ -506,6 +507,11 @@ function makeNewPlanDraft(){
     msoeSummary: '',
     msoeError: '',
     msoeTone: 'info',
+    callSourceFileName: '',
+    callSourceData: '',
+    callSummary: '',
+    callError: '',
+    callTone: 'info',
     planSourceFileName: '',
     planSummary: '',
     planError: '',
@@ -531,7 +537,7 @@ function makeWriteupDraft(){
 
 function makeReportFilters(){
   return {
-    recordTypes: ['pip','coaching','writeup'],
+    recordTypes: ['pip','coaching','call_review','writeup'],
     managerId: '',
     regionalManagerId: '',
     community: '',
@@ -632,6 +638,18 @@ function normalizePlan(plan){
     shopRequestNotes: String(plan && plan.shopRequestNotes || ''),
     shopRequestedBy: String(plan && plan.shopRequestedBy || ''),
     updatedShopScores: plan && typeof plan.updatedShopScores === 'object' && plan.updatedShopScores ? plan.updatedShopScores : null,
+    callReviewEmployeeScore: plan && plan.callReviewEmployeeScore != null ? Number(plan.callReviewEmployeeScore) : null,
+    callReviewManagerScore: plan && plan.callReviewManagerScore != null ? Number(plan.callReviewManagerScore) : null,
+    callReviewSentiment: String(plan && plan.callReviewSentiment || ''),
+    callReviewCallType: String(plan && plan.callReviewCallType || 'resident'),
+    callReviewContact: String(plan && plan.callReviewContact || ''),
+    callReviewDate: String(plan && plan.callReviewDate || ''),
+    callReviewTime: String(plan && plan.callReviewTime || ''),
+    callReviewDetails: String(plan && plan.callReviewDetails || ''),
+    callReviewEmployeeReflection: String(plan && plan.callReviewEmployeeReflection || ''),
+    callReviewManagerFeedback: String(plan && plan.callReviewManagerFeedback || ''),
+    callReviewSourceName: String(plan && plan.callReviewSourceName || ''),
+    callReviewSourceData: String(plan && plan.callReviewSourceData || ''),
     hrApprovedAt: String(plan && plan.hrApprovedAt || ''),
     hrApprovedBy: String(plan && plan.hrApprovedBy || ''),
     hrApprovalCorrespondenceId: String(plan && plan.hrApprovalCorrespondenceId || ''),
@@ -1081,7 +1099,44 @@ function benchmarkRuleSummary(){
   return `Benchmark target ${settings.benchmarkTarget}%. Coaching starts below target. PIP starts at ${settings.pipOverallThreshold}% overall, any metric at or below ${settings.criticalMetricThreshold}%, or ${settings.severeMetricCount}+ metrics below benchmark. MSOE below ${settings.msoeCoachingThreshold}% suggests coaching, and below ${settings.msoePipThreshold}% escalates to a PIP recommendation.`;
 }
 
+function planTypeLabel(type){
+  if(type === 'pip') return 'PIP';
+  if(type === 'call_review') return 'Call Review';
+  return 'Coaching';
+}
+
+function planTypeUpperLabel(type){
+  return planTypeLabel(type).toUpperCase();
+}
+
+function planTypeDescriptor(type){
+  if(type === 'pip') return 'Performance Improvement Plan';
+  if(type === 'call_review') return 'Call Review';
+  return 'Coaching Plan';
+}
+
+function recordTypeLabel(type){
+  if(type === 'writeup') return 'Write-up';
+  return planTypeLabel(type);
+}
+
+function callReviewRuleSummary(){
+  return 'Use Call Review to log a resident or prospect call, store uploaded score/sentiment documents, compare the employee self-grade to the supervisor review score, and track manager feedback plus follow-up actions.';
+}
+
 function newPlanScores(){
+  if(UI.newPlanType === 'call_review'){
+    return {
+      overallScore: null,
+      msoeScore: null,
+      telScore: null,
+      onsiteScore: null,
+      followupScore: null,
+      greetScore: null,
+      needsScore: null,
+      demoScore: null
+    };
+  }
   return {
     overallScore: numberOrNull('np-overall'),
     msoeScore: numberOrNull('np-msoe'),
@@ -1106,6 +1161,14 @@ function formatMetricLabels(keys){
 }
 
 function evaluatePlanRecommendation(scores){
+  if(UI.newPlanType === 'call_review'){
+    return {
+      recommendation: 'call_review',
+      tone: 'info',
+      autoType: null,
+      message: callReviewRuleSummary()
+    };
+  }
   const settings = benchmarkSettings();
   const metrics = metricFieldDefinitions()
     .map(field => ({key: field.key, label: field.label, value: scores[field.key]}))
@@ -1482,18 +1545,18 @@ function employeeActivityFeed(employeeId){
   const events = [];
 
   plans.forEach(plan => {
-    events.push({date: plan.createdAt || '', kind: 'plan', tone: typeBadgeClass(plan.type), title: `${plan.type.toUpperCase()} plan created`, detail: plan.notes || 'Plan created in the platform.', planId: plan.id});
+    events.push({date: plan.createdAt || '', kind: 'plan', tone: typeBadgeClass(plan.type), title: `${planTypeLabel(plan.type)} created`, detail: plan.notes || 'Plan created in the platform.', planId: plan.id});
     if(plan.hrApprovedAt){
-      events.push({date: plan.hrApprovedAt, kind: 'approval', tone: 'badge-active', title: `${plan.type.toUpperCase()} approved by HR`, detail: plan.hrApprovedBy ? `Approved by ${plan.hrApprovedBy}.` : 'Approved in the platform.', planId: plan.id});
+      events.push({date: plan.hrApprovedAt, kind: 'approval', tone: 'badge-active', title: `${planTypeLabel(plan.type)} approved by HR`, detail: plan.hrApprovedBy ? `Approved by ${plan.hrApprovedBy}.` : 'Approved in the platform.', planId: plan.id});
     }
     if(plan.presentedAt){
-      events.push({date: plan.presentedAt, kind: 'presentation', tone: 'badge-shop', title: `${plan.type.toUpperCase()} presented`, detail: 'Plan presentation recorded.', planId: plan.id});
+      events.push({date: plan.presentedAt, kind: 'presentation', tone: 'badge-shop', title: `${planTypeLabel(plan.type)} presented`, detail: 'Plan presentation recorded.', planId: plan.id});
     }
     if(plan.signedDocDate){
       events.push({date: plan.signedDocDate, kind: 'signature', tone: 'badge-completed', title: 'Signed plan uploaded', detail: plan.signedDocName || 'Signed plan stored.', planId: plan.id});
     }
     if(plan.completedAt){
-      events.push({date: plan.completedAt, kind: 'completion', tone: 'badge-active', title: `${plan.type.toUpperCase()} completed`, detail: plan.requiresUpdatedShop ? 'Completed and moved into shop workflow.' : 'Plan marked complete.', planId: plan.id});
+      events.push({date: plan.completedAt, kind: 'completion', tone: 'badge-active', title: `${planTypeLabel(plan.type)} completed`, detail: plan.requiresUpdatedShop ? 'Completed and moved into shop workflow.' : 'Plan marked complete.', planId: plan.id});
     }
   });
 
@@ -1561,7 +1624,9 @@ function planStatusBadgeClass(plan){
 }
 
 function typeBadgeClass(type){
-  return type === 'pip' ? 'badge-pip' : 'badge-coaching';
+  if(type === 'pip') return 'badge-pip';
+  if(type === 'call_review') return 'badge-call-review';
+  return 'badge-coaching';
 }
 
 function scoreClass(score){
@@ -1577,6 +1642,9 @@ function daysLeft(plan){
 }
 
 function pctComplete(plan){
+  if(plan && plan.type === 'call_review'){
+    return plan.status === 'completed' ? 100 : 0;
+  }
   if(!plan.presentedAt) return 0;
   const start = new Date(plan.presentedAt);
   const end = new Date(plan.reviewDate);
@@ -1920,12 +1988,13 @@ function reloadCompanyRoster(){
 }
 
 function getSchedule(plan){
+  if(plan && plan.type === 'call_review') return [];
   if(!plan.presentedAt) return [];
   const schedule = [{
     schedIdx:0,
     due:plan.presentedAt,
-    label:'Initial presentation of PIP/Coaching plan',
-    type:'Initial presentation of PIP/Coaching plan'
+    label:`Initial presentation of ${planTypeLabel(plan.type)} plan`,
+    type:`Initial presentation of ${planTypeLabel(plan.type)} plan`
   }];
   let schedIdx = 1;
   let cursor = addDays(plan.presentedAt, 7);
@@ -1985,10 +2054,10 @@ function getOverdueActionItems(plan){
 
 function getPlanAlerts(plan){
   const alerts = [];
-  if(plan.status === 'active' && !plan.hrApprovedAt) alerts.push('Awaiting HR approval');
+  if(plan.type !== 'call_review' && plan.status === 'active' && !plan.hrApprovedAt) alerts.push('Awaiting HR approval');
   const dl = daysLeft(plan);
-  if(plan.status === 'active' && !plan.presentedAt) alerts.push('Plan not yet presented');
-  if(plan.status === 'active' && plan.presentedAt && !plan.signedDocData) alerts.push('Signed plan missing');
+  if(plan.type !== 'call_review' && plan.status === 'active' && !plan.presentedAt) alerts.push('Plan not yet presented');
+  if(plan.type !== 'call_review' && plan.status === 'active' && plan.presentedAt && !plan.signedDocData) alerts.push('Signed plan missing');
   if(plan.status === 'active' && dl < 0) alerts.push('Review date passed');
   const missed = getMissedMeetings(plan);
   if(missed > 0) alerts.push(missed + ' missed meeting' + (missed > 1 ? 's' : ''));
@@ -2159,7 +2228,7 @@ function openNewPlanForEmployee(employeeId){
 
 function pendingHrApprovalPlans(){
   return activePlans()
-    .filter(plan => !plan.hrApprovedAt)
+    .filter(plan => plan.type !== 'call_review' && !plan.hrApprovedAt)
     .sort((left, right) => (left.createdAt || '').localeCompare(right.createdAt || '') || (left.id || '').localeCompare(right.id || ''));
 }
 
@@ -2194,7 +2263,7 @@ function openHrApprovalQueue(){
                       ${employee ? renderEmployeeProfileLink(employee) : '<strong>Unknown employee</strong>'}
                       <div class="small muted">${employee ? (employee.community || 'Community not set') : 'Community not set'}</div>
                     </td>
-                    <td><span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span></td>
+                    <td><span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span></td>
                     <td>${formatDate(plan.createdAt)}</td>
                     <td>${formatDate(plan.reviewDate)}</td>
                     <td>${escapeHtml(plan.manager || managerDisplayName(employee) || 'Not set')}</td>
@@ -2229,14 +2298,14 @@ function renderDashboard(){
   return `
     <div class="page">
       <div class="hero">
-        <h1>Employee coaching and PIP management in one live page</h1>
-        <p>Track presentations, signed plans, weekly follow-ups, completion reviews, shop-order triggers, and branded exports from a single GitHub-hosted HTML app.</p>
+        <h1>Employee coaching, PIP, and call review management in one live page</h1>
+        <p>Track coaching plans, PIPs, call reviews, presentations, signed plans, weekly follow-ups, shop-order triggers, and branded exports from a single GitHub-hosted HTML app.</p>
       </div>
       <div class="stats">
         <div class="card stat-card">
           <div class="label">Active Plans</div>
           <div><button class="stat-link" onclick="openDashboardPlanQueue('active')">${active.length}</button></div>
-          <div class="sub">Open coaching and PIP plans</div>
+          <div class="sub">Open coaching, PIP, and call review plans</div>
         </div>
         <div class="card stat-card">
           <div class="label">Employees</div>
@@ -2276,7 +2345,7 @@ function renderDashboard(){
               <div>
                 <div class="inline">
                   ${item.employee ? renderEmployeeProfileLink(item.employee) : '<strong>Unknown employee</strong>'}
-                  <span class="badge ${typeBadgeClass(item.plan.type)}">${item.plan.type.toUpperCase()}</span>
+                  <span class="badge ${typeBadgeClass(item.plan.type)}">${planTypeUpperLabel(item.plan.type)}</span>
                   <span class="badge ${item.status === 'past_due' ? 'badge-alert' : 'badge-soft'}">${meetingStatusLabel(item.status)}</span>
                 </div>
                 <div class="small muted" style="margin-top:6px">${item.label} · Due ${formatDate(item.due)} · ${item.employee ? item.employee.community || 'Community not set' : 'Community not set'}</div>
@@ -2299,7 +2368,7 @@ function renderDashboard(){
               <div class="history-card" style="margin-bottom:12px">
                 <div class="inline" style="margin-bottom:6px">
                   ${employee ? renderEmployeeProfileLink(employee) : '<strong>Unknown employee</strong>'}
-                  <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                  <span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span>
                 </div>
                 <div class="small muted" style="margin-bottom:8px">${employee ? employee.community || 'Community not set' : 'Community not set'} · Review ${formatDate(plan.reviewDate)}</div>
                 <div class="inline">${getPlanAlerts(plan).map(alert => `<span class="badge badge-alert">${alert}</span>`).join('')}</div>
@@ -2400,14 +2469,16 @@ function renderPlans(){
                       ${employee ? renderEmployeeProfileLink(employee) : '<strong>Unknown employee</strong>'}
                       <div class="small muted">${employee ? employee.community || 'Community not set' : 'Community not set'}</div>
                     </td>
-                    <td><span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span></td>
+                    <td><span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span></td>
                     <td>${formatDate(plan.reviewDate)}</td>
                     <td>
                       <div class="small muted" style="margin-bottom:6px">${pctComplete(plan)}%</div>
                       <div class="progress-wrap"><div class="progress" style="width:${pctComplete(plan)}%"></div></div>
                     </td>
                     <td>
-                      ${plan.signedDocData ? `<span class="badge badge-active">${plan.signedDocName || 'Uploaded'}</span>` : '<span class="badge badge-alert">Missing</span>'}
+                      ${plan.type === 'call_review'
+                        ? '<span class="badge badge-soft">N/A</span>'
+                        : (plan.signedDocData ? `<span class="badge badge-active">${plan.signedDocName || 'Uploaded'}</span>` : '<span class="badge badge-alert">Missing</span>')}
                     </td>
                     <td>
                       ${alerts.length ? alerts.map(alert => `<div class="tiny muted">${alert}</div>`).join('') : '<span class="tiny muted">None</span>'}
@@ -2852,6 +2923,12 @@ function renderSourceStatus(kind){
       error: UI.newPlanDraft.msoeError,
       defaultMessage: 'Upload an MSOE PDF, DOCX, or TXT file to auto-fill the MSOE rating used for recommendations.'
     },
+    call: {
+      tone: UI.newPlanDraft.callTone,
+      summary: UI.newPlanDraft.callSummary,
+      error: UI.newPlanDraft.callError,
+      defaultMessage: 'Upload a call scorecard, QA review, or sentiment file in PDF, DOCX, TXT, or EML format to auto-fill the call review fields.'
+    },
     plan: {
       tone: UI.newPlanDraft.planTone,
       summary: UI.newPlanDraft.planSummary,
@@ -2987,10 +3064,12 @@ function renderImportedActionPreview(){
 function syncNewPlanDraftToDom(){
   const shopStatus = document.getElementById('np-shop-source-status');
   const msoeStatus = document.getElementById('np-msoe-source-status');
+  const callStatus = document.getElementById('np-call-source-status');
   const planStatus = document.getElementById('np-plan-source-status');
   const preview = document.getElementById('np-imported-items-preview');
   if(shopStatus) shopStatus.innerHTML = renderSourceStatus('shop');
   if(msoeStatus) msoeStatus.innerHTML = renderSourceStatus('msoe');
+  if(callStatus) callStatus.innerHTML = renderSourceStatus('call');
   if(planStatus) planStatus.innerHTML = renderSourceStatus('plan');
   if(preview) preview.innerHTML = renderImportedActionPreview();
   syncNewPlanDocumentTools();
@@ -3009,8 +3088,8 @@ function renderNewPlan(){
         <div class="card">
           <div class="section-title">
             <div>
-              <h2>New coaching or PIP plan</h2>
-              <p>Upload source documents, fill scores, and generate the final coaching or PIP output from one page.</p>
+              <h2>New coaching, PIP, or call review plan</h2>
+              <p>Upload source documents, capture review details, and generate the employee record from one page.</p>
             </div>
           </div>
 
@@ -3028,51 +3107,18 @@ function renderNewPlan(){
             </div>
           </div>
 
-          <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
-            <div class="section-title" style="margin-bottom:10px">
-              <div>
-                <h2 style="font-size:16px">Shop document upload</h2>
-                <p>Bring in a shop report to auto-fill the scorecard used for plan setup.</p>
-              </div>
-            </div>
-            <div class="file-box">
-              <strong>${UI.newPlanDraft.shopSourceFileName ? escapeHtml(UI.newPlanDraft.shopSourceFileName) : 'Choose shop report'}</strong>
-              <div class="small muted">PDF, DOCX, or TXT</div>
-              <div style="margin-top:12px">
-                <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handleShopSourceUpload(event)">
-              </div>
-            </div>
-            <div id="np-shop-source-status" style="margin-top:12px">${renderSourceStatus('shop')}</div>
-          </div>
-
-          <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
-            <div class="section-title" style="margin-bottom:10px">
-              <div>
-                <h2 style="font-size:16px">MSOE document upload</h2>
-                <p>Upload the MSOE scorecard to auto-fill the rating used in the coaching or PIP recommendation.</p>
-              </div>
-            </div>
-            <div class="file-box">
-              <strong>${UI.newPlanDraft.msoeSourceFileName ? escapeHtml(UI.newPlanDraft.msoeSourceFileName) : 'Choose MSOE document'}</strong>
-              <div class="small muted">PDF, DOCX, or TXT</div>
-              <div style="margin-top:12px">
-                <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handleMsoeSourceUpload(event)">
-              </div>
-            </div>
-            <div id="np-msoe-source-status" style="margin-top:12px">${renderSourceStatus('msoe')}</div>
-          </div>
-
           <div style="margin-top:14px">
             <label>Plan type</label>
             <div class="pill-row" style="margin-top:6px">
               <button id="np-type-coaching" class="pill ${UI.newPlanType === 'coaching' ? 'active' : ''}" onclick="setNewPlanType('coaching')">Coaching</button>
               <button id="np-type-pip" class="pill ${UI.newPlanType === 'pip' ? 'active' : ''}" onclick="setNewPlanType('pip')">PIP</button>
+              <button id="np-type-call-review" class="pill ${UI.newPlanType === 'call_review' ? 'active' : ''}" onclick="setNewPlanType('call_review')">Call Review</button>
             </div>
-            <div id="np-type-guidance" class="alert alert-info" style="margin-top:10px">${escapeHtml(benchmarkRuleSummary())}</div>
+            <div id="np-type-guidance" class="alert alert-info" style="margin-top:10px">${escapeHtml(UI.newPlanType === 'call_review' ? callReviewRuleSummary() : benchmarkRuleSummary())}</div>
           </div>
 
           <div class="form-grid cols-3" style="margin-top:14px">
-            <div>
+            <div id="np-shop-date-wrap" class="${UI.newPlanType === 'call_review' ? 'hidden' : ''}">
               <label>Shop date</label>
               <input type="date" id="np-shop-date" value="${today()}">
             </div>
@@ -3090,49 +3136,166 @@ function renderNewPlan(){
             </div>
           </div>
 
-          <div class="form-grid cols-4" style="margin-top:14px">
-            <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>MSOE rating</label><input type="number" id="np-msoe" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+          <div id="np-performance-fields" class="${UI.newPlanType === 'call_review' ? 'hidden' : ''}">
+            <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
+              <div class="section-title" style="margin-bottom:10px">
+                <div>
+                  <h2 style="font-size:16px">Shop document upload</h2>
+                  <p>Bring in a shop report to auto-fill the scorecard used for plan setup.</p>
+                </div>
+              </div>
+              <div class="file-box">
+                <strong>${UI.newPlanDraft.shopSourceFileName ? escapeHtml(UI.newPlanDraft.shopSourceFileName) : 'Choose shop report'}</strong>
+                <div class="small muted">PDF, DOCX, or TXT</div>
+                <div style="margin-top:12px">
+                  <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handleShopSourceUpload(event)">
+                </div>
+              </div>
+              <div id="np-shop-source-status" style="margin-top:12px">${renderSourceStatus('shop')}</div>
+            </div>
+
+            <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
+              <div class="section-title" style="margin-bottom:10px">
+                <div>
+                  <h2 style="font-size:16px">MSOE document upload</h2>
+                  <p>Upload the MSOE scorecard to auto-fill the rating used in the coaching or PIP recommendation.</p>
+                </div>
+              </div>
+              <div class="file-box">
+                <strong>${UI.newPlanDraft.msoeSourceFileName ? escapeHtml(UI.newPlanDraft.msoeSourceFileName) : 'Choose MSOE document'}</strong>
+                <div class="small muted">PDF, DOCX, or TXT</div>
+                <div style="margin-top:12px">
+                  <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handleMsoeSourceUpload(event)">
+                </div>
+              </div>
+              <div id="np-msoe-source-status" style="margin-top:12px">${renderSourceStatus('msoe')}</div>
+            </div>
+
+            <div class="form-grid cols-4" style="margin-top:14px">
+              <div><label>Overall score</label><input type="number" id="np-overall" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>MSOE rating</label><input type="number" id="np-msoe" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>Telephone</label><input type="number" id="np-telephone" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>On-site</label><input type="number" id="np-onsite" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            </div>
+            <div class="form-grid cols-4" style="margin-top:12px">
+              <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>Greeting</label><input type="number" id="np-greeting" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>Identifying Needs</label><input type="number" id="np-needs" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+              <div><label>Demonstrating / Closing</label><input type="number" id="np-demo-closing" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+            </div>
           </div>
-          <div class="form-grid cols-4" style="margin-top:12px">
-            <div><label>Follow-Up</label><input type="number" id="np-followup" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>Greeting</label><input type="number" id="np-greeting" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>Identifying Needs</label><input type="number" id="np-needs" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
-            <div><label>Demonstrating / Closing</label><input type="number" id="np-demo-closing" min="0" max="100" step="0.1" oninput="updatePlanTypeSuggestion(true)"></div>
+
+          <div id="np-call-review-fields" class="${UI.newPlanType === 'call_review' ? '' : 'hidden'}">
+            <div class="card" style="margin-top:16px;background:#f8fbfc;border-style:dashed;box-shadow:none">
+              <div class="section-title" style="margin-bottom:10px">
+                <div>
+                  <h2 style="font-size:16px">Call review upload</h2>
+                  <p>Upload a call scorecard, QA document, or sentiment file to auto-fill the review fields for this employee.</p>
+                </div>
+              </div>
+              <div class="file-box">
+                <strong>${UI.newPlanDraft.callSourceFileName ? escapeHtml(UI.newPlanDraft.callSourceFileName) : 'Choose call review file'}</strong>
+                <div class="small muted">PDF, DOCX, TXT, or EML</div>
+                <div style="margin-top:12px">
+                  <input type="file" accept=".pdf,.docx,.txt,.text,.eml" onchange="handleCallReviewSourceUpload(event)">
+                </div>
+              </div>
+              <div id="np-call-source-status" style="margin-top:12px">${renderSourceStatus('call')}</div>
+            </div>
+
+            <div class="form-grid cols-3" style="margin-top:14px">
+              <div>
+                <label>Call type</label>
+                <select id="np-call-type">
+                  <option value="resident">Resident</option>
+                  <option value="prospect">Prospect</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label>Call date</label>
+                <input type="date" id="np-call-date" value="${today()}">
+              </div>
+              <div>
+                <label>Call time</label>
+                <input type="text" id="np-call-time" placeholder="10:30 AM">
+              </div>
+            </div>
+
+            <div class="form-grid cols-4" style="margin-top:12px">
+              <div>
+                <label>Call contact</label>
+                <input id="np-call-contact" placeholder="Resident/prospect name or unit detail">
+              </div>
+              <div>
+                <label>Employee self-grade</label>
+                <input type="number" id="np-call-employee-score" min="0" max="100" step="0.1">
+              </div>
+              <div>
+                <label>Manager review score</label>
+                <input type="number" id="np-call-manager-score" min="0" max="100" step="0.1">
+              </div>
+              <div>
+                <label>Sentiment</label>
+                <select id="np-call-sentiment">
+                  <option value="">Select sentiment</option>
+                  <option value="positive">Positive</option>
+                  <option value="neutral">Neutral</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="negative">Negative</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="margin-top:12px">
+              <label>Call detail</label>
+              <textarea id="np-call-detail" placeholder="Resident/prospect reason for the call, what happened, call context, and key moments reviewed..."></textarea>
+            </div>
+
+            <div class="form-grid cols-2" style="margin-top:12px">
+              <div>
+                <label>Employee reflection</label>
+                <textarea id="np-call-employee-reflection" placeholder="Employee self-assessment, what they felt went well, and what they would change next time..."></textarea>
+              </div>
+              <div>
+                <label>Manager feedback</label>
+                <textarea id="np-call-manager-feedback" placeholder="Supervisor coaching notes, expectations, and feedback for the next call..."></textarea>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="section-title">
-            <div>
-              <h2>PIP / coaching plan upload</h2>
-              <p>Restore the missing generator workflow by uploading an existing plan to pull action items directly into this form.</p>
+          <div id="np-plan-source-section" class="${UI.newPlanType === 'call_review' ? 'hidden' : ''}">
+            <div class="section-title">
+              <div>
+                <h2>PIP / coaching plan upload</h2>
+                <p>Restore the missing generator workflow by uploading an existing plan to pull action items directly into this form.</p>
+              </div>
             </div>
+
+            <div class="file-box">
+              <strong>${UI.newPlanDraft.planSourceFileName ? escapeHtml(UI.newPlanDraft.planSourceFileName) : 'Choose plan document'}</strong>
+              <div class="small muted">PDF, DOCX, or TXT</div>
+              <div style="margin-top:12px">
+                <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handlePlanSourceUpload(event)">
+              </div>
+            </div>
+            <div id="np-plan-source-status" style="margin-top:12px">${renderSourceStatus('plan')}</div>
+            <div id="np-imported-items-preview" style="margin-top:12px">${renderImportedActionPreview()}</div>
+            <div id="np-doc-tools" style="margin-top:12px">${renderNewPlanDocumentTools()}</div>
           </div>
 
-          <div class="file-box">
-            <strong>${UI.newPlanDraft.planSourceFileName ? escapeHtml(UI.newPlanDraft.planSourceFileName) : 'Choose plan document'}</strong>
-            <div class="small muted">PDF, DOCX, or TXT</div>
-            <div style="margin-top:12px">
-              <input type="file" accept=".pdf,.docx,.txt,.text" onchange="handlePlanSourceUpload(event)">
-            </div>
-          </div>
-          <div id="np-plan-source-status" style="margin-top:12px">${renderSourceStatus('plan')}</div>
-          <div id="np-imported-items-preview" style="margin-top:12px">${renderImportedActionPreview()}</div>
-          <div id="np-doc-tools" style="margin-top:12px">${renderNewPlanDocumentTools()}</div>
-
-          <div class="section-title" style="margin-top:18px">
+          <div class="section-title" style="margin-top:${UI.newPlanType === 'call_review' ? '0' : '18px'}">
             <div>
               <h2 style="font-size:16px">Action items and completion trigger</h2>
-              <p>Enter one item per line. Use <span class="mono">Area | Action item</span> to group items in exports.</p>
+              <p>${UI.newPlanType === 'call_review' ? 'Use action items to document the coaching steps that should follow this call review.' : 'Enter one item per line. Use '} ${UI.newPlanType === 'call_review' ? '' : '<span class="mono">Area | Action item</span> to group items in exports.'}</p>
             </div>
           </div>
 
           <div id="np-writeup-tools" style="margin-bottom:14px">${renderNewPlanWriteupTools()}</div>
 
-          <div class="checkbox-row" style="margin-bottom:14px">
+          <div id="np-shop-trigger-section" class="checkbox-row ${UI.newPlanType === 'call_review' ? 'hidden' : ''}" style="margin-bottom:14px">
             <input type="checkbox" id="np-requires-shop">
             <div>
               <label style="margin-bottom:2px">Post-plan shop trigger</label>
@@ -3164,12 +3327,7 @@ function renderNewPlan(){
 
 function setNewPlanType(type){
   UI.newPlanType = type;
-  const coaching = document.getElementById('np-type-coaching');
-  const pip = document.getElementById('np-type-pip');
-  if(coaching && pip){
-    coaching.classList.toggle('active', type === 'coaching');
-    pip.classList.toggle('active', type === 'pip');
-  }
+  syncNewPlanTypeSections();
 }
 
 function applyTimeline(){
@@ -3206,14 +3364,17 @@ function previewNewPlan(){
   const selectedRecommendations = selectedNewPlanRecommendationItems();
   const effectiveItems = items.length ? dedupeActionItems([...items, ...selectedRecommendations]) : dedupeActionItems([...selectedRecommendations, ...UI.newPlanDraft.extractedActionItems]);
   const box = document.getElementById('new-plan-preview');
+  const isCallReview = UI.newPlanType === 'call_review';
   if(!employee){
     box.innerHTML = '<div class="alert alert-danger">Select an employee first.</div>';
     return;
   }
   box.innerHTML = `
     <div class="alert alert-info">
-      <strong>${employee.name}</strong> · ${UI.newPlanType.toUpperCase()} · Review ${formatDate(document.getElementById('np-review-date').value)}<br>
-      ${effectiveItems.length} action items loaded · Updated shop required: ${document.getElementById('np-requires-shop').checked ? 'Yes' : 'No'}
+      <strong>${employee.name}</strong> · ${planTypeUpperLabel(UI.newPlanType)} · Review ${formatDate(document.getElementById('np-review-date').value)}<br>
+      ${isCallReview
+        ? `Call ${escapeHtml(document.getElementById('np-call-type').value || 'review')} · ${formatDate(document.getElementById('np-call-date').value)} · Employee ${document.getElementById('np-call-employee-score').value || 'N/A'}% · Manager ${document.getElementById('np-call-manager-score').value || 'N/A'}% · ${effectiveItems.length} action items loaded`
+        : `${effectiveItems.length} action items loaded · Updated shop required: ${document.getElementById('np-requires-shop').checked ? 'Yes' : 'No'}`}
     </div>
   `;
 }
@@ -3230,8 +3391,13 @@ function buildPlanFromForm(){
     return null;
   }
   const reviewDate = document.getElementById('np-review-date').value;
+  const isCallReview = UI.newPlanType === 'call_review';
   if(!reviewDate){
     alert('Enter a review date.');
+    return null;
+  }
+  if(isCallReview && !document.getElementById('np-call-date').value){
+    alert('Enter the date of the reviewed call.');
     return null;
   }
 
@@ -3249,37 +3415,50 @@ function buildPlanFromForm(){
   const msoeDelta = (priorMsoe && currentMsoeScore != null && !Number.isNaN(Number(currentMsoeScore)))
     ? Math.round((Number(currentMsoeScore) - Number(priorMsoe.score)) * 10) / 10
     : null;
+  const requiresUpdatedShopField = document.getElementById('np-requires-shop');
 
   return {
     id: genId(),
     employeeId,
     type: UI.newPlanType,
     status: 'active',
-    shopDate: document.getElementById('np-shop-date').value,
+    shopDate: isCallReview ? '' : document.getElementById('np-shop-date').value,
     reviewDate,
     createdAt: today(),
     manager: document.getElementById('np-manager').value.trim() || (employee ? managerDisplayName(employee) : '') || 'Manager Name',
     notes: document.getElementById('np-notes').value.trim(),
-    overallScore: numberOrNull('np-overall'),
-    msoeScore: currentMsoeScore,
-    priorMsoeScore: priorMsoe ? priorMsoe.score : null,
-    priorMsoeDate: priorMsoe ? priorMsoe.date : '',
-    msoeDelta,
-    telScore: numberOrNull('np-telephone'),
-    onsiteScore: numberOrNull('np-onsite'),
-    followupScore: numberOrNull('np-followup'),
-    greetScore: numberOrNull('np-greeting'),
-    needsScore: numberOrNull('np-needs'),
-    demoScore: numberOrNull('np-demo-closing'),
+    overallScore: isCallReview ? null : numberOrNull('np-overall'),
+    msoeScore: isCallReview ? null : currentMsoeScore,
+    priorMsoeScore: isCallReview ? null : (priorMsoe ? priorMsoe.score : null),
+    priorMsoeDate: isCallReview ? '' : (priorMsoe ? priorMsoe.date : ''),
+    msoeDelta: isCallReview ? null : msoeDelta,
+    telScore: isCallReview ? null : numberOrNull('np-telephone'),
+    onsiteScore: isCallReview ? null : numberOrNull('np-onsite'),
+    followupScore: isCallReview ? null : numberOrNull('np-followup'),
+    greetScore: isCallReview ? null : numberOrNull('np-greeting'),
+    needsScore: isCallReview ? null : numberOrNull('np-needs'),
+    demoScore: isCallReview ? null : numberOrNull('np-demo-closing'),
     actionItems,
     weeklyUpdates: [],
     meetings: [],
     consequences: UI.newPlanType === 'pip',
-    requiresUpdatedShop: document.getElementById('np-requires-shop').checked,
+    requiresUpdatedShop: !isCallReview && !!(requiresUpdatedShopField && requiresUpdatedShopField.checked),
     linkedWriteupIds: [...(UI.newPlanDraft.selectedWriteupIds || [])],
     shopSourceName: UI.newPlanDraft.shopSourceFileName || '',
     msoeSourceName: UI.newPlanDraft.msoeSourceFileName || '',
-    planSourceName: UI.newPlanDraft.planSourceFileName || ''
+    planSourceName: UI.newPlanDraft.planSourceFileName || '',
+    callReviewEmployeeScore: isCallReview ? numberOrNull('np-call-employee-score') : null,
+    callReviewManagerScore: isCallReview ? numberOrNull('np-call-manager-score') : null,
+    callReviewSentiment: isCallReview ? String(document.getElementById('np-call-sentiment').value || '') : '',
+    callReviewCallType: isCallReview ? String(document.getElementById('np-call-type').value || 'resident') : '',
+    callReviewContact: isCallReview ? String(document.getElementById('np-call-contact').value || '').trim() : '',
+    callReviewDate: isCallReview ? String(document.getElementById('np-call-date').value || '') : '',
+    callReviewTime: isCallReview ? String(document.getElementById('np-call-time').value || '').trim() : '',
+    callReviewDetails: isCallReview ? String(document.getElementById('np-call-detail').value || '').trim() : '',
+    callReviewEmployeeReflection: isCallReview ? String(document.getElementById('np-call-employee-reflection').value || '').trim() : '',
+    callReviewManagerFeedback: isCallReview ? String(document.getElementById('np-call-manager-feedback').value || '').trim() : '',
+    callReviewSourceName: isCallReview ? (UI.newPlanDraft.callSourceFileName || '') : '',
+    callReviewSourceData: isCallReview ? (UI.newPlanDraft.callSourceData || '') : ''
   };
 }
 
@@ -3289,7 +3468,7 @@ function createPlan(openDocument){
   STATE.plans.push(plan);
   UI.currentView = 'plans';
   saveState();
-  maybeTriggerHrApprovalRequest(plan);
+  if(plan.type !== 'call_review') maybeTriggerHrApprovalRequest(plan);
   if(openDocument) exportPlanDocument(plan.id);
   UI.newPlanType = 'coaching';
   UI.newPlanDraft = makeNewPlanDraft();
@@ -3470,6 +3649,60 @@ function parseMsoeScoreFromText(text){
   }
 
   return findLabelledScore(normalized, MSOE_SCORE_ALIASES.filter(alias => alias !== 'msoe'));
+}
+
+function findTimeFromText(text){
+  const match = normalizeDocumentText(text).match(/\b(\d{1,2}:\d{2}\s*(?:am|pm))\b/i);
+  return match ? match[1].replace(/\s+/g, ' ').toUpperCase() : '';
+}
+
+function detectCallReviewSentiment(text){
+  const normalized = normalizeDocumentText(text).toLowerCase();
+  if(/\bmixed\b/.test(normalized)) return 'mixed';
+  if(/\bnegative\b|\bpoor\b|\bdissatisfied\b|\bangry\b/.test(normalized)) return 'negative';
+  if(/\bpositive\b|\bgreat\b|\bexcellent\b|\bsatisfied\b|\bhappy\b/.test(normalized)) return 'positive';
+  if(/\bneutral\b|\baverage\b/.test(normalized)) return 'neutral';
+  return '';
+}
+
+function detectCallReviewType(text){
+  const normalized = normalizeDocumentText(text).toLowerCase();
+  if(/\bprospect\b|\blead\b|\bguest\b|\btour\b/.test(normalized)) return 'prospect';
+  if(/\bresident\b|\brenewal\b|\bservice request\b|\bmaintenance\b/.test(normalized)) return 'resident';
+  return 'resident';
+}
+
+function extractCallReviewField(text, aliases){
+  const lines = splitDocumentLines(text);
+  for(const alias of aliases){
+    const lowerAlias = alias.toLowerCase();
+    for(let index = 0; index < lines.length; index += 1){
+      const line = lines[index];
+      const lowerLine = line.toLowerCase();
+      if(!lowerLine.includes(lowerAlias)) continue;
+      const inlineValue = line.replace(new RegExp(`.*${alias}\\s*[:\\-]?\\s*`, 'i'), '').trim();
+      if(inlineValue && normalizeComparable(inlineValue) !== normalizeComparable(alias)) return inlineValue;
+      const nextLine = lines[index + 1] || '';
+      if(nextLine && nextLine.length <= 180) return nextLine;
+    }
+  }
+  return '';
+}
+
+function parseCallReviewFromText(text){
+  const normalized = normalizeDocumentText(text);
+  return {
+    employeeScore: findLabelledScore(normalized, ['employee score', 'employee grade', 'self score', 'self grade', 'associate score']),
+    managerScore: findLabelledScore(normalized, ['manager score', 'manager review score', 'supervisor score', 'review score', 'qa score']),
+    sentiment: detectCallReviewSentiment(normalized),
+    callType: detectCallReviewType(normalized),
+    callDate: parseShopDateFromText(normalized),
+    callTime: findTimeFromText(normalized),
+    contact: extractCallReviewField(normalized, ['resident', 'prospect', 'customer', 'caller', 'contact']),
+    details: extractCallReviewField(normalized, ['call detail', 'call details', 'summary', 'call summary', 'notes']) || '',
+    employeeReflection: extractCallReviewField(normalized, ['employee feedback', 'self reflection', 'employee reflection', 'employee notes']) || '',
+    managerFeedback: extractCallReviewField(normalized, ['manager feedback', 'supervisor feedback', 'coaching feedback', 'feedback']) || ''
+  };
 }
 
 function extractMsoeIncompleteActionItemsFromText(text){
@@ -3669,6 +3902,73 @@ function applyMsoeScore(score){
   const input = document.getElementById('np-msoe');
   if(input) input.value = score;
   updatePlanTypeSuggestion(true);
+}
+
+function setNewPlanFieldValue(id, value, promptMessage){
+  const input = document.getElementById(id);
+  if(!input || value == null || value === '') return;
+  const nextValue = String(value);
+  const currentValue = String(input.value || '').trim();
+  if(!currentValue || currentValue === nextValue || confirm(promptMessage || 'Replace the current value with the uploaded call review value?')){
+    input.value = nextValue;
+  }
+}
+
+function syncNewPlanTypeSections(){
+  const type = UI.newPlanType;
+  const coaching = document.getElementById('np-type-coaching');
+  const pip = document.getElementById('np-type-pip');
+  const callReview = document.getElementById('np-type-call-review');
+  const performanceFields = document.getElementById('np-performance-fields');
+  const callReviewFields = document.getElementById('np-call-review-fields');
+  const planSourceSection = document.getElementById('np-plan-source-section');
+  const shopTriggerSection = document.getElementById('np-shop-trigger-section');
+  if(coaching) coaching.classList.toggle('active', type === 'coaching');
+  if(pip) pip.classList.toggle('active', type === 'pip');
+  if(callReview) callReview.classList.toggle('active', type === 'call_review');
+  if(performanceFields) performanceFields.classList.toggle('hidden', type === 'call_review');
+  if(callReviewFields) callReviewFields.classList.toggle('hidden', type !== 'call_review');
+  if(planSourceSection) planSourceSection.classList.toggle('hidden', type === 'call_review');
+  if(shopTriggerSection) shopTriggerSection.classList.toggle('hidden', type === 'call_review');
+  updatePlanTypeSuggestion(false);
+}
+
+async function handleCallReviewSourceUpload(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+
+  UI.newPlanDraft.callSourceFileName = file.name;
+  UI.newPlanDraft.callSummary = 'Reading uploaded call review...';
+  UI.newPlanDraft.callError = '';
+  UI.newPlanDraft.callTone = 'info';
+  syncNewPlanDraftToDom();
+
+  try{
+    const [text, dataUrl] = await Promise.all([extractTextFromFile(file), readFileAsDataUrl(file)]);
+    const parsed = parseCallReviewFromText(text);
+    UI.newPlanDraft.callSummary = `${file.name} uploaded. Call review fields were checked for scores, sentiment, and call details.`;
+    UI.newPlanDraft.callTone = 'success';
+
+    setNewPlanFieldValue('np-call-type', parsed.callType, 'Replace the current call type with the uploaded value?');
+    setNewPlanFieldValue('np-call-contact', parsed.contact, 'Replace the current call contact/detail with the uploaded value?');
+    setNewPlanFieldValue('np-call-date', parsed.callDate, 'Replace the current call date with the uploaded value?');
+    setNewPlanFieldValue('np-call-time', parsed.callTime, 'Replace the current call time with the uploaded value?');
+    setNewPlanFieldValue('np-call-sentiment', parsed.sentiment, 'Replace the current sentiment with the uploaded value?');
+    setNewPlanFieldValue('np-call-employee-score', parsed.employeeScore, 'Replace the current employee self-grade with the uploaded value?');
+    setNewPlanFieldValue('np-call-manager-score', parsed.managerScore, 'Replace the current manager review score with the uploaded value?');
+    setNewPlanFieldValue('np-call-detail', parsed.details, 'Replace the current call detail with the uploaded value?');
+    setNewPlanFieldValue('np-call-employee-reflection', parsed.employeeReflection, 'Replace the current employee reflection with the uploaded value?');
+    setNewPlanFieldValue('np-call-manager-feedback', parsed.managerFeedback, 'Replace the current manager feedback with the uploaded value?');
+
+    UI.newPlanDraft.callSourceData = dataUrl;
+  }catch(error){
+    UI.newPlanDraft.callError = `Could not read ${file.name}. ${error.message}`;
+    UI.newPlanDraft.callSummary = '';
+    UI.newPlanDraft.callTone = 'danger';
+  }
+
+  syncNewPlanDraftToDom();
+  event.target.value = '';
 }
 
 async function handleShopSourceUpload(event){
@@ -4178,7 +4478,7 @@ function renderEmployees(){
                         ${employee.terminationDate ? `<div class="tiny muted" style="margin-top:6px">${formatDate(employee.terminationDate)}${employee.terminationReason ? ` · ${escapeHtml(employee.terminationReason)}` : ''}</div>` : ''}
                       </td>
                       <td>
-                        ${active.length ? active.map(plan => `<span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>`).join('') : '<span class="small muted">None</span>'}
+                        ${active.length ? active.map(plan => `<span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span>`).join('') : '<span class="small muted">None</span>'}
                       </td>
                       <td>
                         <div class="inline">
@@ -4286,14 +4586,15 @@ function renderEmployeeProfile(){
           </div>
           ${docs.length ? `
             <div class="stack">
-              ${plans.filter(plan => plan.signedDocData || plan.updatedShopReportData || plan.shopSourceName || plan.msoeSourceName || plan.planSourceName).map(plan => `
+              ${plans.filter(plan => plan.signedDocData || plan.updatedShopReportData || plan.shopSourceName || plan.msoeSourceName || plan.planSourceName || plan.callReviewSourceName || plan.callReviewSourceData).map(plan => `
                 <div class="history-card">
-                  <strong>${plan.type.toUpperCase()} · ${formatDate(plan.createdAt)}</strong>
+                  <strong>${planTypeLabel(plan.type)} · ${formatDate(plan.createdAt)}</strong>
                   <div class="small muted" style="margin:6px 0 10px">${escapeHtml(planLabel(plan))}</div>
                   <div class="inline">
                     ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Signed plan</button>` : ''}
                     ${plan.updatedShopReportData ? `<button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Updated shop report</button>` : ''}
-                    ${(plan.shopSourceName || plan.msoeSourceName || plan.planSourceName) ? `<button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">View source names</button>` : ''}
+                    ${plan.callReviewSourceData ? `<button class="btn btn-sm btn-soft" onclick="downloadCallReviewSource('${plan.id}')">Call review file</button>` : ''}
+                    ${(plan.shopSourceName || plan.msoeSourceName || plan.planSourceName || plan.callReviewSourceName) ? `<button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">View source names</button>` : ''}
                   </div>
                 </div>
               `).join('')}
@@ -4339,7 +4640,7 @@ function renderEmployeeProfile(){
           <div class="section-title">
             <div>
               <h2>Plans</h2>
-              <p>Quick access to current and past coaching or PIP plans.</p>
+              <p>Quick access to current and past coaching, PIP, and call review records.</p>
             </div>
           </div>
           ${plans.length ? `
@@ -4347,19 +4648,19 @@ function renderEmployeeProfile(){
               ${plans.map(plan => `
                 <div class="history-card">
                   <div class="inline" style="margin-bottom:8px">
-                    <strong>${plan.type.toUpperCase()}</strong>
+                    <strong>${planTypeLabel(plan.type)}</strong>
                     <span class="badge ${typeBadgeClass(plan.type)}">${escapeHtml(planLabel(plan))}</span>
                     ${isPlanLocked(plan) ? '<span class="badge badge-completed">Locked</span>' : ''}
                   </div>
                   <div class="small muted" style="margin-bottom:8px">Created ${formatDate(plan.createdAt)} · Review ${formatDate(plan.reviewDate)} · Manager ${escapeHtml(plan.manager || managerDisplayName(employee) || 'Not set')}</div>
                   <div class="inline">
                     <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${plan.id}')">Open plan</button>
-                    <button class="btn btn-sm btn-accent" onclick="openWeeklyForPlan('${plan.id}')">Weekly updates</button>
+                    ${plan.type === 'call_review' ? '' : `<button class="btn btn-sm btn-accent" onclick="openWeeklyForPlan('${plan.id}')">Weekly updates</button>`}
                   </div>
                 </div>
               `).join('')}
             </div>
-          ` : '<div class="alert alert-info">No coaching or PIP plans are on file for this employee.</div>'}
+          ` : '<div class="alert alert-info">No coaching, PIP, or call review records are on file for this employee.</div>'}
         </div>
 
         <div class="card">
@@ -4929,7 +5230,7 @@ function renderShop(){
                         <div class="small muted">${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</div>
                       </td>
                       <td>
-                        <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                        <span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span>
                         <div class="small muted" style="margin-top:6px">Ordered into queue ${formatDate(plan.shopOrderedAt || plan.completedAt || plan.reviewDate)}</div>
                       </td>
                       <td>
@@ -4989,7 +5290,7 @@ function renderShop(){
                         <div class="small muted">${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</div>
                       </td>
                       <td>
-                        <span class="badge ${typeBadgeClass(plan.type)}">${plan.type.toUpperCase()}</span>
+                        <span class="badge ${typeBadgeClass(plan.type)}">${planTypeUpperLabel(plan.type)}</span>
                         <div class="small muted" style="margin-top:6px">${escapeHtml(planLabel(plan))}</div>
                       </td>
                       <td>
@@ -5123,6 +5424,15 @@ function downloadUpdatedShopReport(planId){
   const link = document.createElement('a');
   link.href = plan.updatedShopReportData;
   link.download = plan.updatedShopReportName || 'updated-ellis-report';
+  link.click();
+}
+
+function downloadCallReviewSource(planId){
+  const plan = getPlan(planId);
+  if(!plan || !plan.callReviewSourceData) return;
+  const link = document.createElement('a');
+  link.href = plan.callReviewSourceData;
+  link.download = plan.callReviewSourceName || 'call-review';
   link.click();
 }
 
@@ -5988,6 +6298,11 @@ function selectWeeklyPlan(planId){
 }
 
 function openWeeklyForPlan(planId){
+  const plan = getPlan(planId);
+  if(plan && plan.type === 'call_review'){
+    alert('Call reviews do not create weekly update cadences. Use the plan detail screen or Reporting to review the record.');
+    return;
+  }
   UI.selectedWeeklyPlanId = planId;
   UI.currentView = 'weekly';
   saveState();
@@ -6175,6 +6490,7 @@ function saveWeeklyLog(planId, schedIdx){
 const REPORT_RECORD_TYPE_OPTIONS = [
   {value:'pip', label:'PIPs'},
   {value:'coaching', label:'Coaching Plans'},
+  {value:'call_review', label:'Call Reviews'},
   {value:'writeup', label:'Write Ups'}
 ];
 
@@ -6185,6 +6501,7 @@ const REPORT_DATE_OPTIONS = [
   {value:'signed_plan', label:'Signed plan date'},
   {value:'meetings', label:'Meeting dates'},
   {value:'last_update', label:'Last update date'},
+  {value:'call_date', label:'Call date'},
   {value:'writeup_date', label:'Write-up date'}
 ];
 
@@ -6237,6 +6554,7 @@ function planMatchesReportDate(plan){
     review: plan.reviewDate || '',
     signed_plan: plan.signedDocDate || '',
     last_update: lastUpdate,
+    call_date: plan.callReviewDate || '',
     writeup_date: plan.createdAt || ''
   };
   return dateInRange(dateMap[dateType] || '', dateFrom, dateTo);
@@ -6245,6 +6563,7 @@ function planMatchesReportDate(plan){
 function writeupMatchesReportDate(writeup){
   const {dateType, dateFrom, dateTo} = UI.reportFilters;
   if(dateType === 'none' || (!dateFrom && !dateTo)) return true;
+  if(dateType === 'call_date') return false;
   return dateInRange(writeup.date || writeup.createdAt || '', dateFrom, dateTo);
 }
 
@@ -6283,6 +6602,7 @@ function reportKeyDateForPlan(plan){
   const dateType = UI.reportFilters.dateType;
   if(dateType === 'presented') return plan.presentedAt || '';
   if(dateType === 'signed_plan') return plan.signedDocDate || '';
+  if(dateType === 'call_date') return plan.callReviewDate || '';
   if(dateType === 'meetings'){
     const lastMeeting = (plan.meetings || []).filter(item => item.heldDate).slice(-1)[0];
     return (lastMeeting && lastMeeting.heldDate) || ((getSchedule(plan).slice(-1)[0] || {}).due || '');
@@ -6291,11 +6611,26 @@ function reportKeyDateForPlan(plan){
     const lastUpdate = (plan.weeklyUpdates || []).slice(-1)[0];
     return lastUpdate ? lastUpdate.date : '';
   }
+  if(plan.type === 'call_review') return plan.callReviewDate || plan.reviewDate || plan.createdAt || '';
   return plan.reviewDate || plan.createdAt || '';
 }
 
 function reportKeyDateForWriteup(writeup){
   return writeup.date || writeup.createdAt || '';
+}
+
+function callReviewSummaryText(plan){
+  if(!plan || plan.type !== 'call_review') return plan && plan.notes ? plan.notes : '';
+  const parts = [];
+  if(plan.callReviewCallType) parts.push(planTypeLabel('call_review') + ': ' + capitalizeSentence(plan.callReviewCallType));
+  if(plan.callReviewContact) parts.push(plan.callReviewContact);
+  if(plan.callReviewSentiment) parts.push('Sentiment ' + capitalizeSentence(plan.callReviewSentiment));
+  if(plan.callReviewEmployeeScore != null) parts.push('Employee ' + plan.callReviewEmployeeScore + '%');
+  if(plan.callReviewManagerScore != null) parts.push('Manager ' + plan.callReviewManagerScore + '%');
+  if(plan.callReviewTime) parts.push(plan.callReviewTime);
+  if(plan.callReviewManagerFeedback) parts.push(plan.callReviewManagerFeedback);
+  if(plan.callReviewDetails) parts.push(plan.callReviewDetails);
+  return parts.filter(Boolean).join(' · ') || (plan.notes || 'Call review saved.');
 }
 
 function reportingRecords(){
@@ -6306,12 +6641,14 @@ function reportingRecords(){
       kind: 'plan',
       recordType: plan.type,
       employee,
-      title: `${plan.type.toUpperCase()} plan`,
-      summary: plan.notes || '',
+      title: `${planTypeLabel(plan.type)} plan`,
+      summary: callReviewSummaryText(plan),
       keyDate: reportKeyDateForPlan(plan),
       status: planLabel(plan),
       recommendation: '',
-      overallScore: plan.overallScore,
+      overallScore: plan.type === 'call_review'
+        ? (plan.callReviewManagerScore != null ? plan.callReviewManagerScore : plan.callReviewEmployeeScore)
+        : plan.overallScore,
       level: '',
       plan,
       writeup: null
@@ -6352,6 +6689,7 @@ function buildReportingSummary(records, mode){
         employees: new Set(),
         pip: 0,
         coaching: 0,
+        callReview: 0,
         writeups: 0,
         finalWarnings: 0,
         scoreSum: 0,
@@ -6362,6 +6700,7 @@ function buildReportingSummary(records, mode){
     entry.employees.add(employee.id);
     if(record.recordType === 'pip') entry.pip += 1;
     if(record.recordType === 'coaching') entry.coaching += 1;
+    if(record.recordType === 'call_review') entry.callReview += 1;
     if(record.recordType === 'writeup'){
       entry.writeups += 1;
       if(writeupLevelMeta(record.level).severity >= 4) entry.finalWarnings += 1;
@@ -6378,11 +6717,12 @@ function buildReportingSummary(records, mode){
       employees: entry.employees.size,
       pip: entry.pip,
       coaching: entry.coaching,
+      callReview: entry.callReview,
       writeups: entry.writeups,
       finalWarnings: entry.finalWarnings,
       avgScore: entry.scoreCount ? (entry.scoreSum / entry.scoreCount).toFixed(1) : ''
     }))
-    .sort((left, right) => (right.pip + right.coaching + right.writeups) - (left.pip + left.coaching + left.writeups) || left.label.localeCompare(right.label));
+    .sort((left, right) => (right.pip + right.coaching + right.callReview + right.writeups) - (left.pip + left.coaching + left.callReview + left.writeups) || left.label.localeCompare(right.label));
 }
 
 function collectEmployeeDocuments(employeeId){
@@ -6396,6 +6736,9 @@ function collectEmployeeDocuments(employeeId){
     }
     if(plan.updatedShopReportData){
       docs.push({name: safeFileName(`${employee.name}_updated-shop_${plan.updatedShopReportName || today()}`), data: plan.updatedShopReportData});
+    }
+    if(plan.callReviewSourceData){
+      docs.push({name: safeFileName(`${employee.name}_call-review_${plan.callReviewSourceName || plan.id}`), data: plan.callReviewSourceData});
     }
   });
 
@@ -6449,6 +6792,7 @@ function renderSummaryTable(title, description, rows){
               <th>Employees</th>
               <th>PIPs</th>
               <th>Coaching</th>
+              <th>Call Reviews</th>
               <th>Write-ups</th>
               <th>Final Warnings</th>
               <th>Avg Score</th>
@@ -6461,11 +6805,12 @@ function renderSummaryTable(title, description, rows){
                 <td>${row.employees}</td>
                 <td>${row.pip}</td>
                 <td>${row.coaching}</td>
+                <td>${row.callReview}</td>
                 <td>${row.writeups}</td>
                 <td>${row.finalWarnings}</td>
                 <td>${row.avgScore ? row.avgScore + '%' : '<span class="small muted">N/A</span>'}</td>
               </tr>
-            `).join('') : `<tr><td colspan="7"><div class="alert alert-info">No data matches the current filters.</div></td></tr>`}
+            `).join('') : `<tr><td colspan="8"><div class="alert alert-info">No data matches the current filters.</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -6487,7 +6832,7 @@ function renderExport(){
           <div class="section-title">
             <div>
               <h2>Reporting center</h2>
-              <p>Filter PIPs, coaching plans, and write-ups by manager, regional owner, community, employee, or date basis, then export the current view.</p>
+              <p>Filter PIPs, coaching plans, call reviews, and write-ups by manager, regional owner, community, employee, or date basis, then export the current view.</p>
             </div>
           </div>
           <div class="pill-row" style="margin-bottom:14px">
@@ -6553,8 +6898,9 @@ function renderExport(){
             <div><strong>Date basis:</strong> ${escapeHtml(dateLabel)}</div>
             <div><strong>PIPs:</strong> ${records.filter(record => record.recordType === 'pip').length}</div>
             <div><strong>Coaching plans:</strong> ${records.filter(record => record.recordType === 'coaching').length}</div>
+            <div><strong>Call reviews:</strong> ${records.filter(record => record.recordType === 'call_review').length}</div>
             <div><strong>Write-ups:</strong> ${records.filter(record => record.recordType === 'writeup').length}</div>
-            <div><strong>Employee doc downloads:</strong> Select one employee to bulk-download signed plans, updated shop reports, support docs, and write-up acknowledgements.</div>
+            <div><strong>Employee doc downloads:</strong> Select one employee to bulk-download signed plans, updated shop reports, call review files, support docs, and write-up acknowledgements.</div>
           </div>
         </div>
       </div>
@@ -6587,7 +6933,7 @@ function renderExport(){
             <tbody>
               ${records.length ? records.map(record => `
                 <tr>
-                  <td><span class="badge ${record.recordType === 'pip' ? 'badge-pip' : record.recordType === 'coaching' ? 'badge-coaching' : writeupLevelBadgeClass(record.level || 'documented_conversation')}">${record.recordType === 'writeup' ? 'WRITE-UP' : record.recordType.toUpperCase()}</span></td>
+                  <td><span class="badge ${record.recordType === 'pip' ? 'badge-pip' : record.recordType === 'coaching' ? 'badge-coaching' : record.recordType === 'call_review' ? 'badge-call-review' : writeupLevelBadgeClass(record.level || 'documented_conversation')}">${record.recordType === 'writeup' ? 'WRITE-UP' : planTypeUpperLabel(record.recordType)}</span></td>
                   <td>
                     ${renderEmployeeProfileLink(record.employee)}
                     <div class="small muted">${escapeHtml(record.employee.role || 'Employee')} · ${escapeHtml(record.employee.region && REGIONS[record.employee.region] ? REGIONS[record.employee.region].short : (record.employee.region || 'No area'))}</div>
@@ -6618,10 +6964,10 @@ function buildPlanApprovalDraft(plan){
   const employee = getEmployee(plan.employeeId);
   const regionalName = employee ? regionalManagerDisplayName(employee) : '';
   const recipient = employee ? regionalManagerEmail(employee) : '';
-  const subject = `RISE ${plan.type.toUpperCase()} approved for ${employee ? employee.name : 'employee'}`;
+  const subject = `RISE ${planTypeUpperLabel(plan.type)} approved for ${employee ? employee.name : 'employee'}`;
   const body =
     `Hello ${regionalName || 'Regional Leader'},\n\n` +
-    `The requested ${plan.type.toUpperCase()} plan for ${employee ? employee.name : 'this employee'} has been approved by HR and can now be issued to the appropriate direct report for presentation.\n\n` +
+    `The requested ${planTypeUpperLabel(plan.type)} plan for ${employee ? employee.name : 'this employee'} has been approved by HR and can now be issued to the appropriate direct report for presentation.\n\n` +
     `Employee: ${employee ? employee.name : 'Unknown employee'}\n` +
     `Community: ${employee ? (employee.community || 'Not set') : 'Not set'}\n` +
     `Direct manager: ${employee ? (managerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
@@ -6632,13 +6978,13 @@ function buildPlanApprovalDraft(plan){
     recipient,
     subject,
     body,
-    attachmentName: `${employee ? employee.name : 'Employee'}_${plan.type.toUpperCase()}_Plan.pdf`
+    attachmentName: `${employee ? employee.name : 'Employee'}_${safeFileName(planTypeLabel(plan.type))}_Plan.pdf`
   };
 }
 
 function buildHrApprovalRequestDraft(plan){
   const employee = getEmployee(plan.employeeId);
-  const subject = `HR approval needed: ${employee ? employee.name : 'Employee'} · ${plan.type.toUpperCase()} plan`;
+  const subject = `HR approval needed: ${employee ? employee.name : 'Employee'} · ${planTypeUpperLabel(plan.type)} plan`;
   const body =
     'HR team,\n\n' +
     'A new plan is awaiting HR approval in the RISE Performance Platform.\n\n' +
@@ -6647,7 +6993,7 @@ function buildHrApprovalRequestDraft(plan){
     `Area: ${employee && employee.region && REGIONS[employee.region] ? REGIONS[employee.region].name : (employee ? (employee.region || 'Not set') : 'Not set')}\n` +
     `Direct manager: ${employee ? (managerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
     `Regional alert owner: ${employee ? (regionalManagerDisplayName(employee) || 'Not set') : 'Not set'}\n` +
-    `Plan type: ${plan.type.toUpperCase()}\n` +
+    `Plan type: ${planTypeUpperLabel(plan.type)}\n` +
     `Issued: ${formatDate(plan.createdAt)}\n` +
     `Review date: ${formatDate(plan.reviewDate)}\n\n` +
     `Notes:\n${plan.notes ? plan.notes : 'No notes entered.'}\n\n` +
@@ -6739,8 +7085,8 @@ function approvePlanByHr(planId){
     recipient: draft.recipient,
     status: draft.recipient ? 'Approval email draft opened' : 'Approval recorded - regional email missing',
     summary: draft.recipient
-      ? `HR approved the ${plan.type.toUpperCase()} plan and opened the regional notification draft. Attach the branded PDF manually before sending.`
-      : `HR approved the ${plan.type.toUpperCase()} plan, but no regional alert-owner email is saved in Settings for this employee.`,
+      ? `HR approved the ${planTypeUpperLabel(plan.type)} plan and opened the regional notification draft. Attach the branded PDF manually before sending.`
+      : `HR approved the ${planTypeUpperLabel(plan.type)} plan, but no regional alert-owner email is saved in Settings for this employee.`,
     body: draft.body,
     attachmentName: draft.attachmentName,
     createdBy: STATE.currentUser.name
@@ -6770,24 +7116,26 @@ function openPlanDetail(planId){
   openModal(`
     <div class="modal">
       <button class="close-btn" onclick="closeModal()">x</button>
-      <h3>${employee ? employee.name : 'Unknown employee'} · ${plan.type.toUpperCase()}</h3>
+      <h3>${employee ? employee.name : 'Unknown employee'} · ${planTypeUpperLabel(plan.type)}</h3>
       <div class="sub">${employee ? employee.community || 'Community not set' : 'Community not set'} · Created ${formatDate(plan.createdAt)} · Review ${formatDate(plan.reviewDate)}</div>
 
       ${alerts.length ? `<div class="inline" style="margin-bottom:14px">${alerts.map(alert => `<span class="badge badge-alert">${alert}</span>`).join('')}</div>` : ''}
 
       <div class="grid-3" style="margin-bottom:16px">
         <div class="card" style="background:#f8fbfc">
-          <div class="small muted">Overall score</div>
-          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${plan.overallScore != null ? plan.overallScore + '%' : 'N/A'}</div>
-          <div class="small muted" style="margin-top:8px">MSOE ${plan.msoeScore != null ? plan.msoeScore + '%' : 'N/A'}</div>
+          <div class="small muted">${plan.type === 'call_review' ? 'Manager review score' : 'Overall score'}</div>
+          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${plan.type === 'call_review' ? (plan.callReviewManagerScore != null ? plan.callReviewManagerScore + '%' : 'N/A') : (plan.overallScore != null ? plan.overallScore + '%' : 'N/A')}</div>
+          <div class="small muted" style="margin-top:8px">${plan.type === 'call_review' ? `Employee self-grade ${plan.callReviewEmployeeScore != null ? plan.callReviewEmployeeScore + '%' : 'N/A'}` : `MSOE ${plan.msoeScore != null ? plan.msoeScore + '%' : 'N/A'}`}</div>
         </div>
         <div class="card" style="background:#f8fbfc">
-          <div class="small muted">Progress</div>
-          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${pctComplete(plan)}%</div>
+          <div class="small muted">${plan.type === 'call_review' ? 'Sentiment' : 'Progress'}</div>
+          <div style="font-size:28px;font-weight:800;color:var(--ink);margin-top:4px">${plan.type === 'call_review' ? escapeHtml(capitalizeSentence(plan.callReviewSentiment || 'Not set')) : pctComplete(plan) + '%'}</div>
         </div>
         <div class="card" style="background:#f8fbfc">
-          <div class="small muted">Status</div>
-          <div style="margin-top:8px"><span class="badge ${planStatusBadgeClass(plan)}">${planLabel(plan)}</span></div>
+          <div class="small muted">${plan.type === 'call_review' ? 'Call details' : 'Status'}</div>
+          ${plan.type === 'call_review'
+            ? `<div class="small" style="margin-top:8px">${escapeHtml(capitalizeSentence(plan.callReviewCallType || 'Resident'))} · ${plan.callReviewDate ? formatDate(plan.callReviewDate) : 'Date not set'}${plan.callReviewTime ? ' · ' + escapeHtml(plan.callReviewTime) : ''}</div>`
+            : `<div style="margin-top:8px"><span class="badge ${planStatusBadgeClass(plan)}">${planLabel(plan)}</span></div>`}
         </div>
       </div>
 
@@ -6795,67 +7143,110 @@ function openPlanDetail(planId){
         <div class="card" style="background:#fbfdff">
           <div class="section-title">
             <div>
-              <h2 style="font-size:16px">Employee's individual plan</h2>
-              <p>Presentation date, signed document upload, and plan-export actions.</p>
+              <h2 style="font-size:16px">${plan.type === 'call_review' ? 'Call review record' : "Employee's individual plan"}</h2>
+              <p>${plan.type === 'call_review' ? 'Resident/prospect call details, manager coaching notes, and document backup.' : 'Presentation date, signed document upload, and plan-export actions.'}</p>
             </div>
           </div>
           <div class="stack">
-            <div class="history-card">
-              <strong>HR approval</strong>
-              <div class="small muted" style="margin:6px 0 10px">${hrApproved ? `Approved ${formatDate(plan.hrApprovedAt)}${plan.hrApprovedBy ? ' · ' + escapeHtml(plan.hrApprovedBy) : ''}` : 'Awaiting HR approval before this plan can be presented to the employee.'}</div>
-              <div class="inline">
-                ${STATE.currentUser && STATE.currentUser.role === 'admin' && !hrApproved ? `<button class="btn btn-sm btn-primary" onclick="openHrApprovalModal('${plan.id}')">Approve + notify manager</button>` : ''}
-                ${plan.hrApprovalCorrespondenceId && employee ? `<button class="btn btn-sm btn-soft" onclick="closeModal();openEmployeeProfile('${employee.id}')">View correspondence log</button>` : ''}
+            ${plan.type === 'call_review' ? `
+              <div class="history-card">
+                <strong>Call snapshot</strong>
+                <div class="small muted" style="margin-top:6px">
+                  Call type: ${escapeHtml(capitalizeSentence(plan.callReviewCallType || 'Resident'))}<br>
+                  Call date: ${plan.callReviewDate ? formatDate(plan.callReviewDate) : 'Not set'}${plan.callReviewTime ? ` · ${escapeHtml(plan.callReviewTime)}` : ''}<br>
+                  Contact: ${escapeHtml(plan.callReviewContact || 'Not set')}<br>
+                  Sentiment: ${escapeHtml(capitalizeSentence(plan.callReviewSentiment || 'Not set'))}
+                </div>
               </div>
-            </div>
-            <div class="history-card">
-              <strong>Presentation status</strong>
-              <div class="small muted" style="margin:6px 0 10px">${plan.presentedAt ? 'Presented on ' + formatDate(plan.presentedAt) : 'Not yet presented to employee'}${!hrApproved ? ' · Presentation is blocked until HR approval is recorded.' : ''}${locked ? ' · Plan is locked after the signed upload.' : ''}</div>
-              ${locked ? '<span class="badge badge-completed">Locked after signed upload</span>' : `
-                ${canUserMarkPlanPresented(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="markPlanPresented('${plan.id}')">Mark as presented</button>` : ''}
-                ${plan.presentedAt && STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-soft" onclick="markPlanPresented('${plan.id}')">Update presentation date</button>` : ''}
-                ${!canUserMarkPlanPresented(STATE.currentUser, plan) && !plan.presentedAt && hrApproved ? '<div class="tiny muted" style="margin-top:8px">Only admins can change plan details after HR approval. Marking as presented is still allowed for managers.</div>' : ''}
-              `}
-            </div>
-            <div class="history-card">
-              <strong>Signed presented coaching / PIP plan</strong>
-              <div class="small muted" style="margin:6px 0 10px">${plan.signedDocData ? 'Uploaded ' + formatDate(plan.signedDocDate) + ' · ' + (plan.signedDocName || 'Signed plan') : 'No signed plan uploaded yet'}${locked ? ' · Core plan fields are now locked.' : ''}</div>
-              <div class="inline">
-                ${locked ? '' : `
-                  ${plan.signedDocData
-                    ? (STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Replace upload</button>` : '')
-                    : (canUserUploadSignedPlan(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Upload signed plan</button>` : '')
-                  }
+              <div class="history-card">
+                <strong>Scoring</strong>
+                <div class="small muted" style="margin-top:6px">
+                  Employee self-grade: ${plan.callReviewEmployeeScore != null ? escapeHtml(plan.callReviewEmployeeScore + '%') : 'Not set'}<br>
+                  Manager review score: ${plan.callReviewManagerScore != null ? escapeHtml(plan.callReviewManagerScore + '%') : 'Not set'}
+                </div>
+              </div>
+              <div class="history-card">
+                <strong>Manager feedback</strong>
+                <div class="small" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(plan.callReviewManagerFeedback || 'No manager feedback entered.')}</div>
+              </div>
+              <div class="history-card">
+                <strong>Employee reflection</strong>
+                <div class="small" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(plan.callReviewEmployeeReflection || 'No employee reflection entered.')}</div>
+              </div>
+              <div class="history-card">
+                <strong>Call detail</strong>
+                <div class="small" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(plan.callReviewDetails || 'No call detail entered.')}</div>
+              </div>
+              ${(plan.callReviewSourceName || plan.callReviewSourceData) ? `
+                <div class="history-card">
+                  <strong>Uploaded call review file</strong>
+                  <div class="small muted" style="margin:6px 0 10px">${escapeHtml(plan.callReviewSourceName || 'Call review file')}</div>
+                  ${plan.callReviewSourceData ? `<button class="btn btn-sm btn-soft" onclick="downloadCallReviewSource('${plan.id}')">Download file</button>` : ''}
+                </div>
+              ` : ''}
+              <div class="history-card">
+                <strong>Document output</strong>
+                <div class="small muted" style="margin:6px 0 10px">Open the formatted call review record for printing or PDF export.</div>
+                <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
+              </div>
+            ` : `
+              <div class="history-card">
+                <strong>HR approval</strong>
+                <div class="small muted" style="margin:6px 0 10px">${hrApproved ? `Approved ${formatDate(plan.hrApprovedAt)}${plan.hrApprovedBy ? ' · ' + escapeHtml(plan.hrApprovedBy) : ''}` : 'Awaiting HR approval before this plan can be presented to the employee.'}</div>
+                <div class="inline">
+                  ${STATE.currentUser && STATE.currentUser.role === 'admin' && !hrApproved ? `<button class="btn btn-sm btn-primary" onclick="openHrApprovalModal('${plan.id}')">Approve + notify manager</button>` : ''}
+                  ${plan.hrApprovalCorrespondenceId && employee ? `<button class="btn btn-sm btn-soft" onclick="closeModal();openEmployeeProfile('${employee.id}')">View correspondence log</button>` : ''}
+                </div>
+              </div>
+              <div class="history-card">
+                <strong>Presentation status</strong>
+                <div class="small muted" style="margin:6px 0 10px">${plan.presentedAt ? 'Presented on ' + formatDate(plan.presentedAt) : 'Not yet presented to employee'}${!hrApproved ? ' · Presentation is blocked until HR approval is recorded.' : ''}${locked ? ' · Plan is locked after the signed upload.' : ''}</div>
+                ${locked ? '<span class="badge badge-completed">Locked after signed upload</span>' : `
+                  ${canUserMarkPlanPresented(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="markPlanPresented('${plan.id}')">Mark as presented</button>` : ''}
+                  ${plan.presentedAt && STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-soft" onclick="markPlanPresented('${plan.id}')">Update presentation date</button>` : ''}
+                  ${!canUserMarkPlanPresented(STATE.currentUser, plan) && !plan.presentedAt && hrApproved ? '<div class="tiny muted" style="margin-top:8px">Only admins can change plan details after HR approval. Marking as presented is still allowed for managers.</div>' : ''}
                 `}
-                ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Download</button>` : ''}
               </div>
-            </div>
-            ${(plan.shopSourceName || plan.msoeSourceName || plan.planSourceName) ? `
               <div class="history-card">
-                <strong>Plan setup source files</strong>
-                <div class="small muted" style="margin-top:6px">
-                  ${plan.shopSourceName ? `Shop source: ${escapeHtml(plan.shopSourceName)}` : 'Shop source not saved'}<br>
-                  ${plan.msoeSourceName ? `MSOE source: ${escapeHtml(plan.msoeSourceName)}` : 'MSOE source not saved'}<br>
-                  ${plan.planSourceName ? `Plan source: ${escapeHtml(plan.planSourceName)}` : 'Plan source not saved'}
+                <strong>Signed presented coaching / PIP plan</strong>
+                <div class="small muted" style="margin:6px 0 10px">${plan.signedDocData ? 'Uploaded ' + formatDate(plan.signedDocDate) + ' · ' + (plan.signedDocName || 'Signed plan') : 'No signed plan uploaded yet'}${locked ? ' · Core plan fields are now locked.' : ''}</div>
+                <div class="inline">
+                  ${locked ? '' : `
+                    ${plan.signedDocData
+                      ? (STATE.currentUser && STATE.currentUser.role === 'admin' ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Replace upload</button>` : '')
+                      : (canUserUploadSignedPlan(STATE.currentUser, plan) ? `<button class="btn btn-sm btn-primary" onclick="openSignedUpload('${plan.id}')">Upload signed plan</button>` : '')
+                    }
+                  `}
+                  ${plan.signedDocData ? `<button class="btn btn-sm btn-soft" onclick="downloadSignedDoc('${plan.id}')">Download</button>` : ''}
                 </div>
               </div>
-            ` : ''}
-            ${(plan.shopOrderedAt || plan.shopRequestedAt || plan.updatedShopReportName) ? `
-              <div class="history-card">
-                <strong>Updated shop workflow</strong>
-                <div class="small muted" style="margin-top:6px">
-                  Queue date: ${formatDate(plan.shopOrderedAt || '')}<br>
-                  Requested by Tea: ${formatDate(plan.shopRequestedAt || '')}${plan.shopRequestedBy ? ` · ${escapeHtml(plan.shopRequestedBy)}` : ''}<br>
-                  Updated Ellis report: ${plan.updatedShopReportName ? `${escapeHtml(plan.updatedShopReportName)} · ${formatDate(plan.updatedShopReportDate || plan.shopResolvedAt || '')}` : 'Not uploaded yet'}
+              ${(plan.shopSourceName || plan.msoeSourceName || plan.planSourceName) ? `
+                <div class="history-card">
+                  <strong>Plan setup source files</strong>
+                  <div class="small muted" style="margin-top:6px">
+                    ${plan.shopSourceName ? `Shop source: ${escapeHtml(plan.shopSourceName)}` : 'Shop source not saved'}<br>
+                    ${plan.msoeSourceName ? `MSOE source: ${escapeHtml(plan.msoeSourceName)}` : 'MSOE source not saved'}<br>
+                    ${plan.planSourceName ? `Plan source: ${escapeHtml(plan.planSourceName)}` : 'Plan source not saved'}
+                  </div>
                 </div>
-                ${plan.updatedShopReportData ? `<div class="inline" style="margin-top:10px">${renderShopScoreSummary(plan.updatedShopScores)}</div><div style="margin-top:10px"><button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Download updated report</button></div>` : ''}
+              ` : ''}
+              ${(plan.shopOrderedAt || plan.shopRequestedAt || plan.updatedShopReportName) ? `
+                <div class="history-card">
+                  <strong>Updated shop workflow</strong>
+                  <div class="small muted" style="margin-top:6px">
+                    Queue date: ${formatDate(plan.shopOrderedAt || '')}<br>
+                    Requested by Tea: ${formatDate(plan.shopRequestedAt || '')}${plan.shopRequestedBy ? ` · ${escapeHtml(plan.shopRequestedBy)}` : ''}<br>
+                    Updated Ellis report: ${plan.updatedShopReportName ? `${escapeHtml(plan.updatedShopReportName)} · ${formatDate(plan.updatedShopReportDate || plan.shopResolvedAt || '')}` : 'Not uploaded yet'}
+                  </div>
+                  ${plan.updatedShopReportData ? `<div class="inline" style="margin-top:10px">${renderShopScoreSummary(plan.updatedShopScores)}</div><div style="margin-top:10px"><button class="btn btn-sm btn-soft" onclick="downloadUpdatedShopReport('${plan.id}')">Download updated report</button></div>` : ''}
+                </div>
+              ` : ''}
+              <div class="history-card">
+                <strong>Document output</strong>
+                <div class="small muted" style="margin:6px 0 10px">Generate the formal employee plan document in a branded print view.</div>
+                <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
               </div>
-            ` : ''}
-            <div class="history-card">
-              <strong>Document output</strong>
-              <div class="small muted" style="margin:6px 0 10px">Generate the formal employee plan document in a branded print view.</div>
-              <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
-            </div>
+            `}
           </div>
         </div>
 
@@ -6863,10 +7254,10 @@ function openPlanDetail(planId){
           <div class="section-title">
             <div>
               <h2 style="font-size:16px">Meeting cadence</h2>
-              <p>Weekly follow-ups auto-run from plan presentation through review date.</p>
+              <p>${plan.type === 'call_review' ? 'Call reviews do not create an automatic weekly meeting cadence unless you open a separate coaching or PIP plan.' : 'Weekly follow-ups auto-run from plan presentation through review date.'}</p>
             </div>
           </div>
-          ${schedule.length ? schedule.map(item => {
+          ${plan.type === 'call_review' ? '<div class="alert alert-info">This call review is available in Plans, Reporting, and the employee profile without HR approval, presentation, or signed-plan steps.</div>' : (schedule.length ? schedule.map(item => {
             const record = getMeetingRecord(plan, item.schedIdx);
             const status = getMeetingStatus(plan, item);
             return `
@@ -6878,7 +7269,7 @@ function openPlanDetail(planId){
                 <button class="btn btn-sm btn-soft" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Weekly updates</button>
               </div>
             `;
-          }).join('') : '<div class="alert alert-info">Present the plan to generate the weekly cadence.</div>'}
+          }).join('') : '<div class="alert alert-info">Present the plan to generate the weekly cadence.</div>')}
         </div>
       </div>
 
@@ -6897,7 +7288,7 @@ function openPlanDetail(planId){
         ${canEditCore ? `<button class="btn btn-soft" onclick="closeModal();openEditPlanModal('${plan.id}')">Edit plan</button>` : ''}
         ${canDelete ? `<button class="btn btn-danger" onclick="deletePlan('${plan.id}')">Delete plan</button>` : ''}
         <button class="btn btn-soft" onclick="closeModal()">Close</button>
-        <button class="btn btn-primary" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Go to Weekly Updates</button>
+        ${plan.type === 'call_review' ? '' : `<button class="btn btn-primary" onclick="closeModal();openWeeklyForPlan('${plan.id}')">Go to Weekly Updates</button>`}
       </div>
     </div>
   `);
@@ -7066,6 +7457,10 @@ function markPlanPresented(planId){
     alert('Only admins can change presentation details after the plan is presented.');
     return;
   }
+  if(plan.type === 'call_review'){
+    alert('Call reviews do not use the presentation workflow.');
+    return;
+  }
   if(!isPlanHrApproved(plan)){
     alert('Record HR approval before presenting this plan to the employee.');
     return;
@@ -7106,8 +7501,8 @@ function confirmPresentation(planId){
   if(!plan.meetings) plan.meetings = [];
   const initialMeeting = {
     schedIdx: 0,
-    label: 'Initial presentation of PIP/Coaching plan',
-    type: 'Initial presentation of PIP/Coaching plan',
+    label: `Initial presentation of ${planTypeLabel(plan.type)} plan`,
+    type: `Initial presentation of ${planTypeLabel(plan.type)} plan`,
     dueDate: value,
     heldDate: value,
     status: 'completed',
@@ -7125,6 +7520,10 @@ function confirmPresentation(planId){
 function openSignedUpload(planId){
   const plan = getPlan(planId);
   if(!plan) return;
+  if(plan.type === 'call_review'){
+    alert('Call reviews do not require a signed plan upload.');
+    return;
+  }
   if(isPlanLocked(plan)){
     alert('This plan is locked after the signed document upload.');
     return;
@@ -7200,7 +7599,7 @@ function openTeaShopOrderEmail(plan){
     'A targeted shop needs to be ordered for the following employee after plan completion:\n\n' +
     'Employee: ' + (employee ? employee.name : 'Unknown employee') + '\n' +
     'Community: ' + (employee ? (employee.community || 'Community not set') : 'Community not set') + '\n' +
-    'Plan type: ' + plan.type.toUpperCase() + '\n' +
+    'Plan type: ' + planTypeUpperLabel(plan.type) + '\n' +
     'Plan completion date: ' + today() + '\n\n' +
     'Please order the updated shop.\n'
   );
@@ -7245,12 +7644,80 @@ function exportPlanDocument(planId){
     grouped[key].push(item.text);
   });
   const doc = window.open('', '_blank');
+  if(plan.type === 'call_review'){
+    doc.document.write(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>${employee ? employee.name : 'Employee'} Call Review</title>
+        <style>
+          body{font-family:Arial,sans-serif;color:#18313c;margin:0;background:#eef5f8}
+          .page{max-width:920px;margin:0 auto;background:#fff;padding:36px 42px 48px}
+          .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;border-bottom:4px solid #549db8;padding-bottom:18px;margin-bottom:22px}
+          .title{font-size:28px;font-weight:800;color:#023046;letter-spacing:-.03em}
+          .subtitle{font-size:13px;color:#5e7480;margin-top:6px}
+          .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;background:#eaf2ff;color:#25537a}
+          table{width:100%;border-collapse:collapse;margin-bottom:18px}
+          th,td{border:1px solid #d6e2e8;padding:10px 11px;font-size:13px;text-align:left;vertical-align:top}
+          th{background:#f7fbfd;color:#5e7480;text-transform:uppercase;font-size:11px;letter-spacing:.08em}
+          h2{font-size:16px;color:#023046;margin:20px 0 10px}
+          .panel{background:#f8fbfc;border:1px solid #dce8ee;border-radius:16px;padding:16px;margin-bottom:18px}
+          @media print{
+            body{background:#fff}
+            .page{max-width:none;padding:0}
+            button{display:none}
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="hero">
+            <div>
+              ${riseWordmark(38)}
+              <div class="title">Call Review</div>
+              <div class="subtitle">Resident/prospect call coaching record generated from the live dashboard.</div>
+            </div>
+            <div class="badge">CALL REVIEW</div>
+          </div>
+          <table>
+            <tr><th>Employee</th><td>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</td><th>Community</th><td>${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</td></tr>
+            <tr><th>Role</th><td>${employee ? escapeHtml(employee.role || 'Role not set') : 'Role not set'}</td><th>Manager</th><td>${escapeHtml(plan.manager || 'Manager not set')}</td></tr>
+            <tr><th>Call Type</th><td>${escapeHtml(capitalizeSentence(plan.callReviewCallType || 'Resident'))}</td><th>Call Date</th><td>${plan.callReviewDate ? formatDate(plan.callReviewDate) : 'Not set'}${plan.callReviewTime ? ` · ${escapeHtml(plan.callReviewTime)}` : ''}</td></tr>
+            <tr><th>Call Contact</th><td>${escapeHtml(plan.callReviewContact || 'Not set')}</td><th>Sentiment</th><td>${escapeHtml(capitalizeSentence(plan.callReviewSentiment || 'Not set'))}</td></tr>
+            <tr><th>Employee Self-Grade</th><td>${plan.callReviewEmployeeScore != null ? `${escapeHtml(plan.callReviewEmployeeScore)}%` : 'Not set'}</td><th>Manager Review Score</th><td>${plan.callReviewManagerScore != null ? `${escapeHtml(plan.callReviewManagerScore)}%` : 'Not set'}</td></tr>
+          </table>
+          <h2>Call Detail</h2>
+          <div class="panel">${plan.callReviewDetails ? escapeHtml(plan.callReviewDetails).replace(/\n/g, '<br>') : 'No call detail entered.'}</div>
+          <h2>Employee Reflection</h2>
+          <div class="panel">${plan.callReviewEmployeeReflection ? escapeHtml(plan.callReviewEmployeeReflection).replace(/\n/g, '<br>') : 'No employee reflection entered.'}</div>
+          <h2>Manager Feedback</h2>
+          <div class="panel">${plan.callReviewManagerFeedback ? escapeHtml(plan.callReviewManagerFeedback).replace(/\n/g, '<br>') : 'No manager feedback entered.'}</div>
+          <h2>Action Items</h2>
+          ${Object.keys(grouped).length ? Object.entries(grouped).map(([area, items]) => `
+            <div class="panel">
+              <strong>${escapeHtml(area)}</strong>
+              <ol>
+                ${items.map(text => `<li style="margin-top:8px">${escapeHtml(text)}</li>`).join('')}
+              </ol>
+            </div>
+          `).join('') : '<div class="panel">No action items attached to this call review.</div>'}
+          <h2>Manager Notes</h2>
+          <div class="panel">${plan.notes ? escapeHtml(plan.notes).replace(/\n/g, '<br>') : 'No notes entered.'}</div>
+          <button onclick="window.print()" style="margin-top:24px;background:#023046;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer">Print / Save as PDF</button>
+        </div>
+      </body>
+      </html>
+    `);
+    doc.document.close();
+    return;
+  }
   doc.document.write(`
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>${employee ? employee.name : 'Employee'} ${plan.type.toUpperCase()} Plan</title>
+      <title>${employee ? employee.name : 'Employee'} ${planTypeLabel(plan.type)} Plan</title>
       <style>
         body{font-family:Arial,sans-serif;color:#18313c;margin:0;background:#eef5f8}
         .page{max-width:920px;margin:0 auto;background:#fff;padding:36px 42px 48px}
@@ -7281,7 +7748,7 @@ function exportPlanDocument(planId){
             <div class="title">${plan.type === 'pip' ? 'Performance Improvement Plan' : 'Coaching Plan'}</div>
             <div class="subtitle">Formal employee performance document generated from the live dashboard.</div>
           </div>
-          <div class="badge">${plan.type.toUpperCase()}</div>
+          <div class="badge">${planTypeUpperLabel(plan.type)}</div>
         </div>
         <table>
           <tr><th>Employee</th><td>${employee ? escapeHtml(employee.name) : 'Unknown employee'}</td><th>Community</th><td>${employee ? escapeHtml(employee.community || 'Community not set') : 'Community not set'}</td></tr>
@@ -7354,7 +7821,7 @@ function exportReportingExcel(){
   ]];
   records.forEach(record => {
     recordRows.push([
-      record.recordType === 'writeup' ? 'Write-up' : record.recordType.toUpperCase(),
+      record.recordType === 'writeup' ? 'Write-up' : recordTypeLabel(record.recordType),
       record.employee.name,
       managerDisplayName(record.employee),
       regionalManagerDisplayName(record.employee),
@@ -7366,11 +7833,11 @@ function exportReportingExcel(){
     ]);
   });
 
-  const managerRows = [['Manager','Employees','PIPs','Coaching','Write-ups','Final Warnings','Avg Score']];
-  managerSummary.forEach(row => managerRows.push([row.label, row.employees, row.pip, row.coaching, row.writeups, row.finalWarnings, row.avgScore]));
+  const managerRows = [['Manager','Employees','PIPs','Coaching','Call Reviews','Write-ups','Final Warnings','Avg Score']];
+  managerSummary.forEach(row => managerRows.push([row.label, row.employees, row.pip, row.coaching, row.callReview, row.writeups, row.finalWarnings, row.avgScore]));
 
-  const communityRows = [['Community','Employees','PIPs','Coaching','Write-ups','Final Warnings','Avg Score']];
-  communitySummary.forEach(row => communityRows.push([row.label, row.employees, row.pip, row.coaching, row.writeups, row.finalWarnings, row.avgScore]));
+  const communityRows = [['Community','Employees','PIPs','Coaching','Call Reviews','Write-ups','Final Warnings','Avg Score']];
+  communitySummary.forEach(row => communityRows.push([row.label, row.employees, row.pip, row.coaching, row.callReview, row.writeups, row.finalWarnings, row.avgScore]));
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recordRows), 'Records');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(managerRows), 'Manager Summary');
@@ -7395,7 +7862,7 @@ function exportReportingPDF(){
         .header{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-bottom:4px solid #549db8;padding-bottom:18px;margin-bottom:24px}
         .title{font-size:30px;font-weight:800;color:#023046;letter-spacing:-.03em}
         .sub{font-size:13px;color:#5e7480;margin-top:6px}
-        .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+        .summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
         .tile{border:1px solid #d6e2e8;border-radius:16px;padding:14px;background:#f8fbfc}
         .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#5e7480}
         .tile .value{font-size:28px;font-weight:800;color:#023046;margin-top:6px}
@@ -7406,6 +7873,7 @@ function exportReportingPDF(){
         .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:700}
         .badge-pip{background:#fdeeee;color:#8e1d1d}
         .badge-coaching{background:#fff3df;color:#905f11}
+        .badge-call-review{background:#eaf2ff;color:#25537a}
         .badge-active{background:#e8f4ec;color:#205432}
         .badge-completed{background:#e8f0f8;color:#25537a}
         .badge-shop{background:#eef5f8;color:#023046}
@@ -7430,6 +7898,7 @@ function exportReportingPDF(){
           <div class="tile"><div class="label">Filtered Records</div><div class="value">${records.length}</div></div>
           <div class="tile"><div class="label">PIPs</div><div class="value">${records.filter(record => record.recordType === 'pip').length}</div></div>
           <div class="tile"><div class="label">Coaching</div><div class="value">${records.filter(record => record.recordType === 'coaching').length}</div></div>
+          <div class="tile"><div class="label">Call Reviews</div><div class="value">${records.filter(record => record.recordType === 'call_review').length}</div></div>
           <div class="tile"><div class="label">Write-Ups</div><div class="value">${records.filter(record => record.recordType === 'writeup').length}</div></div>
         </div>
         <h2>Manager Summary</h2>
@@ -7440,6 +7909,7 @@ function exportReportingPDF(){
               <th>Employees</th>
               <th>PIPs</th>
               <th>Coaching</th>
+              <th>Call Reviews</th>
               <th>Write-Ups</th>
               <th>Final Warnings</th>
               <th>Avg Score</th>
@@ -7452,11 +7922,12 @@ function exportReportingPDF(){
                 <td>${row.employees}</td>
                 <td>${row.pip}</td>
                 <td>${row.coaching}</td>
+                <td>${row.callReview}</td>
                 <td>${row.writeups}</td>
                 <td>${row.finalWarnings}</td>
                 <td>${row.avgScore ? escapeHtml(row.avgScore + '%') : 'N/A'}</td>
               </tr>
-            `).join('') : '<tr><td colspan="7">No manager summary rows matched the current filters.</td></tr>'}
+            `).join('') : '<tr><td colspan="8">No manager summary rows matched the current filters.</td></tr>'}
           </tbody>
         </table>
         <h2>Community Summary</h2>
@@ -7467,6 +7938,7 @@ function exportReportingPDF(){
               <th>Employees</th>
               <th>PIPs</th>
               <th>Coaching</th>
+              <th>Call Reviews</th>
               <th>Write-Ups</th>
               <th>Final Warnings</th>
               <th>Avg Score</th>
@@ -7479,11 +7951,12 @@ function exportReportingPDF(){
                 <td>${row.employees}</td>
                 <td>${row.pip}</td>
                 <td>${row.coaching}</td>
+                <td>${row.callReview}</td>
                 <td>${row.writeups}</td>
                 <td>${row.finalWarnings}</td>
                 <td>${row.avgScore ? escapeHtml(row.avgScore + '%') : 'N/A'}</td>
               </tr>
-            `).join('') : '<tr><td colspan="7">No community summary rows matched the current filters.</td></tr>'}
+            `).join('') : '<tr><td colspan="8">No community summary rows matched the current filters.</td></tr>'}
           </tbody>
         </table>
         <h2>Filtered Records</h2>
@@ -7502,7 +7975,7 @@ function exportReportingPDF(){
           <tbody>
             ${records.length ? records.map(record => `
               <tr>
-                <td>${record.recordType === 'writeup' ? 'Write-up' : record.recordType.toUpperCase()}</td>
+                <td>${record.recordType === 'writeup' ? 'Write-up' : recordTypeLabel(record.recordType)}</td>
                 <td>${escapeHtml(record.employee.name)}</td>
                 <td>${escapeHtml(managerDisplayName(record.employee) || 'Unassigned')}</td>
                 <td>${escapeHtml(record.employee.community || 'Not set')}</td>
