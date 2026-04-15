@@ -497,6 +497,7 @@ function makeNewPlanDraft(){
     docActionRecommendations: [],
     selectedDocActionIds: [],
     selectedWriteupIds: [],
+    selectedCallReviewIds: [],
     recommendedActionItems: [],
     selectedRecommendationIds: [],
     shopSourceFileName: '',
@@ -521,6 +522,7 @@ function makeNewPlanDraft(){
 
 function makeWriteupDraft(){
   return {
+    selectedCallReviewIds: [],
     sourceFileName: '',
     sourceDocData: '',
     sourceSummary: '',
@@ -631,6 +633,7 @@ function normalizePlan(plan){
     ...plan,
     actionItems: Array.isArray(plan && plan.actionItems) ? plan.actionItems : [],
     linkedWriteupIds: Array.isArray(plan && plan.linkedWriteupIds) ? plan.linkedWriteupIds : [],
+    linkedCallReviewIds: Array.isArray(plan && plan.linkedCallReviewIds) ? plan.linkedCallReviewIds : [],
     weeklyUpdates: Array.isArray(plan && plan.weeklyUpdates) ? plan.weeklyUpdates : [],
     meetings: Array.isArray(plan && plan.meetings) ? plan.meetings : [],
     consequences: plan && plan.consequences != null ? Boolean(plan.consequences) : plan && plan.type === 'pip',
@@ -673,6 +676,7 @@ function normalizeWriteup(writeup){
     correctiveAction: String(writeup && writeup.correctiveAction || ''),
     consequences: String(writeup && writeup.consequences || ''),
     manager: String(writeup && writeup.manager || ''),
+    linkedCallReviewIds: Array.isArray(writeup && writeup.linkedCallReviewIds) ? writeup.linkedCallReviewIds : [],
     sourceFileName: String(writeup && writeup.sourceFileName || ''),
     sourceSummary: String(writeup && writeup.sourceSummary || ''),
     sourceDocData: String(writeup && writeup.sourceDocData || ''),
@@ -794,6 +798,7 @@ let UI = {
   planFilter: 'active',
   selectedWeeklyPlanId: null,
   selectedWriteupEmployeeId: null,
+  selectedCallReviewEmployeeId: null,
   selectedEmployeeProfileId: null,
   profileReturnView: 'employees',
   newPlanType: 'coaching',
@@ -1290,6 +1295,12 @@ function writeupsForEmployee(employeeId){
     .sort((left, right) => (right.date || '').localeCompare(left.date || ''));
 }
 
+function callReviewsForEmployee(employeeId){
+  return plansForEmployee(employeeId)
+    .filter(plan => plan.type === 'call_review')
+    .sort((left, right) => (right.callReviewDate || right.reviewDate || right.createdAt || '').localeCompare(left.callReviewDate || left.reviewDate || left.createdAt || ''));
+}
+
 function msoeHistoryForEmployee(employeeId, excludePlanId){
   return (STATE.plans || [])
     .filter(plan => plan.employeeId === employeeId && plan.id !== excludePlanId && plan.msoeScore != null)
@@ -1734,6 +1745,65 @@ function buildWriteupActionRecommendations(writeups){
   });
 }
 
+function buildCallReviewActionRecommendations(callReviews){
+  const recommendations = [];
+
+  (Array.isArray(callReviews) ? callReviews : []).forEach(callReview => {
+    const sourceTitle = `${planTypeLabel('call_review')} · ${formatDate(callReview.callReviewDate || callReview.createdAt || '')}`;
+    (callReview.actionItems || []).forEach((item, index) => {
+      const built = buildDetailedActionItem(item.area || 'Call Review', item.text || '');
+      recommendations.push({
+        id: `${callReview.id}_action_${index}`,
+        callReviewId: callReview.id,
+        area: built.area,
+        text: built.text,
+        sourceTitle,
+        sourceDate: callReview.callReviewDate || callReview.createdAt || '',
+        sourceCategory: capitalizeSentence(callReview.callReviewCallType || 'Call review'),
+        sourceLabel: 'Call review action item'
+      });
+    });
+
+    if(callReview.callReviewManagerFeedback){
+      const built = buildDetailedActionItem('Call Review Coaching', callReview.callReviewManagerFeedback);
+      recommendations.push({
+        id: `${callReview.id}_feedback`,
+        callReviewId: callReview.id,
+        area: built.area,
+        text: built.text,
+        sourceTitle,
+        sourceDate: callReview.callReviewDate || callReview.createdAt || '',
+        sourceCategory: capitalizeSentence(callReview.callReviewSentiment || callReview.callReviewCallType || 'Call review'),
+        sourceLabel: 'Manager feedback'
+      });
+    }
+  });
+
+  const seen = new Set();
+  return recommendations.filter(item => {
+    const key = `${normalizeComparable(item.area)}|${normalizeComparable(item.text)}`;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildHistoricalPlanRecommendations(writeups, callReviews){
+  return [
+    ...buildWriteupActionRecommendations(writeups),
+    ...buildCallReviewActionRecommendations(callReviews)
+  ];
+}
+
+function seedNewPlanHistoricalSelections(employeeId){
+  const writeups = employeeId ? writeupsForEmployee(employeeId) : [];
+  const callReviews = employeeId ? callReviewsForEmployee(employeeId) : [];
+  UI.newPlanDraft.selectedWriteupIds = writeups.map(writeup => writeup.id);
+  UI.newPlanDraft.selectedCallReviewIds = callReviews.map(callReview => callReview.id);
+  UI.newPlanDraft.recommendedActionItems = buildHistoricalPlanRecommendations(writeups, callReviews);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+}
+
 function selectedNewPlanRecommendationItems(){
   const selectedIds = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
   return dedupeActionItems((UI.newPlanDraft.recommendedActionItems || [])
@@ -1748,10 +1818,7 @@ function syncNewPlanWriteupTools(){
 
 function setNewPlanEmployee(employeeId){
   UI.newPlanDraft.employeeId = String(employeeId || '');
-  const writeups = UI.newPlanDraft.employeeId ? writeupsForEmployee(UI.newPlanDraft.employeeId) : [];
-  UI.newPlanDraft.selectedWriteupIds = writeups.map(writeup => writeup.id);
-  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
-  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  seedNewPlanHistoricalSelections(UI.newPlanDraft.employeeId);
   syncNewPlanManager();
   updatePlanTypeSuggestion(false);
   syncNewPlanWriteupTools();
@@ -1763,8 +1830,29 @@ function toggleNewPlanWriteup(writeupId, checked){
   else next.delete(writeupId);
   UI.newPlanDraft.selectedWriteupIds = [...next];
   const writeups = writeupsForEmployee(UI.newPlanDraft.employeeId).filter(writeup => next.has(writeup.id));
+  const callReviewIds = new Set(UI.newPlanDraft.selectedCallReviewIds || []);
+  const callReviews = callReviewsForEmployee(UI.newPlanDraft.employeeId).filter(callReview => callReviewIds.has(callReview.id));
   const previousSelections = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
-  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
+  UI.newPlanDraft.recommendedActionItems = buildHistoricalPlanRecommendations(writeups, callReviews);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems
+    .map(item => item.id)
+    .filter(id => previousSelections.has(id));
+  if(!UI.newPlanDraft.selectedRecommendationIds.length){
+    UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  }
+  syncNewPlanWriteupTools();
+}
+
+function toggleNewPlanCallReview(callReviewId, checked){
+  const next = new Set(UI.newPlanDraft.selectedCallReviewIds || []);
+  if(checked) next.add(callReviewId);
+  else next.delete(callReviewId);
+  UI.newPlanDraft.selectedCallReviewIds = [...next];
+  const writeupIds = new Set(UI.newPlanDraft.selectedWriteupIds || []);
+  const writeups = writeupsForEmployee(UI.newPlanDraft.employeeId).filter(writeup => writeupIds.has(writeup.id));
+  const callReviews = callReviewsForEmployee(UI.newPlanDraft.employeeId).filter(callReview => next.has(callReview.id));
+  const previousSelections = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
+  UI.newPlanDraft.recommendedActionItems = buildHistoricalPlanRecommendations(writeups, callReviews);
   UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems
     .map(item => item.id)
     .filter(id => previousSelections.has(id));
@@ -1801,41 +1889,71 @@ function renderNewPlanWriteupTools(){
   const employeeId = UI.newPlanDraft.employeeId || '';
   const employee = employeeId ? getEmployee(employeeId) : null;
   if(!employee){
-    return '<div class="history-card"><h4>Historical write-up remedies</h4><div class="small muted">Select an employee to review historical write-ups and pull recommended remedies into the new plan.</div></div>';
+    return '<div class="history-card"><h4>Historical support records</h4><div class="small muted">Select an employee to review historical write-ups and call reviews, then pull recommended remedies into the new plan.</div></div>';
   }
 
   const writeups = writeupsForEmployee(employee.id);
-  if(!writeups.length){
-    return '<div class="history-card"><h4>Historical write-up remedies</h4><div class="small muted">No write-ups are on file for this employee yet, so only uploaded source documents and manual action items will feed this plan.</div></div>';
+  const callReviews = callReviewsForEmployee(employee.id);
+  if(!writeups.length && !callReviews.length){
+    return '<div class="history-card"><h4>Historical support records</h4><div class="small muted">No write-ups or call reviews are on file for this employee yet, so only uploaded source documents and manual action items will feed this plan.</div></div>';
   }
 
   const selectedWriteups = new Set(UI.newPlanDraft.selectedWriteupIds || []);
+  const selectedCallReviews = new Set(UI.newPlanDraft.selectedCallReviewIds || []);
   const selectedRecommendations = new Set(UI.newPlanDraft.selectedRecommendationIds || []);
   const recommendation = evaluateWriteupRecommendation(employee.id);
   const alertClass = recommendation.tone === 'danger' ? 'alert-danger' : recommendation.tone === 'warn' ? 'alert-warn' : 'alert-info';
 
   return `
     <div class="history-card">
-      <h4>Historical write-up remedies</h4>
-      <div class="small muted" style="margin-top:6px">Select the write-ups that should inform this new plan. The platform will suggest detailed remedies you can add to the action-item list.</div>
+      <h4>Historical support records</h4>
+      <div class="small muted" style="margin-top:6px">Select the write-ups and call reviews that should inform this new plan. The platform will suggest detailed remedies you can add to the action-item list.</div>
       <div class="alert ${alertClass}" style="margin-top:12px">${escapeHtml(recommendation.message)}</div>
-      <div class="stack" style="margin-top:12px">
-        ${writeups.map(writeup => `
-          <label class="history-card" style="background:#fff">
-            <div class="checkbox-row">
-              <input type="checkbox" ${selectedWriteups.has(writeup.id) ? 'checked' : ''} onchange="toggleNewPlanWriteup('${writeup.id}', this.checked)">
-              <div style="flex:1">
-                <div class="inline" style="margin-bottom:6px">
-                  <strong>${escapeHtml(writeup.title || writeupLevelLabel(writeup.level))}</strong>
-                  <span class="badge ${writeupLevelBadgeClass(writeup.level)}">${escapeHtml(writeupLevelLabel(writeup.level))}</span>
-                  <span class="badge badge-soft">${escapeHtml(formatDate(writeup.date || writeup.createdAt || ''))}</span>
+      ${writeups.length ? `
+        <div style="margin-top:14px">
+          <h4>Historical write-ups</h4>
+          <div class="stack" style="margin-top:10px">
+            ${writeups.map(writeup => `
+              <label class="history-card" style="background:#fff">
+                <div class="checkbox-row">
+                  <input type="checkbox" ${selectedWriteups.has(writeup.id) ? 'checked' : ''} onchange="toggleNewPlanWriteup('${writeup.id}', this.checked)">
+                  <div style="flex:1">
+                    <div class="inline" style="margin-bottom:6px">
+                      <strong>${escapeHtml(writeup.title || writeupLevelLabel(writeup.level))}</strong>
+                      <span class="badge ${writeupLevelBadgeClass(writeup.level)}">${escapeHtml(writeupLevelLabel(writeup.level))}</span>
+                      <span class="badge badge-soft">${escapeHtml(formatDate(writeup.date || writeup.createdAt || ''))}</span>
+                    </div>
+                    <div class="small muted">${escapeHtml(writeup.category)} · ${escapeHtml((writeup.details || '').slice(0, 180) || 'No details saved.')}${(writeup.details || '').length > 180 ? '...' : ''}</div>
+                  </div>
                 </div>
-                <div class="small muted">${escapeHtml(writeup.category)} · ${escapeHtml((writeup.details || '').slice(0, 180) || 'No details saved.')}${(writeup.details || '').length > 180 ? '...' : ''}</div>
-              </div>
-            </div>
-          </label>
-        `).join('')}
-      </div>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${callReviews.length ? `
+        <div style="margin-top:16px">
+          <h4>Historical call reviews</h4>
+          <div class="stack" style="margin-top:10px">
+            ${callReviews.map(callReview => `
+              <label class="history-card" style="background:#fff">
+                <div class="checkbox-row">
+                  <input type="checkbox" ${selectedCallReviews.has(callReview.id) ? 'checked' : ''} onchange="toggleNewPlanCallReview('${callReview.id}', this.checked)">
+                  <div style="flex:1">
+                    <div class="inline" style="margin-bottom:6px">
+                      <strong>${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call review'))} call</strong>
+                      <span class="badge badge-call-review">${planTypeUpperLabel('call_review')}</span>
+                      <span class="badge badge-soft">${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))}</span>
+                    </div>
+                    <div class="small muted">${escapeHtml(callReview.callReviewContact || 'No contact saved')} · Manager ${callReview.callReviewManagerScore != null ? escapeHtml(callReview.callReviewManagerScore + '%') : 'N/A'} · ${escapeHtml(capitalizeSentence(callReview.callReviewSentiment || 'Not set'))}</div>
+                    <div class="small muted" style="margin-top:6px">${escapeHtml((callReview.callReviewManagerFeedback || callReview.callReviewDetails || 'No details saved.').slice(0, 180))}${((callReview.callReviewManagerFeedback || callReview.callReviewDetails || '').length > 180) ? '...' : ''}</div>
+                  </div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
       <div style="margin-top:16px">
         <h4>${UI.newPlanDraft.recommendedActionItems.length} recommended remed${UI.newPlanDraft.recommendedActionItems.length === 1 ? 'y' : 'ies'}</h4>
         ${UI.newPlanDraft.recommendedActionItems.length ? `
@@ -1862,7 +1980,7 @@ function renderNewPlanWriteupTools(){
             <button class="btn btn-accent btn-sm" onclick="mergeSelectedNewPlanRecommendations(true)">Replace action items</button>
             <span class="small muted">${selectedNewPlanRecommendationItems().length} selected for the plan</span>
           </div>
-        ` : '<div class="alert alert-info" style="margin-top:10px">Select one or more write-ups to generate recommended remedies for this plan.</div>'}
+        ` : '<div class="alert alert-info" style="margin-top:10px">Select one or more write-ups or call reviews to generate recommended remedies for this plan.</div>'}
       </div>
     </div>
   `;
@@ -2152,6 +2270,7 @@ function renderShell(){
   const navItems = [
     ['dashboard','Dashboard'],
     ['plans','Active Plans'],
+    ['callreviews','Call Reviews'],
     ['shop','Shop'],
     ['newplan','+ New Plan'],
     ['weekly','Weekly Updates'],
@@ -2204,6 +2323,7 @@ function logout(){
 function renderView(){
   if(UI.currentView === 'profile') return renderEmployeeProfile();
   if(UI.currentView === 'plans') return renderPlans();
+  if(UI.currentView === 'callreviews') return renderCallReviews();
   if(UI.currentView === 'shop') return renderShop();
   if(UI.currentView === 'newplan') return renderNewPlan();
   if(UI.currentView === 'weekly') return renderWeekly();
@@ -2217,13 +2337,15 @@ function renderView(){
 function openNewPlanForEmployee(employeeId){
   UI.newPlanDraft = makeNewPlanDraft();
   UI.newPlanDraft.employeeId = String(employeeId || '');
-  const writeups = UI.newPlanDraft.employeeId ? writeupsForEmployee(UI.newPlanDraft.employeeId) : [];
-  UI.newPlanDraft.selectedWriteupIds = writeups.map(writeup => writeup.id);
-  UI.newPlanDraft.recommendedActionItems = buildWriteupActionRecommendations(writeups);
-  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  seedNewPlanHistoricalSelections(UI.newPlanDraft.employeeId);
   UI.currentView = 'newplan';
   saveState();
   render();
+}
+
+function openNewCallReviewForEmployee(employeeId){
+  UI.newPlanType = 'call_review';
+  openNewPlanForEmployee(employeeId);
 }
 
 function pendingHrApprovalPlans(){
@@ -3444,6 +3566,7 @@ function buildPlanFromForm(){
     consequences: UI.newPlanType === 'pip',
     requiresUpdatedShop: !isCallReview && !!(requiresUpdatedShopField && requiresUpdatedShopField.checked),
     linkedWriteupIds: [...(UI.newPlanDraft.selectedWriteupIds || [])],
+    linkedCallReviewIds: [...(UI.newPlanDraft.selectedCallReviewIds || [])],
     shopSourceName: UI.newPlanDraft.shopSourceFileName || '',
     msoeSourceName: UI.newPlanDraft.msoeSourceFileName || '',
     planSourceName: UI.newPlanDraft.planSourceFileName || '',
@@ -5436,9 +5559,150 @@ function downloadCallReviewSource(planId){
   link.click();
 }
 
+function selectCallReviewEmployee(employeeId){
+  UI.selectedCallReviewEmployeeId = employeeId;
+  render();
+}
+
+function selectedCallReviewEmployee(){
+  const employees = sortedVisibleEmployees();
+  if(UI.selectedCallReviewEmployeeId && employees.some(employee => employee.id === UI.selectedCallReviewEmployeeId)){
+    return getEmployee(UI.selectedCallReviewEmployeeId);
+  }
+  const firstWithReview = employees.find(employee => callReviewsForEmployee(employee.id).length);
+  const selected = firstWithReview || employees[0] || null;
+  UI.selectedCallReviewEmployeeId = selected ? selected.id : null;
+  return selected;
+}
+
+function openPlanBuilderFromCallReview(callReviewId){
+  const callReview = getPlan(callReviewId);
+  if(!callReview || callReview.type !== 'call_review') return;
+  UI.newPlanType = 'coaching';
+  UI.newPlanDraft = makeNewPlanDraft();
+  UI.newPlanDraft.employeeId = callReview.employeeId;
+  seedNewPlanHistoricalSelections(callReview.employeeId);
+  UI.newPlanDraft.selectedCallReviewIds = [callReview.id];
+  const writeupIds = new Set(UI.newPlanDraft.selectedWriteupIds || []);
+  const writeups = writeupsForEmployee(callReview.employeeId).filter(writeup => writeupIds.has(writeup.id));
+  UI.newPlanDraft.recommendedActionItems = buildHistoricalPlanRecommendations(writeups, [callReview]);
+  UI.newPlanDraft.selectedRecommendationIds = UI.newPlanDraft.recommendedActionItems.map(item => item.id);
+  UI.currentView = 'newplan';
+  saveState();
+  render();
+}
+
+function openWriteupFromCallReview(callReviewId){
+  const callReview = getPlan(callReviewId);
+  if(!callReview || callReview.type !== 'call_review') return;
+  UI.selectedWriteupEmployeeId = callReview.employeeId;
+  UI.writeupDraft.selectedCallReviewIds = [callReview.id];
+  UI.currentView = 'writeups';
+  saveState();
+  render();
+}
+
 function selectWriteupEmployee(employeeId){
   UI.selectedWriteupEmployeeId = employeeId;
   render();
+}
+
+function toggleWriteupCallReview(callReviewId, checked){
+  const next = new Set(UI.writeupDraft.selectedCallReviewIds || []);
+  if(checked) next.add(callReviewId);
+  else next.delete(callReviewId);
+  UI.writeupDraft.selectedCallReviewIds = [...next];
+  const host = document.getElementById('wu-call-review-tools');
+  if(host) host.innerHTML = renderWriteupCallReviewTools();
+}
+
+function selectedWriteupCallReviews(){
+  const selectedIds = new Set(UI.writeupDraft.selectedCallReviewIds || []);
+  const employee = selectedWriteupEmployee();
+  if(!employee) return [];
+  return callReviewsForEmployee(employee.id).filter(callReview => selectedIds.has(callReview.id));
+}
+
+function appendTextBlocks(fieldId, blocks){
+  const textarea = document.getElementById(fieldId);
+  if(!textarea) return;
+  const incoming = (Array.isArray(blocks) ? blocks : []).map(block => String(block || '').trim()).filter(Boolean);
+  if(!incoming.length){
+    alert('Select at least one call review first.');
+    return;
+  }
+  const current = String(textarea.value || '').trim();
+  textarea.value = current ? `${current}\n\n${incoming.join('\n\n')}` : incoming.join('\n\n');
+}
+
+function mergeSelectedCallReviewDetailsIntoWriteup(){
+  const blocks = selectedWriteupCallReviews().map(callReview => {
+    const parts = [
+      `Call review ${formatDate(callReview.callReviewDate || callReview.createdAt || '')} (${capitalizeSentence(callReview.callReviewCallType || 'call')})`,
+      callReview.callReviewContact ? `Contact: ${callReview.callReviewContact}` : '',
+      callReview.callReviewManagerScore != null ? `Manager score: ${callReview.callReviewManagerScore}%` : '',
+      callReview.callReviewEmployeeScore != null ? `Employee self-grade: ${callReview.callReviewEmployeeScore}%` : '',
+      callReview.callReviewSentiment ? `Sentiment: ${capitalizeSentence(callReview.callReviewSentiment)}` : '',
+      callReview.callReviewDetails ? `Call detail: ${callReview.callReviewDetails}` : ''
+    ].filter(Boolean);
+    return parts.join('\n');
+  });
+  appendTextBlocks('wu-details', blocks);
+}
+
+function mergeSelectedCallReviewFeedbackIntoWriteup(){
+  const blocks = selectedWriteupCallReviews().map(callReview => {
+    const parts = [
+      `Call review follow-up ${formatDate(callReview.callReviewDate || callReview.createdAt || '')}`,
+      callReview.callReviewManagerFeedback ? `Manager feedback: ${callReview.callReviewManagerFeedback}` : '',
+      (callReview.actionItems || []).length ? `Action items: ${(callReview.actionItems || []).map(item => `${item.area || 'General'} - ${item.text || ''}`).join('; ')}` : ''
+    ].filter(Boolean);
+    return parts.join('\n');
+  });
+  appendTextBlocks('wu-corrective-action', blocks);
+}
+
+function renderWriteupCallReviewTools(){
+  const employee = selectedWriteupEmployee();
+  if(!employee){
+    return '<div class="history-card"><h4>Call review support</h4><div class="small muted">Select an employee to attach supporting call reviews to this write-up.</div></div>';
+  }
+
+  const callReviews = callReviewsForEmployee(employee.id);
+  if(!callReviews.length){
+    return '<div class="history-card"><h4>Call review support</h4><div class="small muted">No call reviews are on file for this employee yet.</div></div>';
+  }
+
+  const selectedIds = new Set(UI.writeupDraft.selectedCallReviewIds || []);
+  return `
+    <div class="history-card">
+      <h4>Call review support</h4>
+      <div class="small muted" style="margin-top:6px">Select one or more call reviews to reference in this write-up, then pull the detail or manager feedback into the form.</div>
+      <div class="stack" style="margin-top:12px">
+        ${callReviews.map(callReview => `
+          <label class="history-card" style="background:#fff">
+            <div class="checkbox-row">
+              <input type="checkbox" ${selectedIds.has(callReview.id) ? 'checked' : ''} onchange="toggleWriteupCallReview('${callReview.id}', this.checked)">
+              <div style="flex:1">
+                <div class="inline" style="margin-bottom:6px">
+                  <strong>${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call review'))} call</strong>
+                  <span class="badge badge-call-review">${planTypeUpperLabel('call_review')}</span>
+                  <span class="badge badge-soft">${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))}</span>
+                </div>
+                <div class="small muted">Manager ${callReview.callReviewManagerScore != null ? escapeHtml(callReview.callReviewManagerScore + '%') : 'N/A'} · Sentiment ${escapeHtml(capitalizeSentence(callReview.callReviewSentiment || 'Not set'))} · ${escapeHtml(callReview.callReviewContact || 'No contact saved')}</div>
+                <div class="small muted" style="margin-top:6px">${escapeHtml((callReview.callReviewManagerFeedback || callReview.callReviewDetails || 'No detail saved.').slice(0, 180))}${((callReview.callReviewManagerFeedback || callReview.callReviewDetails || '').length > 180) ? '...' : ''}</div>
+              </div>
+            </div>
+          </label>
+        `).join('')}
+      </div>
+      <div class="inline" style="margin-top:12px">
+        <button class="btn btn-soft btn-sm" onclick="mergeSelectedCallReviewDetailsIntoWriteup()">Add selected detail</button>
+        <button class="btn btn-accent btn-sm" onclick="mergeSelectedCallReviewFeedbackIntoWriteup()">Add manager feedback</button>
+        <span class="small muted">${selectedWriteupCallReviews().length} selected for this write-up</span>
+      </div>
+    </div>
+  `;
 }
 
 function renderWriteupSourceStatus(){
@@ -5584,6 +5848,7 @@ function buildWriteupFromForm(){
     correctiveAction: String(document.getElementById('wu-corrective-action').value || '').trim(),
     consequences: String(document.getElementById('wu-consequences').value || '').trim(),
     manager: String(document.getElementById('wu-manager').value || '').trim() || managerDisplayName(employee) || (STATE.currentUser ? STATE.currentUser.name : ''),
+    linkedCallReviewIds: [...(UI.writeupDraft.selectedCallReviewIds || [])],
     sourceFileName: UI.writeupDraft.sourceFileName || '',
     sourceSummary: UI.writeupDraft.sourceSummary || '',
     sourceDocData: UI.writeupDraft.sourceDocData || '',
@@ -5952,6 +6217,8 @@ function renderWriteups(){
             <div id="wu-ack-status" style="margin-top:12px">${renderWriteupAcknowledgementStatus()}</div>
           </div>
 
+          <div id="wu-call-review-tools" style="margin-top:12px">${renderWriteupCallReviewTools()}</div>
+
           <div style="margin-top:14px">
             <label>Incident details</label>
             <textarea id="wu-details" placeholder="Describe what happened, who was involved, supporting facts, and what the leader observed.">${escapeHtml(UI.writeupDraft.extractedDetailText || '')}</textarea>
@@ -5996,6 +6263,15 @@ function renderWriteups(){
                 </div>
                 <div class="small muted" style="margin-bottom:8px">Write-up date: ${formatDate(writeup.date)} · Incident date: ${formatDate(writeup.incidentDate || writeup.date)} · Manager: ${escapeHtml(writeup.manager || 'Not set')}</div>
                 <div class="small" style="margin-bottom:8px">${escapeHtml(writeup.details)}</div>
+                ${writeup.linkedCallReviewIds && writeup.linkedCallReviewIds.length ? `
+                  <div class="tiny muted" style="margin-bottom:8px">
+                    Linked call reviews:
+                    ${writeup.linkedCallReviewIds.map(callReviewId => {
+                      const callReview = getPlan(callReviewId);
+                      return callReview ? `${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))} (${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call'))})` : '';
+                    }).filter(Boolean).join(' · ')}
+                  </div>
+                ` : ''}
                 ${writeup.sourceFileName ? `<div class="tiny muted" style="margin-bottom:8px">Support detail used: ${escapeHtml(writeup.sourceFileName)}</div>` : ''}
                 ${writeup.acknowledgementName ? `<div class="tiny muted" style="margin-bottom:8px">Acknowledgement saved: ${escapeHtml(writeup.acknowledgementName)}${writeup.acknowledgementDate ? ` · ${escapeHtml(formatDate(writeup.acknowledgementDate))}` : ''}</div>` : '<div class="tiny muted" style="margin-bottom:8px">Acknowledgement not uploaded yet.</div>'}
                 <div class="inline">
@@ -6014,10 +6290,118 @@ function renderWriteups(){
   `;
 }
 
+function renderCallReviews(){
+  const employees = sortedVisibleEmployees();
+  const selectedEmployee = selectedCallReviewEmployee();
+  const selectedEmployeeCallReviews = selectedEmployee ? callReviewsForEmployee(selectedEmployee.id) : [];
+  const employeeSummary = employees.map(employee => {
+    const reviews = callReviewsForEmployee(employee.id);
+    const latest = reviews[0] || null;
+    const managerScores = reviews.filter(review => review.callReviewManagerScore != null).map(review => Number(review.callReviewManagerScore));
+    const averageManagerScore = managerScores.length
+      ? Math.round((managerScores.reduce((sum, score) => sum + score, 0) / managerScores.length) * 10) / 10
+      : null;
+    return {
+      employee,
+      count: reviews.length,
+      latest,
+      averageManagerScore
+    };
+  }).sort((left, right) => right.count - left.count || left.employee.name.localeCompare(right.employee.name));
+
+  return `
+    <div class="page">
+      <div class="grid-2-equal">
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Call review tracker</h2>
+              <p>Track saved resident and prospect call reviews by employee, then move the right review into coaching, PIP, or write-up workflows.</p>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Reviews</th>
+                  <th>Latest score</th>
+                  <th>Average</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employeeSummary.length ? employeeSummary.map(item => `
+                  <tr>
+                    <td>
+                      ${renderEmployeeProfileLink(item.employee)}
+                      <div class="small muted">${escapeHtml(item.employee.community || item.employee.department || 'No mapping')}</div>
+                    </td>
+                    <td>${item.count}</td>
+                    <td>${item.latest && item.latest.callReviewManagerScore != null ? `${escapeHtml(item.latest.callReviewManagerScore)}%` : '<span class="badge badge-soft">N/A</span>'}</td>
+                    <td>${item.averageManagerScore != null ? `${escapeHtml(item.averageManagerScore)}%` : '<span class="badge badge-soft">N/A</span>'}</td>
+                    <td><button class="btn btn-sm ${selectedEmployee && selectedEmployee.id === item.employee.id ? 'btn-primary' : 'btn-soft'}" onclick="selectCallReviewEmployee('${item.employee.id}')">${selectedEmployee && selectedEmployee.id === item.employee.id ? 'Selected' : 'Review'}</button></td>
+                  </tr>
+                `).join('') : '<tr><td colspan="5"><div class="alert alert-info">No employees are available for call review tracking.</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <div>
+              <h2>Selected employee call reviews</h2>
+              <p>Open the saved review, start a new review, or carry a specific call review into a write-up or Coaching/PIP plan.</p>
+            </div>
+          </div>
+
+          ${selectedEmployee ? `
+            <div class="alert alert-info" style="margin-bottom:12px">
+              ${renderEmployeeProfileLink(selectedEmployee)} · ${escapeHtml(selectedEmployee.role || 'Employee')}<br>
+              ${escapeHtml(selectedEmployee.community || selectedEmployee.department || 'No mapping')} · Manager: ${escapeHtml(managerDisplayName(selectedEmployee) || 'Not set')}
+            </div>
+            <div class="inline" style="margin-bottom:14px">
+              <button class="btn btn-primary" onclick="openNewCallReviewForEmployee('${selectedEmployee.id}')">New call review</button>
+              <button class="btn btn-accent" onclick="openNewPlanForEmployee('${selectedEmployee.id}')">New coaching / PIP plan</button>
+              <button class="btn btn-soft" onclick="selectWriteupEmployee('${selectedEmployee.id}');switchView('writeups')">Open write-ups</button>
+            </div>
+          ` : '<div class="alert alert-info">Select an employee to review saved call review history.</div>'}
+
+          ${selectedEmployee ? (selectedEmployeeCallReviews.length ? `
+            <div class="stack">
+              ${selectedEmployeeCallReviews.map(callReview => `
+                <div class="history-card">
+                  <div class="inline" style="margin-bottom:8px">
+                    <strong>${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call review'))} call</strong>
+                    <span class="badge badge-call-review">${planTypeUpperLabel('call_review')}</span>
+                    <span class="badge badge-soft">${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))}</span>
+                  </div>
+                  <div class="small muted" style="margin-bottom:8px">Manager score: ${callReview.callReviewManagerScore != null ? escapeHtml(callReview.callReviewManagerScore + '%') : 'Not set'} · Employee self-grade: ${callReview.callReviewEmployeeScore != null ? escapeHtml(callReview.callReviewEmployeeScore + '%') : 'Not set'} · Sentiment: ${escapeHtml(capitalizeSentence(callReview.callReviewSentiment || 'Not set'))}</div>
+                  <div class="small muted" style="margin-bottom:8px">Contact: ${escapeHtml(callReview.callReviewContact || 'Not set')} ${callReview.callReviewTime ? `· ${escapeHtml(callReview.callReviewTime)}` : ''}</div>
+                  <div class="small" style="margin-bottom:8px">${escapeHtml((callReview.callReviewManagerFeedback || callReview.callReviewDetails || 'No details saved.').slice(0, 220))}${((callReview.callReviewManagerFeedback || callReview.callReviewDetails || '').length > 220) ? '...' : ''}</div>
+                  <div class="inline">
+                    <button class="btn btn-sm btn-soft" onclick="openPlanDetail('${callReview.id}')">Open review</button>
+                    <button class="btn btn-sm btn-primary" onclick="openPlanBuilderFromCallReview('${callReview.id}')">Use in coaching / PIP</button>
+                    <button class="btn btn-sm btn-accent" onclick="openWriteupFromCallReview('${callReview.id}')">Use in write-up</button>
+                    ${callReview.callReviewSourceData ? `<button class="btn btn-sm btn-soft" onclick="downloadCallReviewSource('${callReview.id}')">Download file</button>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="alert alert-info">No call reviews have been saved for this employee yet.</div>') : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function openWriteupDocument(writeupId){
   const writeup = getWriteup(writeupId);
   if(!writeup) return;
   const employee = getEmployee(writeup.employeeId);
+  const linkedCallReviews = (writeup.linkedCallReviewIds || []).map(callReviewId => getPlan(callReviewId)).filter(callReview => callReview && callReview.type === 'call_review');
   const doc = window.open('', '_blank');
   doc.document.write(`
     <!DOCTYPE html>
@@ -6069,6 +6453,16 @@ function openWriteupDocument(writeupId){
         <div class="panel">
           <h2>Corrective Action / Next Steps</h2>
           <div style="white-space:pre-wrap">${escapeHtml(writeup.correctiveAction || 'Not provided')}</div>
+        </div>
+        <div class="panel">
+          <h2>Linked Call Reviews</h2>
+          ${linkedCallReviews.length ? linkedCallReviews.map(callReview => `
+            <div style="margin-bottom:12px">
+              <strong>${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))} · ${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call'))} call</strong><br>
+              <span>Manager score: ${callReview.callReviewManagerScore != null ? escapeHtml(callReview.callReviewManagerScore + '%') : 'Not set'} · Sentiment: ${escapeHtml(capitalizeSentence(callReview.callReviewSentiment || 'Not set'))}</span><br>
+              <span>${escapeHtml(callReview.callReviewManagerFeedback || callReview.callReviewDetails || 'No details saved.')}</span>
+            </div>
+          `).join('') : 'No linked call reviews.'}
         </div>
         <div class="panel">
           <h2>Consequences if Not Corrected</h2>
@@ -7107,6 +7501,8 @@ function openPlanDetail(planId){
   const plan = getPlan(planId);
   if(!plan) return;
   const employee = getEmployee(plan.employeeId);
+  const linkedWriteups = (plan.linkedWriteupIds || []).map(writeupId => getWriteup(writeupId)).filter(Boolean);
+  const linkedCallReviews = (plan.linkedCallReviewIds || []).map(callReviewId => getPlan(callReviewId)).filter(callReview => callReview && callReview.type === 'call_review');
   const schedule = getSchedule(plan);
   const alerts = getPlanAlerts(plan);
   const locked = isPlanLocked(plan);
@@ -7187,7 +7583,11 @@ function openPlanDetail(planId){
               <div class="history-card">
                 <strong>Document output</strong>
                 <div class="small muted" style="margin:6px 0 10px">Open the formatted call review record for printing or PDF export.</div>
-                <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
+                <div class="inline">
+                  <button class="btn btn-sm btn-accent" onclick="exportPlanDocument('${plan.id}')">Open generated document</button>
+                  <button class="btn btn-sm btn-primary" onclick="closeModal();openPlanBuilderFromCallReview('${plan.id}')">Use in coaching / PIP</button>
+                  <button class="btn btn-sm btn-soft" onclick="closeModal();openWriteupFromCallReview('${plan.id}')">Use in write-up</button>
+                </div>
               </div>
             ` : `
               <div class="history-card">
@@ -7227,6 +7627,15 @@ function openPlanDetail(planId){
                     ${plan.shopSourceName ? `Shop source: ${escapeHtml(plan.shopSourceName)}` : 'Shop source not saved'}<br>
                     ${plan.msoeSourceName ? `MSOE source: ${escapeHtml(plan.msoeSourceName)}` : 'MSOE source not saved'}<br>
                     ${plan.planSourceName ? `Plan source: ${escapeHtml(plan.planSourceName)}` : 'Plan source not saved'}
+                  </div>
+                </div>
+              ` : ''}
+              ${(linkedWriteups.length || linkedCallReviews.length) ? `
+                <div class="history-card">
+                  <strong>Linked support history</strong>
+                  <div class="small muted" style="margin-top:6px">
+                    ${linkedWriteups.length ? `Write-ups: ${linkedWriteups.map(writeup => escapeHtml(writeup.title || writeupLevelLabel(writeup.level))).join(' · ')}` : 'Write-ups: None linked'}<br>
+                    ${linkedCallReviews.length ? `Call reviews: ${linkedCallReviews.map(callReview => `${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))} (${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call'))})`).join(' · ')}` : 'Call reviews: None linked'}
                   </div>
                 </div>
               ` : ''}
@@ -7629,6 +8038,8 @@ function exportPlanDocument(planId){
   const plan = getPlan(planId);
   if(!plan) return;
   const employee = getEmployee(plan.employeeId);
+  const linkedWriteups = (plan.linkedWriteupIds || []).map(writeupId => getWriteup(writeupId)).filter(Boolean);
+  const linkedCallReviews = (plan.linkedCallReviewIds || []).map(callReviewId => getPlan(callReviewId)).filter(callReview => callReview && callReview.type === 'call_review');
   const showPerformanceScores = Boolean(plan.shopSourceName);
   const msoeHistory = msoeHistoryForEmployee(plan.employeeId, plan.id);
   const showMsoeTrend = (plan.msoeScore != null) || msoeHistory.length;
@@ -7793,6 +8204,23 @@ function exportPlanDocument(planId){
         `).join('') : '<div class="panel">No action items attached to this plan.</div>'}
         <h2>Manager Notes</h2>
         <div class="panel">${plan.notes ? escapeHtml(plan.notes).replace(/\n/g, '<br>') : 'No notes entered.'}</div>
+        ${(linkedWriteups.length || linkedCallReviews.length) ? `
+          <h2>Linked Support History</h2>
+          <div class="panel">
+            ${linkedWriteups.length ? `
+              <div style="margin-bottom:12px">
+                <strong>Write-Ups</strong><br>
+                ${linkedWriteups.map(writeup => `${escapeHtml(writeup.title || writeupLevelLabel(writeup.level))} · ${escapeHtml(formatDate(writeup.date || writeup.createdAt || ''))}`).join('<br>')}
+              </div>
+            ` : ''}
+            ${linkedCallReviews.length ? `
+              <div>
+                <strong>Call Reviews</strong><br>
+                ${linkedCallReviews.map(callReview => `${escapeHtml(formatDate(callReview.callReviewDate || callReview.createdAt || ''))} · ${escapeHtml(capitalizeSentence(callReview.callReviewCallType || 'Call'))} · Manager ${callReview.callReviewManagerScore != null ? escapeHtml(callReview.callReviewManagerScore + '%') : 'N/A'}`).join('<br>')}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
         <h2>Expectations and Accountability</h2>
         <div class="panel">
           Weekly follow-up meetings will be completed throughout the plan term. Progress will be reviewed against the action items listed above, with due dates running from the presentation date through the review date.
@@ -8433,6 +8861,7 @@ function resetAllData(){
     planFilter: 'active',
     selectedWeeklyPlanId: null,
     selectedWriteupEmployeeId: null,
+    selectedCallReviewEmployeeId: null,
     selectedEmployeeProfileId: null,
     profileReturnView: 'employees',
     newPlanType: 'coaching',
