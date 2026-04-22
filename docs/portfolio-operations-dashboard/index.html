@@ -491,6 +491,35 @@ const PROPERTIES = [
   { name: "Sereno", units: 320 },
   { name: "Glen Kernan Park", units: 308 },
 ];
+const OPS_PROPERTY_CATALOG_KEY = "rise_ops_property_catalog_v1";
+function persistOpsPropertyCatalog() {
+  try {
+    const existingRaw = localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
+    const existing = existingRaw ? JSON.parse(existingRaw) : null;
+    const merged = new Map();
+    const collect = (entries) => {
+      (Array.isArray(entries) ? entries : []).forEach((prop) => {
+        const name = String(prop?.name ?? "").trim();
+        if(!name) return;
+        const current = merged.get(name) || { name, units: null };
+        merged.set(name, {
+          name,
+          units: current.units ?? prop?.units ?? null
+        });
+      });
+    };
+    collect(PROPERTIES.map((prop) => ({ name: prop.name, units: prop.units ?? null })));
+    collect(existing?.properties);
+    localStorage.setItem(
+      OPS_PROPERTY_CATALOG_KEY,
+      JSON.stringify({
+        updatedAt: new Date().toISOString(),
+        properties: Array.from(merged.values()),
+      }),
+    );
+  } catch {}
+}
+persistOpsPropertyCatalog();
 const CURVES = [
   { key:"budget",    label:"📋 Budget",     color:"#238636", textColor:"#4ade80", lineColor:"#4ade80" },
   { key:"aggressive",label:"🚀 Aggressive", color:"#b91c1c", textColor:"#f87171", lineColor:"#f87171" },
