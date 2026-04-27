@@ -456,6 +456,8 @@ const WINDOWSHADE_DEFAULTS = {
   renewals_future_months: true,
   reputation_scores: false,
   reputation_rollup: false,
+  import_historical_reports: true,
+  import_dlr_summary: true,
   import_workspace: false,
   import_report_export: false,
   import_monthly_presentation: false,
@@ -688,13 +690,15 @@ let renewalImportLog = [];
 let renewalImportSourceLabel = "";
 let marketSurveyImportLog = [];
 let marketSurveyImportSourceLabel = "";
+let historicalImportTarget = defaultHistoricalImportTarget();
+let latestDlrSummary = defaultDlrSummary();
 let portfolioReportMode = "owner";
 let portfolioReportSections = defaultPortfolioReportSections();
 let portfolioReportFilters = defaultPortfolioReportFilters();
 let monthlyPresentationCommunities = [];
 let weeklyExecutiveEmail = defaultWeeklyExecutiveEmailSettings();
-const DASHBOARD_EXTRACT_HEADERS = ["property","month","occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
-const EXTRACT_MAPPABLE_FIELDS = ["occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
+const DASHBOARD_EXTRACT_HEADERS = ["property","month","occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
+const EXTRACT_MAPPABLE_FIELDS = ["occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
 const DEFAULT_EXTRACT_FIELD_MAP = {
   occupied: "occupied",
   leased: "leased",
@@ -708,6 +712,8 @@ const DEFAULT_EXTRACT_FIELD_MAP = {
   budget_occ: "budget_occ",
   market_rent: "market_rent",
   budget_rent: "budget_rent",
+  budget_ner: "budget_ner",
+  rent_roll_total: "rent_roll_total",
   concessions: "concessions",
   ner: "ner",
   renewal_expirations: "renewal_expirations",
@@ -1255,6 +1261,102 @@ function normalizeMarketSurveyData(data) {
         concessionDetails: String(item?.concessionDetails ?? "").trim()
       }))
       .filter(item => item.name)
+  };
+}
+
+function defaultHistoricalImportTarget() {
+  const now = new Date();
+  return {
+    community: "",
+    month: DEFAULT_CURRENT_MONTH,
+    year: now.getFullYear()
+  };
+}
+
+function normalizeHistoricalImportTarget(input = {}) {
+  const defaults = defaultHistoricalImportTarget();
+  return {
+    community: String(input.community ?? defaults.community).trim(),
+    month: Number.isInteger(input.month) ? input.month : Number(input.month ?? defaults.month),
+    year: Number.isInteger(input.year) ? input.year : Number(input.year ?? defaults.year)
+  };
+}
+
+function defaultDlrSummary() {
+  return {
+    sourceFileName: "",
+    importedAt: "",
+    reportPeriodLabel: "",
+    occupancyStartMonth: "",
+    propertyStatus: "",
+    leasedPct: null,
+    occupancyPct: null,
+    trendingOccupancyPct: null,
+    moveInGoalPerWeek: null,
+    activity: {},
+    notes: {
+      tours: [],
+      applications: [],
+      marketing: []
+    },
+    forwardLook: {
+      months: [],
+      leaseExpirations: [],
+      mtm: [],
+      pendingMoveOuts: [],
+      pendingMoveIns: [],
+      budgetedOccupancy: [],
+      projectedOccupancy: [],
+      moveInsNeeded: []
+    },
+    pricing: {
+      totalUnits: null,
+      leasedUnits: null,
+      occupiedUnits: null,
+      avgBudgetRent: null,
+      avgInPlaceRent: null
+    }
+  };
+}
+
+function normalizeDlrSummary(data) {
+  const defaults = defaultDlrSummary();
+  const input = data ?? {};
+  const normalizeArray = (values, mapper = value => value) => Array.isArray(values) ? values.map(mapper) : [];
+  return {
+    ...defaults,
+    sourceFileName: String(input.sourceFileName ?? defaults.sourceFileName).trim(),
+    importedAt: String(input.importedAt ?? defaults.importedAt).trim(),
+    reportPeriodLabel: String(input.reportPeriodLabel ?? defaults.reportPeriodLabel).trim(),
+    occupancyStartMonth: String(input.occupancyStartMonth ?? defaults.occupancyStartMonth).trim(),
+    propertyStatus: String(input.propertyStatus ?? defaults.propertyStatus).trim(),
+    leasedPct: Number.isFinite(Number(input.leasedPct)) ? Number(input.leasedPct) : null,
+    occupancyPct: Number.isFinite(Number(input.occupancyPct)) ? Number(input.occupancyPct) : null,
+    trendingOccupancyPct: Number.isFinite(Number(input.trendingOccupancyPct)) ? Number(input.trendingOccupancyPct) : null,
+    moveInGoalPerWeek: Number.isFinite(Number(input.moveInGoalPerWeek)) ? Number(input.moveInGoalPerWeek) : null,
+    activity: (input.activity && typeof input.activity === "object") ? input.activity : {},
+    notes: {
+      tours: normalizeArray(input.notes?.tours, value => String(value ?? "").trim()).filter(Boolean),
+      applications: normalizeArray(input.notes?.applications, value => String(value ?? "").trim()).filter(Boolean),
+      marketing: normalizeArray(input.notes?.marketing, value => String(value ?? "").trim()).filter(Boolean)
+    },
+    forwardLook: {
+      months: normalizeArray(input.forwardLook?.months, value => String(value ?? "").trim()).filter(Boolean),
+      leaseExpirations: normalizeArray(input.forwardLook?.leaseExpirations, value => Number(value ?? 0) || 0),
+      mtm: normalizeArray(input.forwardLook?.mtm, value => Number(value ?? 0) || 0),
+      pendingMoveOuts: normalizeArray(input.forwardLook?.pendingMoveOuts, value => Number(value ?? 0) || 0),
+      pendingMoveIns: normalizeArray(input.forwardLook?.pendingMoveIns, value => Number(value ?? 0) || 0),
+      budgetedOccupancy: normalizeArray(input.forwardLook?.budgetedOccupancy, value => Number(value ?? 0) || 0),
+      projectedOccupancy: normalizeArray(input.forwardLook?.projectedOccupancy, value => Number(value ?? 0) || 0),
+      moveInsNeeded: normalizeArray(input.forwardLook?.moveInsNeeded, value => Number(value ?? 0) || 0)
+    },
+    pricing: {
+      totalUnits: Number.isFinite(Number(input.pricing?.totalUnits)) ? Number(input.pricing.totalUnits) : null,
+      leasedUnits: Number.isFinite(Number(input.pricing?.leasedUnits)) ? Number(input.pricing.leasedUnits) : null,
+      occupiedUnits: Number.isFinite(Number(input.pricing?.occupiedUnits)) ? Number(input.pricing.occupiedUnits) : null,
+      avgBudgetRent: Number.isFinite(Number(input.pricing?.avgBudgetRent)) ? Number(input.pricing.avgBudgetRent) : null,
+      avgInPlaceRent: Number.isFinite(Number(input.pricing?.avgInPlaceRent)) ? Number(input.pricing.avgInPlaceRent) : null
+    }
   };
 }
 
@@ -1890,6 +1992,7 @@ function defaultSavedCommunityRecord(propName = getProp().name) {
     msoeByQuarter: defaultMsoeByQuarter(),
     reputationData: defaultReputationData(),
     marketSurveyData: defaultMarketSurveyData(),
+    latestDlrSummary: defaultDlrSummary(),
     propertyName: prop.name
   };
 }
@@ -1934,6 +2037,7 @@ function normalizeSavedCommunityRecord(propName, data) {
     msoeByQuarter: normalizeMsoeByQuarter(input.msoeByQuarter),
     reputationData: normalizeReputationData(input.reputationData),
     marketSurveyData: normalizeMarketSurveyData(input.marketSurveyData),
+    latestDlrSummary: normalizeDlrSummary(input.latestDlrSummary),
     financialLedger: (input.financialLedger && typeof input.financialLedger === "object") ? input.financialLedger : {},
     financialUpdatedAt: String(input.financialUpdatedAt ?? ""),
     propertyName: propName
@@ -1967,6 +2071,7 @@ function getCurrentCommunityRecord() {
     msoeByQuarter,
     reputationData,
     marketSurveyData,
+    latestDlrSummary,
     financialLedger,
     financialUpdatedAt
   });
@@ -2467,10 +2572,16 @@ function loadPropertyData(propName) {
   msoeByQuarter = d.msoeByQuarter;
   reputationData = d.reputationData;
   marketSurveyData = d.marketSurveyData;
+  latestDlrSummary = d.latestDlrSummary;
   financialLedger = d.financialLedger;
   financialUpdatedAt = d.financialUpdatedAt;
   renewalImportLog = [];
   renewalImportSourceLabel = "";
+  historicalImportTarget = normalizeHistoricalImportTarget({
+    community: historicalImportTarget.community || propName,
+    month: importMonthOverride,
+    year: historicalImportTarget.year
+  });
   restoreCurrentMonthSnapshots(currentMonth);
 }
 
@@ -4472,6 +4583,20 @@ function attachEventListeners() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     processImportFiles(files);
+    e.target.value = "";
+  });
+  const historicalInput = document.getElementById("historical-report-input");
+  if (historicalInput) historicalInput.addEventListener("change", function(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    processHistoricalImportFiles(files);
+    e.target.value = "";
+  });
+  const dlrInput = document.getElementById("dlr-input");
+  if (dlrInput) dlrInput.addEventListener("change", function(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    processDlrFiles(files);
     e.target.value = "";
   });
   const renewalInput = document.getElementById("renewal-input");
@@ -7729,6 +7854,32 @@ function parseMonthIndexValue(value) {
   return isNaN(dateCandidate) ? null : dateCandidate.getMonth();
 }
 
+function buildHistoricalMonthLabel(monthIdx, year = new Date().getFullYear()) {
+  const safeMonth = MONTHS[Math.max(0, Math.min(11, Number(monthIdx) || 0))] || MONTHS[DEFAULT_CURRENT_MONTH];
+  const safeYear = Number.isFinite(Number(year)) ? Number(year) : new Date().getFullYear();
+  return `${safeMonth}-${String(safeYear).slice(-2)}`;
+}
+
+function getHistoricalImportCommunityName() {
+  const matched = matchPropertyName(historicalImportTarget.community, { fallbackToCurrent: false });
+  return matched || getProp().name;
+}
+
+function getHistoricalImportMonthIndex() {
+  return Number.isInteger(historicalImportTarget.month) ? historicalImportTarget.month : Number(historicalImportTarget.month ?? importMonthOverride ?? DEFAULT_CURRENT_MONTH);
+}
+
+function getHistoricalImportYear() {
+  const parsed = Number(historicalImportTarget.year);
+  return Number.isFinite(parsed) && parsed > 2000 ? parsed : new Date().getFullYear();
+}
+
+function getCommunityDlrSummary(propName) {
+  const matchedName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  if (matchedName === getProp().name) return normalizeDlrSummary(latestDlrSummary);
+  return normalizeDlrSummary(savedData?.[matchedName]?.latestDlrSummary);
+}
+
 function normalizeCommunityLookupName(value) {
   return String(value ?? "")
     .toLowerCase()
@@ -7775,6 +7926,13 @@ function getPropertyRecordForApply(propName) {
   return normalizeSavedCommunityRecord(propName, savedData[propName]);
 }
 
+function getForcedImportTarget(options = {}) {
+  const community = options.forcedProperty ? matchPropertyName(options.forcedProperty, { fallbackToCurrent: false }) : "";
+  const monthIdx = Number.isInteger(options.forcedMonthIdx) ? options.forcedMonthIdx : null;
+  const year = Number.isInteger(options.forcedYear) ? options.forcedYear : null;
+  return { community, monthIdx, year };
+}
+
 function applyValueToRecord(record, monthIdx, targetKey, numericValue) {
   if (!record.monthlyData[monthIdx]) record.monthlyData[monthIdx] = defaultMonthly()[monthIdx];
   const md = record.monthlyData[monthIdx];
@@ -7798,6 +7956,8 @@ function applyValueToRecord(record, monthIdx, targetKey, numericValue) {
   if (targetKey === "budget_occ") { md.budgetOcc = numericValue; return true; }
   if (targetKey === "market_rent") { md.marketRent = numericValue; return true; }
   if (targetKey === "budget_rent") { md.proformaRent = numericValue; return true; }
+  if (targetKey === "budget_ner") { md.proformaNER = numericValue; return true; }
+  if (targetKey === "rent_roll_total") { md.rentRollTotal = numericValue; return true; }
   if (targetKey === "concessions") { md.concessions = numericValue; return true; }
   if (targetKey === "ner") { md.nerActual = numericValue; return true; }
   if (targetKey === "renewal_expirations") { md.renewalExpirations = numericValue; return true; }
@@ -10823,10 +10983,44 @@ function draftWeeklyExecutiveOutlookEmail() {
   }, 250);
 }
 
+function formatDlrMetricValue(value, suffix = "") {
+  return Number.isFinite(Number(value)) ? `${Number(value)}${suffix}` : "—";
+}
+
+function renderDlrActivityMiniTable(summary) {
+  const rows = Object.entries(summary.activity ?? {});
+  if (rows.length === 0) {
+    return `<div style="font-size:0.68rem;color:var(--muted)">Upload a DLR PDF to populate activity snapshots here.</div>`;
+  }
+  return `<table style="width:100%;border-collapse:collapse;font-size:0.7rem">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Metric</th>
+        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Daily</th>
+        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">WTD</th>
+        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">MTD</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.slice(0, 8).map(([label, values]) => `<tr>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2)">${escapeHtml(label)}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.daily, values?.isPercent ? "%" : "")}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.wtd, values?.isPercent ? "%" : "")}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.mtd, values?.isPercent ? "%" : "")}</td>
+      </tr>`).join("")}
+    </tbody>
+  </table>`;
+}
+
 function renderCSVTab() {
   const errorHTML = csvError ? `<div class="alert-red mb4">${csvError}</div>` : "";
   const logHTML = csvLog.length > 0 ? `<div class="alert-green mb4">${csvLog.map((l,i) => `<div style="${i===0?"color:#3fb950;font-weight:600":"color:var(--muted)"}">${l}</div>`).join('')}</div>` : "";
   const imageInventory = getPresentationImageInventory();
+  const historicalCommunity = getHistoricalImportCommunityName();
+  const historicalMonthIdx = getHistoricalImportMonthIndex();
+  const historicalYear = getHistoricalImportYear();
+  const historicalDlrSummary = getCommunityDlrSummary(historicalCommunity);
+  const historicalYearOptions = Array.from({ length: 5 }, (_, idx) => new Date().getFullYear() - 2 + idx);
   const selectedReportSections = getSelectedPortfolioReportSections();
   const investorOptions = getInvestorReportFilterOptions();
   const regionalOptions = getRegionalReportFilterOptions();
@@ -10868,6 +11062,103 @@ function renderCSVTab() {
   const weeklyBaselineText = weeklyBaseline?.exportedAt
     ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
     : "No weekly baseline synced yet. Use Sync This Week as Baseline after you send this week’s report so next week’s export has a true week-over-week comparison.";
+  const historicalImportHTML = `<div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <h3 style="font-size:0.85rem;font-weight:600;margin-bottom:6px">🕰 Historical Report Import</h3>
+        <p style="font-size:0.72rem;color:var(--muted)">Route uploaded historical CSV / PDF data into one selected community and one selected reporting month before applying it into the dashboard. This writes into the same mapped monthly fields used by Overview, Traffic, Renewals, portfolio exports, and bonus scoring.</p>
+      </div>
+      <button class="btn btn-blue btn-sm" onclick="applyHistoricalExtractedDashboardRows()" ${extractedDashboardRows.length===0?"disabled":""}>Apply Preview To Historical Target</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div class="card-title" style="margin-bottom:6px">Community</div>
+        <select onchange="updateHistoricalImportTargetField('community',this.value)">
+          ${getAllCommunityNames().map(name => `<option value="${escapeHtml(name)}" ${name===historicalCommunity?"selected":""}>${escapeHtml(name)}</option>`).join("")}
+        </select>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div class="card-title" style="margin-bottom:6px">Month</div>
+        <select onchange="updateHistoricalImportTargetField('month',Number(this.value))">
+          ${MONTHS.map((month, idx) => `<option value="${idx}" ${idx===historicalMonthIdx?"selected":""}>${month}</option>`).join("")}
+        </select>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div class="card-title" style="margin-bottom:6px">Year</div>
+        <select onchange="updateHistoricalImportTargetField('year',Number(this.value))">
+          ${historicalYearOptions.map(year => `<option value="${year}" ${year===historicalYear?"selected":""}>${year}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <label class="csv-dropzone" style="cursor:pointer">
+      <div class="csv-drop-icon">🗂</div>
+      <div style="font-size:0.82rem;color:#4493f8;font-weight:600">Upload historical CSV / PDF reports for ${escapeHtml(historicalCommunity)} · ${escapeHtml(buildHistoricalMonthLabel(historicalMonthIdx, historicalYear))}</div>
+      <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">These uploads are stamped to the selected community + month/year in the preview so they can feed the existing dashboard tabs and bonus metrics without manual remapping.</div>
+      <input type="file" accept=".csv,.pdf" id="historical-report-input" multiple/>
+    </label>
+    <div style="font-size:0.66rem;color:var(--muted);margin-top:8px">The dashboard still stores values in the current month slots, so the selected year is kept as routing context and preview labeling for historical workflows and future automation hooks.</div>
+  </div>`;
+  const dlrForwardMonths = (historicalDlrSummary.forwardLook?.months ?? []).slice(0, 4);
+  const dlrExecutiveHTML = `<div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <h3 style="font-size:0.85rem;font-weight:600;margin-bottom:6px">📘 RISE Daily Leasing Report (DLR)</h3>
+        <p style="font-size:0.72rem;color:var(--muted)">Investor-ready summary of the latest imported DLR for ${escapeHtml(historicalCommunity)}. This is designed to become the automation-friendly landing zone for a scheduled agent later.</p>
+      </div>
+      <label class="btn btn-blue btn-sm" style="cursor:pointer">Upload DLR PDF
+        <input type="file" accept=".pdf" id="dlr-input" style="display:none" multiple/>
+      </label>
+    </div>
+    ${historicalDlrSummary.sourceFileName ? `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+        <div class="bonus-framework-stat"><div class="k">Report Period</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.reportPeriodLabel || "—")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.occupancyPct, "%")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.leasedPct, "%")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">90-Day Trend</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.trendingOccupancyPct, "%")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Move-In Goal / Week</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.moveInGoalPerWeek)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Property Status</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.propertyStatus || "—")}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:12px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:8px">Activity Snapshot</div>
+          ${renderDlrActivityMiniTable(historicalDlrSummary)}
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:8px">Pricing Snapshot</div>
+          <div style="font-size:0.72rem;line-height:1.7">
+            <div>Total Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.totalUnits)}</strong></div>
+            <div>Leased Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.leasedUnits)}</strong></div>
+            <div>Occupied Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.occupiedUnits)}</strong></div>
+            <div>Avg Budget Rent: <strong>${historicalDlrSummary.pricing?.avgBudgetRent ? "$" + Number(historicalDlrSummary.pricing.avgBudgetRent).toLocaleString() : "—"}</strong></div>
+            <div>Avg In-Place Rent: <strong>${historicalDlrSummary.pricing?.avgInPlaceRent ? "$" + Number(historicalDlrSummary.pricing.avgInPlaceRent).toLocaleString() : "—"}</strong></div>
+          </div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Imported from ${escapeHtml(historicalDlrSummary.sourceFileName)}${historicalDlrSummary.importedAt ? ` · saved ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.importedAt))}` : ""}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:8px">Forward Look</div>
+          <div style="display:grid;grid-template-columns:repeat(${Math.max(dlrForwardMonths.length,1)},1fr);gap:8px">
+            ${dlrForwardMonths.map((monthLabel, idx) => `<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px">
+              <div style="font-size:0.68rem;font-weight:700;color:#4493f8">${escapeHtml(monthLabel)}</div>
+              <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">Expirations ${formatDlrMetricValue(historicalDlrSummary.forwardLook.leaseExpirations?.[idx])}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Pending outs ${formatDlrMetricValue(historicalDlrSummary.forwardLook.pendingMoveOuts?.[idx])}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Pending ins ${formatDlrMetricValue(historicalDlrSummary.forwardLook.pendingMoveIns?.[idx])}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Budget occ ${formatDlrMetricValue(historicalDlrSummary.forwardLook.budgetedOccupancy?.[idx], "%")}</div>
+            </div>`).join("") || `<div style="font-size:0.68rem;color:var(--muted)">Forward-looking DLR months were not available in the last upload.</div>`}
+          </div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:8px">Leasing Notes</div>
+          <div style="font-size:0.68rem;color:var(--muted);line-height:1.7">
+            <div style="margin-bottom:8px"><strong style="color:var(--text)">Tours</strong><br>${historicalDlrSummary.notes?.tours?.length ? historicalDlrSummary.notes.tours.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No tour notes captured."}</div>
+            <div style="margin-bottom:8px"><strong style="color:var(--text)">Applications</strong><br>${historicalDlrSummary.notes?.applications?.length ? historicalDlrSummary.notes.applications.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No application notes captured."}</div>
+            <div><strong style="color:var(--text)">Marketing / Specials</strong><br>${historicalDlrSummary.notes?.marketing?.length ? historicalDlrSummary.notes.marketing.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No marketing notes captured."}</div>
+          </div>
+        </div>
+      </div>
+    ` : `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.72rem;color:var(--muted)">Upload a DLR PDF to generate a RISE-branded high-level leasing summary for this community. The parsed values also save back into the mapped dashboard fields.</div>`}
+  </div>`;
   const ownerFilterSummary = `${(portfolioReportFilters.investorGroups ?? []).length} investor group(s) · ${(portfolioReportFilters.investorCommunities ?? []).length} community selection(s)`;
   const regionalFilterSummary = `${(portfolioReportFilters.regionalScopes ?? []).length} scope(s) · ${(portfolioReportFilters.regionalCommunities ?? []).length} community selection(s)`;
   const scopeFilterHTML = portfolioReportMode === "owner"
@@ -11129,7 +11420,7 @@ function renderCSVTab() {
     </div>
     <div class="tbl-wrap" style="margin-bottom:0">
       <table>
-        <thead><tr><th class="l">Property</th><th class="c">Month</th><th class="c">Occupied</th><th class="c">Leased</th><th class="c">Move-Outs</th><th class="c">Move-Ins</th><th class="c">Guest Cards</th><th class="c">Tours</th><th class="c">Applications</th><th class="c">Apps Approved</th><th class="c">Leases Signed</th><th class="c">Budget Occ %</th><th class="c">Market Rent</th><th class="c">Budget Rent</th><th class="c">Concessions</th><th class="c">NER</th><th class="c">Renewal Exp.</th><th class="c">Renewals Signed</th><th class="c">Renewal NTVs</th><th class="c">Transfers</th><th class="c">Undecided / M2M</th><th class="c">Early Term.</th></tr></thead>
+        <thead><tr><th class="l">Property</th><th class="c">Month</th><th class="c">Occupied</th><th class="c">Leased</th><th class="c">Move-Outs</th><th class="c">Move-Ins</th><th class="c">Guest Cards</th><th class="c">Tours</th><th class="c">Applications</th><th class="c">Apps Approved</th><th class="c">Leases Signed</th><th class="c">Budget Occ %</th><th class="c">Market Rent</th><th class="c">Budget Rent</th><th class="c">Budget NER</th><th class="c">Rent Roll Total</th><th class="c">Concessions</th><th class="c">NER</th><th class="c">Renewal Exp.</th><th class="c">Renewals Signed</th><th class="c">Renewal NTVs</th><th class="c">Transfers</th><th class="c">Undecided / M2M</th><th class="c">Early Term.</th></tr></thead>
         <tbody>${extractedDashboardRows.map((row, idx) => `<tr>
           <td class="l"><input type="text" value="${row.property ?? ""}" onchange="updateExtractedDashboardCell(${idx},'property',this.value)" style="width:150px"></td>
           <td><input type="text" value="${row.month ?? ""}" onchange="updateExtractedDashboardCell(${idx},'month',this.value)" style="width:58px;text-align:center"></td>
@@ -11145,6 +11436,8 @@ function renderCSVTab() {
           <td><input type="number" value="${row.budget_occ ?? ""}" onchange="updateExtractedDashboardCell(${idx},'budget_occ',this.value)" style="width:82px;text-align:center"></td>
           <td><input type="number" value="${row.market_rent ?? ""}" onchange="updateExtractedDashboardCell(${idx},'market_rent',this.value)" style="width:92px;text-align:center"></td>
           <td><input type="number" value="${row.budget_rent ?? ""}" onchange="updateExtractedDashboardCell(${idx},'budget_rent',this.value)" style="width:92px;text-align:center"></td>
+          <td><input type="number" value="${row.budget_ner ?? ""}" onchange="updateExtractedDashboardCell(${idx},'budget_ner',this.value)" style="width:92px;text-align:center"></td>
+          <td><input type="number" value="${row.rent_roll_total ?? ""}" onchange="updateExtractedDashboardCell(${idx},'rent_roll_total',this.value)" style="width:110px;text-align:center"></td>
           <td><input type="number" value="${row.concessions ?? ""}" onchange="updateExtractedDashboardCell(${idx},'concessions',this.value)" style="width:92px;text-align:center"></td>
           <td><input type="number" value="${row.ner ?? ""}" onchange="updateExtractedDashboardCell(${idx},'ner',this.value)" style="width:92px;text-align:center"></td>
           <td><input type="number" value="${row.renewal_expirations ?? ""}" onchange="updateExtractedDashboardCell(${idx},'renewal_expirations',this.value)" style="width:92px;text-align:center"></td>
@@ -11171,6 +11464,8 @@ function renderCSVTab() {
     {field:"Budget Occ %",         variants:["budget_occ","budget_occupancy","occ_goal","budgeted_occ"],                   color:"#4ade80"},
     {field:"Market Rent ($)",      variants:["market_rent","marketrent","asking_rent","gross_rent","rent"],                color:"#fbbf24"},
     {field:"Budget Rent ($)",      variants:["budget_rent","budgetrent","proforma_rent","proformaRent"],                   color:"#a78bfa"},
+    {field:"Budget NER ($)",       variants:["budget_ner","proforma_ner","proformaner","budgeted_ner","ner_budget"],       color:"#22c55e"},
+    {field:"Rent Roll Total ($)",  variants:["rent_roll_total","rentrolltotal","total_rent","total_rent_roll","gross_rent_total","rent_total"], color:"#38bdf8"},
     {field:"Concessions ($)",      variants:["concessions","concession","concession_amount","net_concessions"],            color:"#f87171"},
     {field:"Actual NER ($)",       variants:["ner","ner_actual","neractual","net_effective_rent","effective_rent"],        color:"#34d399"},
     {field:"Renewal Expirations",  variants:["renewal_expirations","total_lease_expirations","expirations"],               color:"#60a5fa"},
@@ -11183,7 +11478,7 @@ function renderCSVTab() {
     {field:"Property Name",        variants:["property","property_name","community","community_name"],                      color:"var(--text)"},
   ];
 
-  const sampleCSV = `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination\nFlorence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,100,1765,14,5,2,0,7,1\nFlorence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,75,1790,12,6,1,0,5,0\nBartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,50,1612,18,9,3,1,5,2`;
+  const sampleCSV = `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination\nFlorence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7,1\nFlorence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5,0\nBartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5,2`;
 
   const importWorkspaceSection = `<div class="card mb4">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
@@ -11237,6 +11532,22 @@ function renderCSVTab() {
   </div>`;
 
   return [
+    renderWindowshadeCard({
+      key: "import_historical_reports",
+      title: "Historical Report Import",
+      subtitle: "Targeted historical month/community routing for staged CSV and PDF uploads.",
+      countLabel: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`,
+      bodyHtml: historicalImportHTML,
+      collapsedPreview: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`
+    }),
+    renderWindowshadeCard({
+      key: "import_dlr_summary",
+      title: "Daily Leasing Report",
+      subtitle: "RISE-branded high-level DLR summary and upload workflow.",
+      countLabel: historicalDlrSummary.sourceFileName ? "DLR loaded" : "No DLR",
+      bodyHtml: dlrExecutiveHTML,
+      collapsedPreview: historicalDlrSummary.reportPeriodLabel || "Upload a DLR PDF"
+    }),
     renderWindowshadeCard({
       key: "import_workspace",
       title: "Import Workspace",
@@ -11298,10 +11609,10 @@ function renderCSVTab() {
 
 function downloadTemplate() {
   const csv = [
-    `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination`,
-    `Florence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,100,1765,14,5,2,0,7`,
-    `Florence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,75,1790,12,6,1,0,5`,
-    `Bartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,50,1612,18,9,3,1,5`,
+    `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination`,
+    `Florence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7`,
+    `Florence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5`,
+    `Bartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5`,
   ].join('\n');
   const blob = new Blob([csv], {type:"text/csv"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "RISE_leasing_template.csv"; a.click();
@@ -11372,6 +11683,8 @@ function renderExtractFieldMapControls() {
     { key: "budget_occ", label: "Budget Occ %" },
     { key: "market_rent", label: "Market Rent" },
     { key: "budget_rent", label: "Budget Rent" },
+    { key: "budget_ner", label: "Budget NER" },
+    { key: "rent_roll_total", label: "Rent Roll Total" },
     { key: "concessions", label: "Concessions" },
     { key: "ner", label: "NER" },
     { key: "renewal_expirations", label: "Renewal Expirations" },
@@ -11411,6 +11724,8 @@ function buildDlrDashboardRows(dlr, targetMonth) {
     budget_occ: "",
     market_rent: dlr.marketRent ?? "",
     budget_rent: dlr.budgetRent ?? "",
+    budget_ner: "",
+    rent_roll_total: "",
     concessions: "",
     ner: ""
   });
@@ -11433,6 +11748,8 @@ function buildDlrDashboardRows(dlr, targetMonth) {
       budget_occ: "",
       market_rent: "",
       budget_rent: "",
+      budget_ner: "",
+      rent_roll_total: "",
       concessions: "",
       ner: ""
     });
@@ -11453,14 +11770,15 @@ function downloadExtractedDashboardCSV() {
   a.click();
 }
 
-function applyExtractedDashboardRows() {
+function applyExtractedDashboardRows(options = {}) {
   if (extractedDashboardRows.length === 0) return;
   let applied = 0;
   const touchedProps = new Set();
+  const forcedTarget = getForcedImportTarget(options);
   extractedDashboardRows.forEach(row => {
-    const monthIdx = getRowTargetMonth(row);
+    const monthIdx = forcedTarget.monthIdx ?? getRowTargetMonth(row);
     if (monthIdx === null || monthIdx < 0 || monthIdx > 11) return;
-    const propName = matchPropertyName(row.property, { fallbackToCurrent: false });
+    const propName = forcedTarget.community || matchPropertyName(row.property, { fallbackToCurrent: false });
     if (!propName) return;
     const record = getPropertyRecordForApply(propName);
     const applyMappedValue = (sourceKey, value) => {
@@ -11483,6 +11801,15 @@ function applyExtractedDashboardRows() {
   renderTab();
 }
 
+function applyHistoricalExtractedDashboardRows() {
+  if (extractedDashboardRows.length === 0) return;
+  applyExtractedDashboardRows({
+    forcedProperty: getHistoricalImportCommunityName(),
+    forcedMonthIdx: getHistoricalImportMonthIndex(),
+    forcedYear: getHistoricalImportYear()
+  });
+}
+
 // ─── Drag-Drop Handler ────────────────────────────────────────────────────────
 function handleDrop(e) {
   e.preventDefault();
@@ -11499,6 +11826,40 @@ async function processImportFiles(files) {
       await handlePDF(file);
     } else if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
       await handleCSVFile(file);
+    }
+  }
+}
+
+function updateHistoricalImportTargetField(field, value) {
+  if (!Object.prototype.hasOwnProperty.call(defaultHistoricalImportTarget(), field)) return;
+  historicalImportTarget = normalizeHistoricalImportTarget({ ...historicalImportTarget, [field]: value });
+  renderTab();
+}
+
+async function processHistoricalImportFiles(files) {
+  const forcedProperty = getHistoricalImportCommunityName();
+  const forcedMonthIdx = getHistoricalImportMonthIndex();
+  const forcedYear = getHistoricalImportYear();
+  csvLog = [`📚 Historical import target: ${forcedProperty} · ${buildHistoricalMonthLabel(forcedMonthIdx, forcedYear)}`];
+  for (const file of files) {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      await handlePDF(file, { forcedProperty, forcedMonthIdx, forcedYear });
+    } else if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
+      await handleCSVFile(file, { forcedProperty, forcedMonthIdx, forcedYear });
+    }
+  }
+}
+
+async function processDlrFiles(files) {
+  const forcedProperty = getHistoricalImportCommunityName();
+  const forcedMonthIdx = getHistoricalImportMonthIndex();
+  const forcedYear = getHistoricalImportYear();
+  for (const file of files) {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      await handlePDF(file, { forcedProperty, forcedMonthIdx, forcedYear });
+    } else {
+      csvError = `${file.name} is not a supported DLR file. Upload a PDF Daily Leasing Report.`;
+      renderTab();
     }
   }
 }
@@ -11553,7 +11914,127 @@ function parsePendingByMonth(sourceText, kindLabel) {
   return result;
 }
 
-function parseDlrPdf(sourceText) {
+function escapeRegex(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractDlrActivityRow(rawText, label) {
+  const pattern = new RegExp(`^${escapeRegex(label)}\\s+(-?[\\d.]+%?)\\s+(-?[\\d.]+%?)\\s+(-?[\\d.]+%?)\\s*$`, "im");
+  const match = rawText.match(pattern);
+  if (!match) return null;
+  const parseValue = (value) => {
+    if (/%$/.test(value)) return Number(String(value).replace(/%/g, ""));
+    return Number(String(value).replace(/,/g, ""));
+  };
+  return {
+    daily: parseValue(match[1]),
+    wtd: parseValue(match[2]),
+    mtd: parseValue(match[3]),
+    isPercent: /%$/.test(match[1]) || /%$/.test(match[2]) || /%$/.test(match[3])
+  };
+}
+
+function extractDlrBulletSection(rawText, startLabel, endLabels = []) {
+  const lines = String(rawText ?? "").split(/\r?\n/).map(line => line.trim());
+  const startIdx = lines.findIndex(line => line.toLowerCase().startsWith(String(startLabel).toLowerCase()));
+  if (startIdx === -1) return [];
+  const items = [];
+  for (let idx = startIdx + 1; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+    if (!line) continue;
+    if (endLabels.some(label => line.toLowerCase().startsWith(String(label).toLowerCase()))) break;
+    if (/^[-•]/.test(line) || /^\d+\./.test(line)) items.push(line.replace(/^[-•]\s*/, "").trim());
+  }
+  return items;
+}
+
+function extractDlrForwardLook(rawText) {
+  const lines = String(rawText ?? "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const monthLineIdx = lines.findIndex(line => /^([A-Z][a-z]{2}-\d{2,4}\s+){3,}/.test(line));
+  if (monthLineIdx === -1) return defaultDlrSummary().forwardLook;
+  const months = lines[monthLineIdx].split(/\s+/).filter(Boolean);
+  const mapLine = (label) => {
+    const line = lines.find(entry => entry.toLowerCase().startsWith(label.toLowerCase()));
+    if (!line) return [];
+    return line
+      .replace(new RegExp(`^${escapeRegex(label)}`,"i"), "")
+      .trim()
+      .split(/\s+/)
+      .map(value => Number(String(value).replace(/[%,$]/g, "")) || 0)
+      .slice(0, months.length);
+  };
+  return {
+    months,
+    leaseExpirations: mapLine("Lease Expirations"),
+    mtm: mapLine("MTM"),
+    pendingMoveOuts: mapLine("Pending Move-Outs"),
+    pendingMoveIns: mapLine("Pending Move-Ins"),
+    budgetedOccupancy: mapLine("Budgeted Occupancy"),
+    projectedOccupancy: mapLine("Projected (Trending) Occupancy"),
+    moveInsNeeded: mapLine("Move-ins Needed to Achieve Budget Occupancy")
+  };
+}
+
+function extractDlrPricingSummary(rawText) {
+  const match = String(rawText ?? "").match(/Totals\s*\/\s*Averages\s+(\d+)\s+\d+\s+(\d+)\s+([\d.]+)%\s+(\d+)\s+([\d.]+)%\s+\$([\d,]+)\s+\$[\d.,]+\s+\$([\d,]+)/i);
+  if (!match) return defaultDlrSummary().pricing;
+  return {
+    totalUnits: Number(match[1]) || null,
+    leasedUnits: Number(match[2]) || null,
+    occupiedUnits: Number(match[4]) || null,
+    avgBudgetRent: Number(String(match[6]).replace(/,/g, "")) || null,
+    avgInPlaceRent: Number(String(match[7]).replace(/,/g, "")) || null
+  };
+}
+
+function parseDlrReportPeriod(sourceText, fileName = "") {
+  const fromText = String(sourceText ?? "").match(/(\d{1,2}\/\d{1,2}\/\d{4}\s*-\s*\d{1,2}\/\d{1,2}\/\d{4})/);
+  if (fromText) return fromText[1].replace(/\s+/g, "");
+  const fromFile = String(fileName ?? "").match(/(\d{2}\.\d{2}\.\d{4}-\d{2}\.\d{2}\.\d{4})/);
+  return fromFile ? fromFile[1].replace(/\./g, "/") : "";
+}
+
+function buildDlrSummary(rawText, fileName = "") {
+  const activityLabels = [
+    "Tours",
+    "Walk In",
+    "Off Site Event",
+    "Phone Calls",
+    "Emails/Online",
+    "Text/Chat/Other",
+    "Gross New Applications",
+    "Denied",
+    "Cancelled",
+    "Net New Applications",
+    "Pipeline (Application Started)",
+    "Notices Received",
+    "Move-Ins",
+    "Move-Outs",
+    "Renewals"
+  ];
+  const activity = Object.fromEntries(activityLabels.map(label => [label, extractDlrActivityRow(rawText, label)]).filter(([, value]) => value));
+  return normalizeDlrSummary({
+    sourceFileName: fileName,
+    importedAt: new Date().toISOString(),
+    reportPeriodLabel: parseDlrReportPeriod(rawText, fileName),
+    occupancyStartMonth: String(rawText.match(/Occupancy Start Month\s+([A-Za-z]+-\d{2,4})/i)?.[1] ?? "").trim(),
+    propertyStatus: String(rawText.match(/Property Status\s+([A-Za-z ]+)/i)?.[1] ?? "").trim(),
+    leasedPct: Number(rawText.match(/Leased %\s+([\d.]+)%/i)?.[1] ?? NaN),
+    occupancyPct: Number(rawText.match(/Occupancy %\s+([\d.]+)%/i)?.[1] ?? NaN),
+    trendingOccupancyPct: Number(rawText.match(/Trending Occupancy % \(90 Days\)\s+([\d.]+)%/i)?.[1] ?? NaN),
+    moveInGoalPerWeek: Number(rawText.match(/Move-In Goal Per Week\s+(\d+)/i)?.[1] ?? NaN),
+    activity,
+    notes: {
+      tours: extractDlrBulletSection(rawText, "Tours:", ["Applications:", "Highlights"]),
+      applications: extractDlrBulletSection(rawText, "Applications:", ["Highlights", "Marketing Outreach and Specials"]),
+      marketing: extractDlrBulletSection(rawText, "Marketing Outreach and Specials", ["Lease Expiration Management", "Trending Occupancy", "RISE "])
+    },
+    forwardLook: extractDlrForwardLook(rawText),
+    pricing: extractDlrPricingSummary(rawText)
+  });
+}
+
+function parseDlrPdf(sourceText, rawText = sourceText, fileName = "") {
   if (!/daily leasing report/i.test(sourceText)) return null;
   const reportDate = parseDlrReportDate(sourceText);
   const guestCardCategories = [
@@ -11566,6 +12047,7 @@ function parseDlrPdf(sourceText) {
   const guestCardValues = guestCardCategories.map(label => findDlrMtdValue(label, sourceText)).filter(val => val !== null);
   const guestCards = guestCardValues.length > 0 ? guestCardValues.reduce((sum, val) => sum + val, 0) : null;
   return {
+    summary: buildDlrSummary(rawText, fileName),
     reportDate,
     occupied: findDlrNumberNear("occupied units", sourceText) ?? findDlrNumberNear("occupied", sourceText),
     leased: findDlrNumberNear("leased units", sourceText) ?? findDlrNumberNear("leased", sourceText),
@@ -11582,7 +12064,7 @@ function parseDlrPdf(sourceText) {
 }
 
 // ─── PDF Handler ──────────────────────────────────────────────────────────────
-async function handlePDF(file) {
+async function handlePDF(file, options = {}) {
   csvError = ""; csvLog = [];
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -11599,7 +12081,8 @@ async function handlePDF(file) {
 
     const log = [];
     let matched = 0;
-    const propName = getProp().name.toLowerCase();
+    const forcedTarget = getForcedImportTarget(options);
+    const propName = (forcedTarget.community || getProp().name).toLowerCase();
     const propFirstWord = propName.split(" ")[0];
 
     // Check if this PDF relates to the selected property
@@ -11616,29 +12099,33 @@ async function handlePDF(file) {
       if (text.includes(mLow) || text.includes(fullNames[i])) detectedMonths.push(i);
     });
 
-    const dlr = parseDlrPdf(originalText);
+    const dlr = parseDlrPdf(originalText, fullText, file.name);
     if (dlr) {
       const reportMonth = dlr.reportDate ? dlr.reportDate.getMonth() : null;
-      const manualOverrideActive = importRoutingMode === "force_override";
-      const targetMonth = manualOverrideActive
+      const manualOverrideActive = forcedTarget.monthIdx === null && importRoutingMode === "force_override";
+      const targetMonth = forcedTarget.monthIdx ?? (manualOverrideActive
         ? getImportTargetMonth()
-        : (reportMonth ?? getImportTargetMonth());
-      const totalUnits = getTotalUnits();
+        : (reportMonth ?? getImportTargetMonth()));
+      const targetCommunity = forcedTarget.community || getProp().name;
+      const targetRecord = getPropertyRecordForApply(targetCommunity);
       log.push(`↪ DLR format detected${dlr.reportDate ? ` · report date ${dlr.reportDate.toLocaleDateString('en-US')}` : ""}`);
-      if (manualOverrideActive) {
+      if (forcedTarget.community || forcedTarget.monthIdx !== null) {
+        log.push(`↪ Historical target applied: ${targetCommunity} · ${buildHistoricalMonthLabel(targetMonth, forcedTarget.year || getHistoricalImportYear())}`);
+      } else if (manualOverrideActive) {
         log.push(`↪ Manual month override applied: ${MONTHS[targetMonth]}`);
       } else {
         log.push(`↪ DLR routed to ${MONTHS[targetMonth]} from Daily Leasing Report header date`);
       }
 
-      if (targetMonth === currentMonth) {
-        if (dlr.occupied !== null) { currentOccupied = Math.round(dlr.occupied); matched++; log.push(`→ Occupied units: ${currentOccupied}`); }
-        if (dlr.leased !== null) { currentLeased = Math.round(dlr.leased); matched++; log.push(`→ Leased units: ${currentLeased}`); }
+      if (!targetRecord.monthlyData[targetMonth]) targetRecord.monthlyData[targetMonth] = defaultMonthly()[targetMonth];
+      if (targetMonth === targetRecord.currentMonth) {
+        if (dlr.occupied !== null) { targetRecord.currentOccupied = Math.round(dlr.occupied); matched++; log.push(`→ Occupied units: ${targetRecord.currentOccupied}`); }
+        if (dlr.leased !== null) { targetRecord.currentLeased = Math.round(dlr.leased); matched++; log.push(`→ Leased units: ${targetRecord.currentLeased}`); }
       } else if (dlr.occupied !== null || dlr.leased !== null) {
         log.push(`→ Live occupied/leased widgets unchanged because ${MONTHS[targetMonth]} is not the active month`);
       }
 
-      const md = monthlyData[targetMonth];
+      const md = targetRecord.monthlyData[targetMonth];
       if (dlr.moveOuts !== null) { md.moveOuts = Math.round(dlr.moveOuts); matched++; log.push(`→ ${MONTHS[targetMonth]} move-outs: ${md.moveOuts}`); }
       if (dlr.moveIns !== null) { md.moveIns = Math.round(dlr.moveIns); matched++; log.push(`→ ${MONTHS[targetMonth]} move-ins: ${md.moveIns}`); }
       if (dlr.guestCards !== null) { md.guestCards = Math.round(dlr.guestCards); matched++; log.push(`→ ${MONTHS[targetMonth]} guest cards: ${md.guestCards} (MTD source rollup)`); }
@@ -11646,16 +12133,21 @@ async function handlePDF(file) {
       if (dlr.applications !== null) { md.applications = Math.round(dlr.applications); matched++; log.push(`→ ${MONTHS[targetMonth]} applications: ${md.applications}`); }
       if (dlr.marketRent !== null) { md.marketRent = dlr.marketRent; matched++; log.push(`→ ${MONTHS[targetMonth]} market rent: $${md.marketRent}`); }
       if (dlr.budgetRent !== null) { md.proformaRent = dlr.budgetRent; matched++; log.push(`→ ${MONTHS[targetMonth]} budget rent: $${md.proformaRent}`); }
+      targetRecord.latestDlrSummary = normalizeDlrSummary(dlr.summary);
 
       Object.entries(dlr.pendingMoveOutsByMonth).forEach(([monthIdx, value]) => {
-        monthlyData[Number(monthIdx)].moveOuts = Math.round(value);
+        const idx = Number(monthIdx);
+        if (!targetRecord.monthlyData[idx]) targetRecord.monthlyData[idx] = defaultMonthly()[idx];
+        targetRecord.monthlyData[idx].moveOuts = Math.round(value);
         matched++;
-        log.push(`→ ${MONTHS[Number(monthIdx)]} pending move-outs: ${monthlyData[Number(monthIdx)].moveOuts}`);
+        log.push(`→ ${MONTHS[idx]} pending move-outs: ${targetRecord.monthlyData[idx].moveOuts}`);
       });
       Object.entries(dlr.pendingMoveInsByMonth).forEach(([monthIdx, value]) => {
-        monthlyData[Number(monthIdx)].moveIns = Math.round(value);
+        const idx = Number(monthIdx);
+        if (!targetRecord.monthlyData[idx]) targetRecord.monthlyData[idx] = defaultMonthly()[idx];
+        targetRecord.monthlyData[idx].moveIns = Math.round(value);
         matched++;
-        log.push(`→ ${MONTHS[Number(monthIdx)]} pending move-ins: ${monthlyData[Number(monthIdx)].moveIns}`);
+        log.push(`→ ${MONTHS[idx]} pending move-ins: ${targetRecord.monthlyData[idx].moveIns}`);
       });
 
       if (matched === 0) {
@@ -11664,12 +12156,21 @@ async function handlePDF(file) {
         return;
       }
 
+      savedData[targetCommunity] = normalizeSavedCommunityRecord(targetCommunity, targetRecord);
+      persistSaved();
+      if (targetCommunity === getProp().name) loadPropertyData(getProp().name);
+
       csvLog = [
         `✅ Extracted ${matched} mapped DLR values into the preview for ${MONTHS[targetMonth]}`,
         ...log,
-        "ℹ Leases Signed, Rent Roll / NER, and historical-trend fields remain excluded because you marked them as separate reports."
+        "ℹ DLR uploads now also save a branded summary snapshot for this community."
       ];
-      mergeExtractedDashboardRows(buildDlrDashboardRows(dlr, targetMonth), `DLR PDF${dlr.reportDate ? ` (${dlr.reportDate.toLocaleDateString('en-US')})` : ""}`);
+      const previewRows = buildDlrDashboardRows(dlr, targetMonth).map(row => ({
+        ...row,
+        property: targetCommunity,
+        month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonth, forcedTarget.year) : row.month
+      }));
+      mergeExtractedDashboardRows(previewRows, `DLR PDF${dlr.reportDate ? ` (${dlr.reportDate.toLocaleDateString('en-US')})` : ""}`);
       renderTab();
       return;
     }
@@ -11715,6 +12216,9 @@ async function handlePDF(file) {
       { field: "applications", keywords: ["applications","apps","total applications","total apps"], pct: false },
       { field: "leasesSignedActual", keywords: ["leases signed","new leases","signed leases","executed leases","total leases"], pct: false },
       { field: "marketRent", keywords: ["market rent","asking rent","average rent","avg rent"], pct: false },
+      { field: "proformaRent", keywords: ["budget rent","proforma rent","budgeted rent"], pct: false },
+      { field: "proformaNER", keywords: ["budget ner","proforma ner","budgeted ner","ner budget"], pct: false },
+      { field: "rentRollTotal", keywords: ["rent roll total","total rent roll","gross rent total","total rent"], pct: false },
       { field: "concessions", keywords: ["concessions","concession amount","avg concession"], pct: false },
       { field: "nerActual", keywords: ["effective rent","net effective","ner ","ner/"], pct: false },
       { field: "budgetOcc", keywords: ["budget occ","budgeted occ","budget occupancy"], pct: true },
@@ -11745,17 +12249,19 @@ async function handlePDF(file) {
 
     // Extract values into dashboard-shaped rows
     const detectedMonth = detectedMonths.length > 0 ? detectedMonths[detectedMonths.length - 1] : null;
-    const targetMonth = importRoutingMode === "force_override"
+    const targetMonth = forcedTarget.monthIdx ?? (importRoutingMode === "force_override"
       ? getImportTargetMonth()
-      : (detectedMonth ?? getImportTargetMonth());
-    if (detectedMonth !== null && targetMonth !== detectedMonth) {
+      : (detectedMonth ?? getImportTargetMonth()));
+    if (forcedTarget.monthIdx !== null) {
+      log.push(`↪ Historical target applied: ${forcedTarget.community || getProp().name} · ${buildHistoricalMonthLabel(targetMonth, forcedTarget.year || getHistoricalImportYear())}`);
+    } else if (detectedMonth !== null && targetMonth !== detectedMonth) {
       log.push(`↪ Month override applied: using ${MONTHS[targetMonth]} instead of detected ${MONTHS[detectedMonth]}`);
     } else {
       log.push(`↪ Import routed to ${MONTHS[targetMonth]}`);
     }
     const genericRows = [{
-      property: getProp().name,
-      month: MONTHS[targetMonth],
+      property: forcedTarget.community || getProp().name,
+      month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonth, forcedTarget.year) : MONTHS[targetMonth],
       occupied: foundValues.occupied ?? "",
       leased: foundValues.leased ?? "",
       move_outs: foundValues.moveOuts ?? "",
@@ -11766,7 +12272,9 @@ async function handlePDF(file) {
       leases_signed: foundValues.leasesSignedActual ?? "",
       budget_occ: foundValues.budgetOcc ?? "",
       market_rent: foundValues.marketRent ?? "",
-      budget_rent: "",
+      budget_rent: foundValues.proformaRent ?? "",
+      budget_ner: foundValues.proformaNER ?? "",
+      rent_roll_total: foundValues.rentRollTotal ?? "",
       concessions: foundValues.concessions ?? "",
       ner: foundValues.nerActual ?? ""
     }];
@@ -11780,7 +12288,7 @@ async function handlePDF(file) {
 }
 
 // ─── CSV Handler ──────────────────────────────────────────────────────────────
-async function handleCSVFile(file) {
+async function handleCSVFile(file, options = {}) {
   if (!file) return;
   csvError = ""; csvLog = [];
   try {
@@ -11804,6 +12312,7 @@ async function handleCSVFile(file) {
         leasesSignedActual: ["leases_signed","leasessigned","new_leases","signed_leases","leases"],
         marketRent: ["market_rent","marketrent","asking_rent","gross_rent","rent"],
         proformaRent: ["budget_rent","budgetrent","proforma_rent","proformarent","budget_rent_base_premiums"],
+        proformaNER: ["budget_ner","proforma_ner","proformaner","budgeted_ner","ner_budget"],
         concessions: ["concessions","concession","concession_amount","net_concessions"],
         nerActual: ["ner","ner_actual","neractual","net_effective_rent","effective_rent"],
         rentRollTotal: ["rent_roll_total","rentrolltotal","total_rent","total_rent_roll","gross_rent_total","rent_total"],
@@ -11823,13 +12332,14 @@ async function handleCSVFile(file) {
       let monthlyUpdates = Array.from({length:12}, () => ({}));
       let matched = 0;
       const relevantRows = rows;
+      const forcedTarget = getForcedImportTarget(options);
       relevantRows.forEach(row => {
         const monthStr = findVal(row, fieldMap.month);
-        const monthIdx = importRoutingMode === "force_override"
+        const monthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override"
           ? getImportTargetMonth()
-          : (parseMonthIndexValue(monthStr) ?? getImportTargetMonth());
+          : (parseMonthIndexValue(monthStr) ?? getImportTargetMonth()));
         const rawProperty = findVal(row, fieldMap.property);
-        const propertyName = matchPropertyName(rawProperty, { fallbackToCurrent: false });
+        const propertyName = forcedTarget.community || matchPropertyName(rawProperty, { fallbackToCurrent: false });
         if (!propertyName) {
           if (monthIdx >= 0) log.push(`Skipped ${MONTHS[monthIdx]} row: missing property/community value`);
           else log.push("Skipped row: missing property/community value");
@@ -11851,7 +12361,7 @@ async function handleCSVFile(file) {
         }
         normalizedRows.push({
           property: propertyName,
-          month: MONTHS[monthIdx],
+          month: forcedTarget.year ? buildHistoricalMonthLabel(monthIdx, forcedTarget.year) : MONTHS[monthIdx],
           occupied: findVal(row, fieldMap.occupied) ?? "",
           leased: findVal(row, fieldMap.leased) ?? "",
           move_outs: findVal(row, fieldMap.moveOuts) ?? "",
@@ -11864,6 +12374,8 @@ async function handleCSVFile(file) {
           budget_occ: findVal(row, fieldMap.budgetOcc) ?? "",
           market_rent: findVal(row, fieldMap.marketRent) ?? "",
           budget_rent: findVal(row, fieldMap.proformaRent) ?? "",
+          budget_ner: findVal(row, fieldMap.proformaNER) ?? "",
+          rent_roll_total: findVal(row, fieldMap.rentRollTotal) ?? "",
           concessions: findVal(row, fieldMap.concessions) ?? "",
           ner: findVal(row, fieldMap.nerActual) ?? "",
           renewal_expirations: findVal(row, fieldMap.renewalExpirations) ?? "",
