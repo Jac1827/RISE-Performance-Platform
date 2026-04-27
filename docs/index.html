@@ -1320,24 +1320,20 @@ function latestMsoeSnapshotForEmployee(employeeId, excludePlanId){
 }
 
 function callReviewHistoryForEmployee(employeeId, excludePlanId){
-  const keys = SHOP_SCORE_FIELDS.map(field => field.key);
   return (STATE.plans || [])
-    .filter(plan => plan && plan.employeeId === employeeId && plan.id !== excludePlanId)
+    .filter(plan => plan && plan.type === 'call_review' && plan.employeeId === employeeId && plan.id !== excludePlanId)
     .map(plan => {
-      const scores = {};
-      let any = false;
-      keys.forEach(key => {
-        const value = plan[key];
-        if(value == null) return;
-        const numeric = Number(value);
-        if(Number.isNaN(numeric)) return;
-        scores[key] = numeric;
-        any = true;
-      });
+      const employeeScore = plan.callReviewEmployeeScore != null ? Number(plan.callReviewEmployeeScore) : Number.NaN;
+      const managerScore = plan.callReviewManagerScore != null ? Number(plan.callReviewManagerScore) : Number.NaN;
+      const scores = {
+        employeeScore: Number.isNaN(employeeScore) ? null : employeeScore,
+        managerScore: Number.isNaN(managerScore) ? null : managerScore
+      };
+      const any = scores.employeeScore != null || scores.managerScore != null;
       if(!any) return null;
       return {
         planId: plan.id,
-        date: plan.createdAt || '',
+        date: plan.callReviewDate || plan.reviewDate || plan.createdAt || '',
         type: plan.type || '',
         scores
       };
@@ -1364,14 +1360,11 @@ function formatScoreDisplay(value){
 }
 
 function renderCallReviewScoresInline(scores){
-  const parts = SHOP_SCORE_FIELDS
-    .map(field => {
-      const value = scores ? scores[field.key] : null;
-      if(value == null || Number.isNaN(Number(value))) return null;
-      const label = field.key === 'overallScore' ? 'Overall' : titleCaseLabel(field.label);
-      return `${label} ${formatScoreDisplay(value)}`;
-    })
-    .filter(Boolean);
+  const parts = [];
+  const managerScore = scores ? scores.managerScore : null;
+  const employeeScore = scores ? scores.employeeScore : null;
+  if(managerScore != null && !Number.isNaN(Number(managerScore))) parts.push(`Manager ${formatScoreDisplay(managerScore)}`);
+  if(employeeScore != null && !Number.isNaN(Number(employeeScore))) parts.push(`Employee ${formatScoreDisplay(employeeScore)}`);
   return parts.length ? parts.join(' · ') : 'No call review scores recorded yet.';
 }
 
@@ -1907,20 +1900,32 @@ function syncNewPlanScoreHistory(){
   if(host) host.innerHTML = renderNewPlanScoreHistory();
 }
 
+function clearNewPlanScoreFields(){
+  SHOP_SCORE_FIELDS.forEach(field => {
+    const input = document.getElementById(field.inputId);
+    if(input) input.value = '';
+  });
+  ['np-call-employee-score', 'np-call-manager-score'].forEach(id => {
+    const input = document.getElementById(id);
+    if(input) input.value = '';
+  });
+}
+
 function applyHistoricalCallReviewScoresToNewPlan(overwriteExisting){
   const employeeId = UI.newPlanDraft.employeeId || '';
   if(!employeeId) return;
   const snapshot = latestCallReviewSnapshotForEmployee(employeeId);
   if(!snapshot || !snapshot.scores) return;
-
-  SHOP_SCORE_FIELDS.forEach(field => {
-    const input = document.getElementById(field.inputId);
+  [
+    {id: 'np-call-employee-score', value: snapshot.scores.employeeScore},
+    {id: 'np-call-manager-score', value: snapshot.scores.managerScore}
+  ].forEach(entry => {
+    const input = document.getElementById(entry.id);
     if(!input) return;
     const current = String(input.value || '').trim();
     if(current && !overwriteExisting) return;
-    const value = snapshot.scores[field.key];
-    if(value == null || Number.isNaN(Number(value))) return;
-    input.value = String(value);
+    if(entry.value == null || Number.isNaN(Number(entry.value))) return;
+    input.value = String(entry.value);
   });
 
   updatePlanTypeSuggestion(false);
@@ -1931,7 +1936,9 @@ function setNewPlanEmployee(employeeId){
   UI.newPlanDraft.employeeId = String(employeeId || '');
   seedNewPlanHistoricalSelections(UI.newPlanDraft.employeeId);
   syncNewPlanManager();
-  // Pull forward the last saved call review scorecard if the new plan form is empty.
+  // Reset score inputs when the selected employee changes so history never carries across employees.
+  clearNewPlanScoreFields();
+  // Pull forward the last saved call review scorecard for the newly selected employee.
   applyHistoricalCallReviewScoresToNewPlan(false);
   updatePlanTypeSuggestion(false);
   syncNewPlanWriteupTools();
