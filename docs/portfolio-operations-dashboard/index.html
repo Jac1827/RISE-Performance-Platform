@@ -6235,7 +6235,7 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     applicationsLast7: surveyInput.applicationsLast7 ?? existingSurvey.applicationsLast7,
     applicationsLast30: surveyInput.applicationsLast30 ?? existingSurvey.applicationsLast30,
     marketConcessions: surveyInput.marketConcessions || existingSurvey.marketConcessions,
-    compNarrative: existingSurvey.compNarrative || surveyInput.compNarrative || "",
+    compNarrative: surveyInput.compNarrative || existingSurvey.compNarrative || "",
     surveyComps: Array.isArray(surveyInput.surveyComps) && surveyInput.surveyComps.length > 0
       ? surveyInput.surveyComps
       : existingSurvey.surveyComps
@@ -7744,9 +7744,10 @@ function normalizeCommunityLookupName(value) {
     .trim();
 }
 
-function matchPropertyName(rawName) {
+function matchPropertyName(rawName, options = {}) {
+  const fallbackToCurrent = options.fallbackToCurrent !== false;
   const cleaned = String(rawName ?? "").trim();
-  if (!cleaned) return getProp().name;
+  if (!cleaned) return fallbackToCurrent ? getProp().name : "";
   const normalized = normalizeCommunityLookupName(cleaned);
   const communities = getAllCommunityNames();
   const exact = communities.find(name => {
@@ -11459,7 +11460,8 @@ function applyExtractedDashboardRows() {
   extractedDashboardRows.forEach(row => {
     const monthIdx = getRowTargetMonth(row);
     if (monthIdx === null || monthIdx < 0 || monthIdx > 11) return;
-    const propName = matchPropertyName(row.property);
+    const propName = matchPropertyName(row.property, { fallbackToCurrent: false });
+    if (!propName) return;
     const record = getPropertyRecordForApply(propName);
     const applyMappedValue = (sourceKey, value) => {
       if (value === "") return;
@@ -11817,6 +11819,7 @@ async function handleCSVFile(file) {
       };
       const findVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== "") return row[k]; } return null; };
       const log = [];
+      const normalizedRows = [];
       let monthlyUpdates = Array.from({length:12}, () => ({}));
       let matched = 0;
       const relevantRows = rows;
@@ -11825,7 +11828,13 @@ async function handleCSVFile(file) {
         const monthIdx = importRoutingMode === "force_override"
           ? getImportTargetMonth()
           : (parseMonthIndexValue(monthStr) ?? getImportTargetMonth());
-        const propertyName = matchPropertyName(findVal(row, fieldMap.property) ?? getProp().name);
+        const rawProperty = findVal(row, fieldMap.property);
+        const propertyName = matchPropertyName(rawProperty, { fallbackToCurrent: false });
+        if (!propertyName) {
+          if (monthIdx >= 0) log.push(`Skipped ${MONTHS[monthIdx]} row: missing property/community value`);
+          else log.push("Skipped row: missing property/community value");
+          return;
+        }
         const trySet = (field, keys) => {
           const val = findVal(row, keys);
           if (val !== null && val !== "") {
@@ -11840,34 +11849,33 @@ async function handleCSVFile(file) {
         if (monthIdx >= 0) {
           log.push(`${propertyName} · ${MONTHS[monthIdx]}: ${Object.keys(monthlyUpdates[monthIdx]).join(", ") || "no mapped columns"}`);
         }
+        normalizedRows.push({
+          property: propertyName,
+          month: MONTHS[monthIdx],
+          occupied: findVal(row, fieldMap.occupied) ?? "",
+          leased: findVal(row, fieldMap.leased) ?? "",
+          move_outs: findVal(row, fieldMap.moveOuts) ?? "",
+          move_ins: findVal(row, fieldMap.moveIns) ?? "",
+          guest_cards: findVal(row, fieldMap.guestCards) ?? "",
+          tours: findVal(row, fieldMap.tours) ?? "",
+          applications: findVal(row, fieldMap.applications) ?? "",
+          applications_approved: findVal(row, fieldMap.applicationsApproved) ?? "",
+          leases_signed: findVal(row, fieldMap.leasesSignedActual) ?? "",
+          budget_occ: findVal(row, fieldMap.budgetOcc) ?? "",
+          market_rent: findVal(row, fieldMap.marketRent) ?? "",
+          budget_rent: findVal(row, fieldMap.proformaRent) ?? "",
+          concessions: findVal(row, fieldMap.concessions) ?? "",
+          ner: findVal(row, fieldMap.nerActual) ?? "",
+          renewal_expirations: findVal(row, fieldMap.renewalExpirations) ?? "",
+          renewals_signed: findVal(row, fieldMap.renewalSigned) ?? "",
+          renewal_ntvs: findVal(row, fieldMap.renewalNTV) ?? "",
+          renewal_transfers: findVal(row, fieldMap.renewalTransfers) ?? "",
+          renewal_undecided: findVal(row, fieldMap.renewalUndecided) ?? "",
+          renewal_early_termination: findVal(row, fieldMap.renewalEarlyTermination) ?? ""
+        });
       });
       if (matched === 0) { csvError = "No recognizable columns found. See the field mapping guide below."; renderTab(); return; }
-      mergeExtractedDashboardRows(relevantRows.map(row => ({
-        property: matchPropertyName(findVal(row, fieldMap.property) ?? getProp().name),
-        month: MONTHS[importRoutingMode === "force_override"
-          ? getImportTargetMonth()
-          : (parseMonthIndexValue(findVal(row, fieldMap.month)) ?? getImportTargetMonth())],
-        occupied: findVal(row, fieldMap.occupied) ?? "",
-        leased: findVal(row, fieldMap.leased) ?? "",
-        move_outs: findVal(row, fieldMap.moveOuts) ?? "",
-        move_ins: findVal(row, fieldMap.moveIns) ?? "",
-        guest_cards: findVal(row, fieldMap.guestCards) ?? "",
-        tours: findVal(row, fieldMap.tours) ?? "",
-        applications: findVal(row, fieldMap.applications) ?? "",
-        applications_approved: findVal(row, fieldMap.applicationsApproved) ?? "",
-        leases_signed: findVal(row, fieldMap.leasesSignedActual) ?? "",
-        budget_occ: findVal(row, fieldMap.budgetOcc) ?? "",
-        market_rent: findVal(row, fieldMap.marketRent) ?? "",
-        budget_rent: findVal(row, fieldMap.proformaRent) ?? "",
-        concessions: findVal(row, fieldMap.concessions) ?? "",
-        ner: findVal(row, fieldMap.nerActual) ?? "",
-        renewal_expirations: findVal(row, fieldMap.renewalExpirations) ?? "",
-        renewals_signed: findVal(row, fieldMap.renewalSigned) ?? "",
-        renewal_ntvs: findVal(row, fieldMap.renewalNTV) ?? "",
-        renewal_transfers: findVal(row, fieldMap.renewalTransfers) ?? "",
-        renewal_undecided: findVal(row, fieldMap.renewalUndecided) ?? "",
-        renewal_early_termination: findVal(row, fieldMap.renewalEarlyTermination) ?? ""
-      })), `CSV ${file.name}`);
+      mergeExtractedDashboardRows(normalizedRows, `CSV ${file.name}`);
       csvLog = [`✅ Extracted ${matched} values from ${relevantRows.length} CSV row(s) into the preview.`, ...log.slice(0, 18)];
       renderTab();
     } catch(err) { csvError = "Failed to parse CSV: " + err.message; renderTab(); }
