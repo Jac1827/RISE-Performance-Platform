@@ -2283,6 +2283,20 @@ function getApplicationDecisionMetrics(monthEntry = {}) {
   return { applications, approvals, denials, leases, approvalPct, denialPct, appToLeasePct };
 }
 
+function getGrossLeaseProgressCount(monthEntry = {}) {
+  const approvals = getApplicationsApprovedCount(monthEntry);
+  if (approvals > 0) return approvals;
+  return Math.max(0, Number(monthEntry.leasesSignedActual) || 0);
+}
+
+function getMoveInTargetFromScheduleRow(scheduleRow = {}) {
+  const netOccNeed = Math.max(0, Number(scheduleRow?.netOccLeases) || 0);
+  const grossLeaseNeed = Math.max(0, Number(scheduleRow?.grossLeases) || 0);
+  if (netOccNeed > 0) return netOccNeed;
+  if (grossLeaseNeed > 0) return grossLeaseNeed;
+  return 0;
+}
+
 function getRenewalSummaryForMonth(monthEntry = {}) {
   const expirations = Math.max(0, Number(monthEntry.renewalExpirations) || 0);
   const signed = Math.max(0, Number(monthEntry.renewalSigned) || 0);
@@ -5913,14 +5927,15 @@ function renderTrafficTab() {
   const guestCardTotal = getLeadSourceTotal(cm);
   const tourRate = guestCardTotal > 0 ? (cm.tours / guestCardTotal) * 100 : 0;
   const appRate = cm.tours > 0 ? (applicationMetrics.applications / cm.tours) * 100 : 0;
-  const closeRate = applicationMetrics.appToLeasePct;
-  const overallRateBase = applicationMetrics.leases > 0 ? applicationMetrics.leases : applicationMetrics.approvals;
+  const grossLeaseActual = getGrossLeaseProgressCount(cm);
+  const closeRate = applicationMetrics.applications > 0 ? (grossLeaseActual / applicationMetrics.applications) * 100 : 0;
+  const overallRateBase = grossLeaseActual > 0 ? grossLeaseActual : applicationMetrics.approvals;
   const overallRate = guestCardTotal > 0 ? (overallRateBase / guestCardTotal) * 100 : 0;
 
   const tourConv    = guestCardTotal > 0 ? (cm.tours / guestCardTotal * 100).toFixed(0) + "%" : "—";
   const appConv     = cm.tours > 0 ? (applicationMetrics.applications / cm.tours * 100).toFixed(0) + "%" : "—";
   const approvalConv = applicationMetrics.applications > 0 ? (applicationMetrics.approvals / applicationMetrics.applications * 100).toFixed(0) + "%" : "—";
-  const leaseConv   = applicationMetrics.applications > 0 ? (applicationMetrics.leases / applicationMetrics.applications * 100).toFixed(0) + "%" : "—";
+  const leaseConv   = applicationMetrics.applications > 0 ? (grossLeaseActual / applicationMetrics.applications * 100).toFixed(0) + "%" : "—";
   const approvalBreakout = applicationMetrics.applications > 0
     ? `${applicationMetrics.approvalPct.toFixed(0)}% / ${applicationMetrics.denialPct.toFixed(0)}%`
     : "—";
@@ -5930,7 +5945,7 @@ function renderTrafficTab() {
       {label:"Guest Cards → Tour", val:tourConv, sub:`${cm.tours ?? 0} tours / ${guestCardTotal} leads`, color:"#4493f8"},
       {label:"Tour → Application", val:appConv, sub:`${applicationMetrics.applications} apps / ${cm.tours ?? 0} tours`, color:"#a371f7"},
       {label:"Applications Approved", val:String(applicationMetrics.approvals), sub:`${applicationMetrics.approvals} approved out of ${applicationMetrics.applications} apps`, color:"#3fb950"},
-      {label:"App → Lease", val:leaseConv, sub:`${applicationMetrics.leases} leases / ${applicationMetrics.applications} apps`, color:"#d29922"},
+      {label:"App → Lease", val:leaseConv, sub:`${grossLeaseActual} ${applicationMetrics.approvals > 0 ? "approved / gross leases" : "leases"} / ${applicationMetrics.applications} apps`, color:"#d29922"},
       {label:"Approval / Denial", val:approvalBreakout, sub:`${applicationMetrics.denials} denied applications`, color:"#fb923c"},
   ].map(s => statBox(s.label, s.val, s.sub, s.color)).join('')}
   </div>`;
@@ -5952,7 +5967,7 @@ function renderTrafficTab() {
   const weeksElapsed = Math.max(1, Math.min(4, Math.ceil(new Date().getDate() / 7)));
   const weeksLeft    = Math.max(1, 4 - weeksElapsed + 1);
   const leasesGoal   = currentRow.grossLeases ?? 0;
-  const leasedActual = applicationMetrics.leases;
+  const leasedActual = grossLeaseActual;
   const approvalsActual = applicationMetrics.approvals;
   const gcActual     = guestCardTotal;
   const gcGoal       = currentRow.guestCardsNeeded ?? 0;
@@ -5983,7 +5998,7 @@ function renderTrafficTab() {
         <div style="font-size:0.68rem;color:var(--muted)">Pace-Based Projection <span style="color:var(--border)">·</span> extrapolates current signing rate</div>
         <div style="font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:${projVsGoal>=0?"#3fb950":"#f85149"}">${projectedLeases.toFixed(0)} leases</div>
         <div style="font-size:0.68rem;color:${projVsGoal>=0?"#3fb950":"#f85149"}">${projVsGoal>=0?"▲":"▼"} ${Math.abs(projVsGoal).toFixed(0)} vs goal of ${leasesGoal}</div>
-        <div style="font-size:0.63rem;color:var(--muted);margin-top:2px">${leasedActual} signed ÷ ${weeksElapsed} wk × 4 wks</div>
+        <div style="font-size:0.63rem;color:var(--muted);margin-top:2px">${leasedActual} ${applicationMetrics.approvals > 0 ? "approved / gross leases" : "signed leases"} ÷ ${weeksElapsed} wk × 4 wks</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -6011,17 +6026,10 @@ function renderTrafficTab() {
 
 
   // ── Funnel bars ────────────────────────────────────────────────────────────
-  // Move-in goal: units needed to physically reach the budget occupancy % this month.
-  // Uses savedBudgetTargets first, falls back to the budgetOcc entered in the schedule row.
-  const savedBudgetOccPct = savedBudgetTargets[currentMonth] > 0
-    ? savedBudgetTargets[currentMonth]
-    : (monthlyData[currentMonth]?.budgetOcc ?? 0);
-  const savedBudgetOccUnits = totalUnits > 0 && savedBudgetOccPct > 0
-    ? Math.ceil(totalUnits * savedBudgetOccPct / 100) : 0;
-  const moveOutsThisMonth   = getEffectiveMoveOutsForMonth(currentMonth).effective;
-  const moveInGoal = savedBudgetOccUnits > 0
-    ? Math.max(savedBudgetOccUnits - currentOccupied + moveOutsThisMonth, 0)
-    : 0;
+  const moveInGoal = getMoveInTargetFromScheduleRow(currentRow);
+  const moveInGoalContext = moveInGoal > 0
+    ? `${moveInGoal} move-in${moveInGoal === 1 ? "" : "s"} needed from the current leasing schedule to protect budgeted occupancy after planned move-outs`
+    : "The current leasing schedule does not show an additional move-in need this month";
 
   const funnelItems = [
     {label:"Guest Cards / Leads", actual: gcActual,       goal: gcGoal,       color:"#4493f8"},
@@ -6045,8 +6053,9 @@ function renderTrafficTab() {
 
   const funnelCard = `<div class="card mb4">
     <h2 style="font-size:0.9rem;font-weight:600;margin-bottom:4px">${MONTHS[currentMonth]} Leasing Funnel — Actual vs. Goal</h2>
-    <p style="font-size:0.68rem;color:var(--muted);margin-bottom:14px">Move-In goal = units needed to reach ${savedBudgetOccPct > 0 ? `budget occ of ${savedBudgetOccPct.toFixed(1)}% (${savedBudgetOccUnits} units)` : "budget occ — enter a Leasing Pace % Target in the schedule on the Overview tab"}. The Overview schedule now mirrors monthly Applications in the Apps column and monthly Approved Applications in the Gross Leases column when those actuals are entered here.</p>
+    <p style="font-size:0.68rem;color:var(--muted);margin-bottom:14px">Move-In target now mirrors the leasing schedule first and falls back to the schedule’s gross-lease need when Net Occ resolves to zero. The Overview schedule continues to mirror monthly Applications in the Apps column and monthly Approved Applications in the Gross Leases column when those actuals are entered here.</p>
     ${funnelBars}
+    <div style="font-size:0.63rem;color:var(--muted);margin-top:10px">${moveInGoalContext}.</div>
   </div>`;
 
   // Table with move-ins column
@@ -6055,9 +6064,10 @@ function renderTrafficTab() {
     const d = monthlyData[i] ?? {}, row = schedule[i];
     const decisionMetrics = getApplicationDecisionMetrics(d);
     const sourceTotal = getLeadSourceTotal(d);
+    const rowGrossLeaseActual = getGrossLeaseProgressCount(d);
     const gcConv = sourceTotal > 0 ? (d.tours / sourceTotal * 100).toFixed(0) + "%" : "—";
     const tConv  = d.tours > 0 ? (decisionMetrics.applications / d.tours * 100).toFixed(0) + "%" : "—";
-    const aConv  = decisionMetrics.applications > 0 ? (decisionMetrics.leases / decisionMetrics.applications * 100).toFixed(0) + "%" : "—";
+    const aConv  = decisionMetrics.applications > 0 ? (rowGrossLeaseActual / decisionMetrics.applications * 100).toFixed(0) + "%" : "—";
     const approvalMix = decisionMetrics.applications > 0
       ? `${decisionMetrics.approvalPct.toFixed(0)}% / ${decisionMetrics.denialPct.toFixed(0)}%`
       : "—";
@@ -6070,17 +6080,7 @@ function renderTrafficTab() {
       return `<td>${monthInpField(i, field, fieldValue)}${i>=currentMonth?`<div class="goal-sub" style="color:${colors[fi]}">Goal: ${goals[fi]??0}</div>`:""}</td>`;
     }).join('');
 
-    // Move-ins target: units needed to reach budget occ % for this month
-    // Uses savedBudgetTargets first, falls back to the budgetOcc entered in the schedule row
-    const rowSavedBudgetPct = savedBudgetTargets[i] > 0
-      ? savedBudgetTargets[i]
-      : (monthlyData[i]?.budgetOcc ?? 0);
-    const rowSavedBudgetUnits = totalUnits > 0 && rowSavedBudgetPct > 0
-      ? Math.ceil(totalUnits * rowSavedBudgetPct / 100) : 0;
-    const rowMoveOutsThisMonth = getEffectiveMoveOutsForMonth(i).effective;
-    const rowMoveInTarget = rowSavedBudgetUnits > 0
-      ? Math.max(rowSavedBudgetUnits - currentOccupied + rowMoveOutsThisMonth, 0)
-      : 0;
+    const rowMoveInTarget = getMoveInTargetFromScheduleRow(row);
     const moveInCell = `<td>${monthInpField(i, "moveIns", d.moveIns??0)}${i>=currentMonth?`<div class="goal-sub" style="color:#2dd4bf">Target: ${rowMoveInTarget}</div>`:""}</td>`;
 
     return `<tr class="${i<currentMonth?"past":isCurrent?"current-row":""}">
