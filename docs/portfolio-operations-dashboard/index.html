@@ -697,14 +697,19 @@ let portfolioReportSections = defaultPortfolioReportSections();
 let portfolioReportFilters = defaultPortfolioReportFilters();
 let monthlyPresentationCommunities = [];
 let weeklyExecutiveEmail = defaultWeeklyExecutiveEmailSettings();
-const DASHBOARD_EXTRACT_HEADERS = ["property","month","occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
-const EXTRACT_MAPPABLE_FIELDS = ["occupied","leased","move_outs","move_ins","guest_cards","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
+const DASHBOARD_EXTRACT_HEADERS = ["property","month","occupied","leased","move_outs","move_ins","guest_cards","walk_in","off_site_event","phone_calls","emails_online","text_chat_other","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
+const EXTRACT_MAPPABLE_FIELDS = ["occupied","leased","move_outs","move_ins","guest_cards","walk_in","off_site_event","phone_calls","emails_online","text_chat_other","tours","applications","applications_approved","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
 const DEFAULT_EXTRACT_FIELD_MAP = {
   occupied: "occupied",
   leased: "leased",
   move_outs: "move_outs",
   move_ins: "move_ins",
   guest_cards: "guest_cards",
+  walk_in: "walk_in",
+  off_site_event: "off_site_event",
+  phone_calls: "phone_calls",
+  emails_online: "emails_online",
+  text_chat_other: "text_chat_other",
   tours: "tours",
   applications: "applications",
   applications_approved: "applications_approved",
@@ -1745,6 +1750,7 @@ function defaultMonthly() {
   return Array.from({length:12}, () => ({
     moveOuts:0, moveIns:0, budgetOcc:0,
     guestCards:0, tours:0, applications:0, applicationsApproved:0, leasesSignedActual:0,
+    walkIn:0, offSiteEvent:0, phoneCalls:0, emailsOnline:0, textChatOther:0,
     grossLeaseGoalManual:null, appGoalManual:null,
     marketRent:0, concessions:0, nerActual:0,
     proformaRent:0, proformaNER:0, rentRollTotal:0,
@@ -1773,7 +1779,7 @@ function getClosedMonthApplicationWeeklyTrend(monthEntries = monthlyData, closeB
       const entry = monthEntries[idx] ?? {};
       const applicationMetrics = getApplicationDecisionMetrics(entry);
       const documented = applicationMetrics.applications > 0
-        || (Number(entry.guestCards) || 0) > 0
+        || getLeadSourceTotal(entry) > 0
         || (Number(entry.tours) || 0) > 0
         || getApplicationsApprovedCount(entry) > 0
         || (Number(entry.leasesSignedActual) || 0) > 0;
@@ -2166,6 +2172,23 @@ function getApplicationsApprovedCount(monthEntry = {}) {
     return Math.max(0, Number(monthEntry.applicationsApproved) || 0);
   }
   return Math.max(0, Number(monthEntry.leasesSignedActual) || 0);
+}
+
+function getLeadSourceBreakdown(monthEntry = {}) {
+  return {
+    walkIn: Math.max(0, Number(monthEntry.walkIn) || 0),
+    offSiteEvent: Math.max(0, Number(monthEntry.offSiteEvent) || 0),
+    phoneCalls: Math.max(0, Number(monthEntry.phoneCalls) || 0),
+    emailsOnline: Math.max(0, Number(monthEntry.emailsOnline) || 0),
+    textChatOther: Math.max(0, Number(monthEntry.textChatOther) || 0)
+  };
+}
+
+function getLeadSourceTotal(monthEntry = {}) {
+  const sources = getLeadSourceBreakdown(monthEntry);
+  const sourceTotal = Object.values(sources).reduce((sum, value) => sum + value, 0);
+  if (sourceTotal > 0) return sourceTotal;
+  return Math.max(0, Number(monthEntry.guestCards) || 0);
 }
 
 function getApplicationDecisionMetrics(monthEntry = {}) {
@@ -2721,7 +2744,7 @@ function getCommunitySummary(propName, sourceData) {
   const occPct = totalUnits > 0 ? occupied / totalUnits * 100 : 0;
   const leasedPct = totalUnits > 0 ? leased / totalUnits * 100 : 0;
   const guestCardGoal = Number(currentRow.guestCardsNeeded ?? 0) || 0;
-  const guestCards = Number(curMonthData.guestCards) || 0;
+  const guestCards = getLeadSourceTotal(curMonthData);
   const tours = Number(curMonthData.tours) || 0;
   const applicationMetrics = getApplicationDecisionMetrics(curMonthData);
   const prevApplicationMetrics = getApplicationDecisionMetrics(prevMonthData);
@@ -2730,7 +2753,7 @@ function getCommunitySummary(propName, sourceData) {
   const closedQuarterRetention = getClosedOutRetentionAverageForMonths(scopeMonthlyData, getQuarterMonths(bonusQuarter), scopeCurrentMonth);
   const applications = applicationMetrics.applications;
   const previousApplications = Number(prevMonthData.applications) || 0;
-  const previousGuestCards = Number(prevMonthData.guestCards) || 0;
+  const previousGuestCards = getLeadSourceTotal(prevMonthData);
   const previousTours = Number(prevMonthData.tours) || 0;
   const previousApplicationsApproved = prevApplicationMetrics.approvals;
   const leasesSigned = Number(curMonthData.leasesSignedActual) || 0;
@@ -3083,7 +3106,7 @@ function getCommunityPerformancePlan(propName, sourceData) {
     signed: 0
   });
   const closedQuarterRetention = getClosedOutRetentionAverageForMonths(scopeMonthlyData, getQuarterMonths(bonusQuarter), scopeCurrentMonth);
-  const currentGuestCards = Number(currentMonthData.guestCards) || 0;
+  const currentGuestCards = getLeadSourceTotal(currentMonthData);
   const currentTours = Number(currentMonthData.tours) || 0;
   const currentApplications = currentAppMetrics.applications;
   const quarterRetentionActual = closedQuarterRetention.avgRetentionRate;
@@ -4592,13 +4615,6 @@ function attachEventListeners() {
     processHistoricalImportFiles(files);
     e.target.value = "";
   });
-  const dlrInput = document.getElementById("dlr-input");
-  if (dlrInput) dlrInput.addEventListener("change", function(e) {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    processDlrFiles(files);
-    e.target.value = "";
-  });
   const renewalInput = document.getElementById("renewal-input");
   if (renewalInput) renewalInput.addEventListener("change", function(e) {
     const files = Array.from(e.target.files || []);
@@ -5138,7 +5154,7 @@ function buildRecommendationsForRecord(propName, sourceData) {
   const scheduleRow = schedule[monthIdx] ?? {};
   const applicationMetrics = getApplicationDecisionMetrics(monthEntry);
   const renewalSummary = getRenewalSummaryForMonth(monthEntry);
-  const guestCards = Number(monthEntry.guestCards) || 0;
+  const guestCards = getLeadSourceTotal(monthEntry);
   const tours = Number(monthEntry.tours) || 0;
   const tourRate = guestCards > 0 ? (tours / guestCards) * 100 : 0;
   const appRate = tours > 0 ? (applicationMetrics.applications / tours) * 100 : 0;
@@ -5359,7 +5375,7 @@ function renderOverviewTab() {
   const weeklyPace    = leasedSoFar > 0 ? (leasedSoFar / weeksElapsed).toFixed(1) : "0";
   const weeklyTarget  = weeksLeft > 0 ? Math.ceil(leasesRemain / weeksLeft) : 0;
   const paceRatio     = leasesNeeded > 0 ? leasedSoFar / leasesNeeded : 0;
-  const gcSoFar       = cm.guestCards ?? 0;
+  const gcSoFar       = getLeadSourceTotal(cm);
   const gcNeeded      = currentRow.guestCardsNeeded ?? 0;
   const gcPace        = gcSoFar > 0 ? (gcSoFar / weeksElapsed).toFixed(1) : "0";
   const gcWeeklyNeeded = gcNeeded > 0 ? Math.ceil((gcNeeded - gcSoFar) / weeksLeft) : 0;
@@ -5801,17 +5817,19 @@ function renderOverviewTab() {
 // ─── Traffic Tab ──────────────────────────────────────────────────────────────
 function renderTrafficTab() {
   const cm = monthlyData[currentMonth] ?? {};
+  const leadSources = getLeadSourceBreakdown(cm);
   const schedule = computeSchedule();
   const currentRow = schedule[currentMonth] ?? {};
   const totalUnits = getTotalUnits();
   const applicationMetrics = getApplicationDecisionMetrics(cm);
-  const tourRate = cm.guestCards > 0 ? (cm.tours / cm.guestCards) * 100 : 0;
+  const guestCardTotal = getLeadSourceTotal(cm);
+  const tourRate = guestCardTotal > 0 ? (cm.tours / guestCardTotal) * 100 : 0;
   const appRate = cm.tours > 0 ? (applicationMetrics.applications / cm.tours) * 100 : 0;
   const closeRate = applicationMetrics.appToLeasePct;
   const overallRateBase = applicationMetrics.leases > 0 ? applicationMetrics.leases : applicationMetrics.approvals;
-  const overallRate = cm.guestCards > 0 ? (overallRateBase / cm.guestCards) * 100 : 0;
+  const overallRate = guestCardTotal > 0 ? (overallRateBase / guestCardTotal) * 100 : 0;
 
-  const tourConv    = cm.guestCards > 0 ? (cm.tours / cm.guestCards * 100).toFixed(0) + "%" : "—";
+  const tourConv    = guestCardTotal > 0 ? (cm.tours / guestCardTotal * 100).toFixed(0) + "%" : "—";
   const appConv     = cm.tours > 0 ? (applicationMetrics.applications / cm.tours * 100).toFixed(0) + "%" : "—";
   const approvalConv = applicationMetrics.applications > 0 ? (applicationMetrics.approvals / applicationMetrics.applications * 100).toFixed(0) + "%" : "—";
   const leaseConv   = applicationMetrics.applications > 0 ? (applicationMetrics.leases / applicationMetrics.applications * 100).toFixed(0) + "%" : "—";
@@ -5821,12 +5839,25 @@ function renderTrafficTab() {
 
   const convGrid = `<div class="mb4" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
     ${[
-      {label:"Guest Cards → Tour", val:tourConv, sub:`${cm.tours ?? 0} tours / ${cm.guestCards ?? 0} leads`, color:"#4493f8"},
+      {label:"Guest Cards → Tour", val:tourConv, sub:`${cm.tours ?? 0} tours / ${guestCardTotal} leads`, color:"#4493f8"},
       {label:"Tour → Application", val:appConv, sub:`${applicationMetrics.applications} apps / ${cm.tours ?? 0} tours`, color:"#a371f7"},
       {label:"Applications Approved", val:String(applicationMetrics.approvals), sub:`${applicationMetrics.approvals} approved out of ${applicationMetrics.applications} apps`, color:"#3fb950"},
       {label:"App → Lease", val:leaseConv, sub:`${applicationMetrics.leases} leases / ${applicationMetrics.applications} apps`, color:"#d29922"},
       {label:"Approval / Denial", val:approvalBreakout, sub:`${applicationMetrics.denials} denied applications`, color:"#fb923c"},
-    ].map(s => statBox(s.label, s.val, s.sub, s.color)).join('')}
+  ].map(s => statBox(s.label, s.val, s.sub, s.color)).join('')}
+  </div>`;
+
+  const leadSourceCard = `<div class="card mb4">
+    <h2 style="font-size:0.9rem;font-weight:600;margin-bottom:4px">${MONTHS[currentMonth]} Lead Source Breakdown</h2>
+    <p style="font-size:0.68rem;color:var(--muted);margin-bottom:14px">Track the same five lead-source buckets used by the DLR so investor exports can mirror the report format more closely. The guest card total below auto-rolls up from these source fields when they are populated.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+      <div>${statBox("Walk In", String(leadSources.walkIn), "Lead source count", "#60a5fa")}</div>
+      <div>${statBox("Off Site Event", String(leadSources.offSiteEvent), "Lead source count", "#818cf8")}</div>
+      <div>${statBox("Phone Calls", String(leadSources.phoneCalls), "Lead source count", "#c084fc")}</div>
+      <div>${statBox("Emails / Online", String(leadSources.emailsOnline), "Lead source count", "#34d399")}</div>
+      <div>${statBox("Text / Chat / Other", String(leadSources.textChatOther), "Lead source count", "#f59e0b")}</div>
+      <div>${statBox("Total Guest Cards", String(guestCardTotal), "Auto-rollup from all lead sources", "#4493f8")}</div>
+    </div>
   </div>`;
 
   // ── Leasing Velocity / Pace ───────────────────────────────────────────────
@@ -5835,7 +5866,7 @@ function renderTrafficTab() {
   const leasesGoal   = currentRow.grossLeases ?? 0;
   const leasedActual = applicationMetrics.leases;
   const approvalsActual = applicationMetrics.approvals;
-  const gcActual     = cm.guestCards ?? 0;
+  const gcActual     = guestCardTotal;
   const gcGoal       = currentRow.guestCardsNeeded ?? 0;
   const toursActual  = cm.tours ?? 0;
   const toursGoal    = currentRow.toursNeeded ?? 0;
@@ -5917,7 +5948,7 @@ function renderTrafficTab() {
     const ahead = f.actual >= f.goal;
     return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px">
-        <span style="color:var(--text);font-weight:500">${f.label}</span>
+      <span style="color:var(--text);font-weight:500">${f.label}</span>
         <span style="color:${ahead?"#3fb950":"#d29922"}">${f.actual} / ${f.goal} ${ahead?"✓":`(${f.goal-f.actual} to go)`}</span>
       </div>
       <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${pct}%;background:${f.color}"></div><span class="funnel-bar-pct">${pct.toFixed(0)}%</span></div>
@@ -5935,7 +5966,8 @@ function renderTrafficTab() {
     const isCurrent = i === currentMonth;
     const d = monthlyData[i] ?? {}, row = schedule[i];
     const decisionMetrics = getApplicationDecisionMetrics(d);
-    const gcConv = d.guestCards > 0 ? (d.tours / d.guestCards * 100).toFixed(0) + "%" : "—";
+    const sourceTotal = getLeadSourceTotal(d);
+    const gcConv = sourceTotal > 0 ? (d.tours / sourceTotal * 100).toFixed(0) + "%" : "—";
     const tConv  = d.tours > 0 ? (decisionMetrics.applications / d.tours * 100).toFixed(0) + "%" : "—";
     const aConv  = decisionMetrics.applications > 0 ? (decisionMetrics.leases / decisionMetrics.applications * 100).toFixed(0) + "%" : "—";
     const approvalMix = decisionMetrics.applications > 0
@@ -5946,7 +5978,7 @@ function renderTrafficTab() {
     const fields = ["guestCards","tours","applications","applicationsApproved"];
 
     const fieldCells = fields.map((field, fi) => {
-      const fieldValue = field === "applicationsApproved" ? getApplicationsApprovedCount(d) : (d[field] ?? 0);
+      const fieldValue = field === "applicationsApproved" ? getApplicationsApprovedCount(d) : (field === "guestCards" ? sourceTotal : (d[field] ?? 0));
       return `<td>${monthInpField(i, field, fieldValue)}${i>=currentMonth?`<div class="goal-sub" style="color:${colors[fi]}">Goal: ${goals[fi]??0}</div>`:""}</td>`;
     }).join('');
 
@@ -5990,7 +6022,45 @@ function renderTrafficTab() {
     </table>
   </div>`;
 
+  const leadSourceRows = MONTHS.map((month, i) => {
+    const d = monthlyData[i] ?? {};
+    const sourceTotal = getLeadSourceTotal(d);
+    return `<tr class="${i<currentMonth?"past":i===currentMonth?"current-row":""}">
+      <td class="l">${month}${i===currentMonth?`<span class="now-badge">Now</span>`:""}</td>
+      <td>${monthInpField(i, "walkIn", d.walkIn ?? 0)}</td>
+      <td>${monthInpField(i, "offSiteEvent", d.offSiteEvent ?? 0)}</td>
+      <td>${monthInpField(i, "phoneCalls", d.phoneCalls ?? 0)}</td>
+      <td>${monthInpField(i, "emailsOnline", d.emailsOnline ?? 0)}</td>
+      <td>${monthInpField(i, "textChatOther", d.textChatOther ?? 0)}</td>
+      <td style="font-weight:700;color:#4493f8">${sourceTotal}</td>
+    </tr>`;
+  });
+
+  const leadSourceTable = `<div class="tbl-wrap mb4">
+    <div class="tbl-header"><h2>Monthly Lead Source Table</h2><p>These five buckets mirror the DLR format. Guest card totals auto-calculate from the source mix when present.</p></div>
+    <table>
+      <thead><tr>
+        <th class="l">Month</th>
+        <th class="c">Walk In</th>
+        <th class="c">Off Site Event</th>
+        <th class="c">Phone Calls</th>
+        <th class="c">Emails / Online</th>
+        <th class="c">Text / Chat / Other</th>
+        <th class="c">Total Guest Cards</th>
+      </tr></thead>
+      <tbody>${renderFutureWindowshadedTableRows(leadSourceRows, 7, "traffic_lead_sources_future_months")}</tbody>
+    </table>
+  </div>`;
+
   return [
+    renderWindowshadeCard({
+      key: "traffic_lead_sources",
+      title: "Lead Source Breakdown",
+      subtitle: "DLR-aligned source tracking by month, auto-rolling into guest card totals.",
+      countLabel: `${guestCardTotal} total leads`,
+      bodyHtml: leadSourceCard + leadSourceTable,
+      collapsedPreview: `${leadSources.walkIn} walk-in · ${leadSources.offSiteEvent} off-site · ${leadSources.phoneCalls} phone · ${leadSources.emailsOnline} email/online · ${leadSources.textChatOther} text/chat/other`
+    }),
     renderWindowshadeCard({
       key: "traffic_snapshot",
       title: "Traffic Snapshot",
@@ -7949,6 +8019,11 @@ function applyValueToRecord(record, monthIdx, targetKey, numericValue) {
   if (targetKey === "move_outs") { md.moveOuts = numericValue; return true; }
   if (targetKey === "move_ins") { md.moveIns = numericValue; return true; }
   if (targetKey === "guest_cards") { md.guestCards = numericValue; return true; }
+  if (targetKey === "walk_in") { md.walkIn = numericValue; return true; }
+  if (targetKey === "off_site_event") { md.offSiteEvent = numericValue; return true; }
+  if (targetKey === "phone_calls") { md.phoneCalls = numericValue; return true; }
+  if (targetKey === "emails_online") { md.emailsOnline = numericValue; return true; }
+  if (targetKey === "text_chat_other") { md.textChatOther = numericValue; return true; }
   if (targetKey === "tours") { md.tours = numericValue; return true; }
   if (targetKey === "applications") { md.applications = numericValue; return true; }
   if (targetKey === "applications_approved") { md.applicationsApproved = numericValue; return true; }
@@ -10987,29 +11062,420 @@ function formatDlrMetricValue(value, suffix = "") {
   return Number.isFinite(Number(value)) ? `${Number(value)}${suffix}` : "—";
 }
 
-function renderDlrActivityMiniTable(summary) {
-  const rows = Object.entries(summary.activity ?? {});
-  if (rows.length === 0) {
-    return `<div style="font-size:0.68rem;color:var(--muted)">Upload a DLR PDF to populate activity snapshots here.</div>`;
+function formatDlrCurrency(value) {
+  return Number.isFinite(Number(value))
+    ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    : "—";
+}
+
+function formatDlrPercent(value, digits = 1) {
+  return Number.isFinite(Number(value))
+    ? `${Number(value).toFixed(digits)}%`
+    : "—";
+}
+
+function formatDlrMonthYear(monthIdx, year) {
+  const safeMonthIdx = clampNumber(monthIdx, 0, 11);
+  const safeYear = Number.isFinite(Number(year)) ? Number(year) : new Date().getFullYear();
+  return `${FULL_MONTHS[safeMonthIdx]} ${safeYear}`;
+}
+
+function getCommunityRecordForScope(propName) {
+  const matchedName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  return matchedName === getProp().name
+    ? normalizeSavedCommunityRecord(matchedName, getCurrentCommunityRecord())
+    : normalizeSavedCommunityRecord(matchedName, savedData?.[matchedName]);
+}
+
+function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
+  const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  let runningUnits = snapshotKey === "leasedSnapshot"
+    ? Math.max(0, Number(record?.currentLeased) || 0)
+    : Math.max(0, Number(record?.currentOccupied) || 0);
+  if (!Number.isInteger(targetMonth)) return runningUnits;
+  if (targetMonth === anchorMonth) return runningUnits;
+  const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
+  if (targetMonth < anchorMonth) {
+    for (let month = anchorMonth; month > targetMonth; month -= 1) {
+      const priorSnapshot = Number(monthEntries[month - 1]?.[snapshotKey] ?? 0);
+      if (priorSnapshot > 0) return priorSnapshot;
+      runningUnits = Math.max(runningUnits + getEffectiveMoveOutsForMonth(month, monthEntries).effective - (monthEntries[month]?.moveIns ?? 0), 0);
+      runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
+    }
+    return runningUnits;
   }
-  return `<table style="width:100%;border-collapse:collapse;font-size:0.7rem">
+  for (let month = anchorMonth + 1; month <= targetMonth; month += 1) {
+    const explicitSnapshot = Number(monthEntries[month]?.[snapshotKey] ?? 0);
+    if (explicitSnapshot > 0) {
+      runningUnits = explicitSnapshot;
+      continue;
+    }
+    runningUnits = Math.max(runningUnits - getEffectiveMoveOutsForMonth(month, monthEntries).effective + (monthEntries[month]?.moveIns ?? 0), 0);
+    runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
+  }
+  return runningUnits;
+}
+
+function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommunityName(), monthIdx = getHistoricalImportMonthIndex(), year = getHistoricalImportYear()) {
+  const communityName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  const record = getCommunityRecordForScope(communityName);
+  const prop = getPropertyByName(communityName);
+  const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+  const scopeMonthlyData = Array.isArray(record.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
+  const scopeSeasonal = Array.isArray(record.seasonal) && record.seasonal.length === 12 ? record.seasonal : [...DEFAULT_SEASONAL];
+  const normalizedMonthIdx = clampNumber(monthIdx, 0, 11);
+  const scopeCurrentMonth = Number.isInteger(record.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  const schedule = computeScheduleFromContext({
+    totalUnits,
+    currentOccupied: Number(record.currentOccupied) || 0,
+    currentLeased: Number(record.currentLeased) || 0,
+    occupancyGoal: Number(record.occupancyGoal ?? 95),
+    leasedGoal: Number(record.leasedGoal ?? 97),
+    currentMonth: scopeCurrentMonth,
+    conversionRate: Number(record.conversionRate ?? 65),
+    monthlyData: scopeMonthlyData,
+    seasonal: scopeSeasonal
+  });
+  const monthEntry = scopeMonthlyData[normalizedMonthIdx] ?? {};
+  const prevMonthEntry = scopeMonthlyData[Math.max(normalizedMonthIdx - 1, 0)] ?? {};
+  const renewalSummary = getRenewalSummaryForMonth(monthEntry);
+  const prevRenewalSummary = getRenewalSummaryForMonth(prevMonthEntry);
+  const appMetrics = getApplicationDecisionMetrics(monthEntry);
+  const prevAppMetrics = getApplicationDecisionMetrics(prevMonthEntry);
+  const scheduleRow = schedule[normalizedMonthIdx] ?? {};
+  const nextRows = MONTHS.map((_, idx) => idx)
+    .filter(idx => idx >= normalizedMonthIdx)
+    .slice(0, 4)
+    .map(idx => {
+      const entry = scopeMonthlyData[idx] ?? {};
+      const row = schedule[idx] ?? {};
+      const renewals = getRenewalSummaryForMonth(entry);
+      return {
+        monthIdx: idx,
+        label: formatDlrMonthYear(idx, year),
+        leaseExpirations: renewals.expirations,
+        mtm: renewals.undecided,
+        pendingMoveOuts: getEffectiveMoveOutsForMonth(idx, scopeMonthlyData).effective,
+        pendingMoveIns: Number(entry.moveIns) || 0,
+        budgetedOccupancy: Number(entry.budgetOcc) || 0,
+        projectedOccupancy: Number(row.occPct) || 0,
+        moveInsNeeded: Number(row.netOccLeases) || 0
+      };
+    });
+  const occupiedUnits = normalizedMonthIdx === scopeCurrentMonth
+    ? Number(record.currentOccupied) || 0
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, normalizedMonthIdx, "occupiedSnapshot");
+  const leasedUnits = normalizedMonthIdx === scopeCurrentMonth
+    ? Number(record.currentLeased) || 0
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, normalizedMonthIdx, "leasedSnapshot");
+  const occupancyPct = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+  const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
+  const trendMonthIdx = Math.min(normalizedMonthIdx + 2, 11);
+  const trendRow = schedule[trendMonthIdx] ?? scheduleRow;
+  const trendingOccupancyPct = Number(trendRow.occPct ?? occupancyPct) || occupancyPct;
+  const budgetOccPct = Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
+  const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
+  const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
+  const tourToAppPct = Number(monthEntry.tours) > 0 ? (appMetrics.applications / Number(monthEntry.tours)) * 100 : 0;
+  const leadSources = getLeadSourceBreakdown(monthEntry);
+  const leadSourceTotal = getLeadSourceTotal(monthEntry);
+  const normalizedGuestToTourPct = leadSourceTotal > 0 ? ((Number(monthEntry.tours) || 0) / leadSourceTotal) * 100 : 0;
+  const currentNer = (Number(monthEntry.rentRollTotal) || 0) > 0 && occupiedUnits > 0
+    ? Number(monthEntry.rentRollTotal) / occupiedUnits
+    : (Number(monthEntry.nerActual) || 0);
+  const status = occupancyPct + 0.5 >= budgetOccPct
+    ? "On Track"
+    : occupancyPct + 2 >= budgetOccPct
+      ? "Watch"
+      : "Needs Attention";
+  const recommendations = buildRecommendationsForRecord(communityName, record);
+  const notes = {
+    tours: recommendations.filter(item => item.source === "Traffic").map(item => `${item.title}: ${item.body}`).slice(0, 3),
+    applications: [
+      `Applications approved: ${appMetrics.approvals}/${appMetrics.applications || 0} (${formatDlrPercent(appMetrics.approvalPct, 0)})`,
+      `Application to lease: ${formatDlrPercent(appMetrics.appToLeasePct, 0)}`,
+      prevAppMetrics.applications > 0 || prevAppMetrics.approvals > 0
+        ? `Prior month approvals: ${prevAppMetrics.approvals}/${prevAppMetrics.applications || 0} (${formatDlrPercent(prevAppMetrics.approvalPct, 0)})`
+        : ""
+    ].filter(Boolean),
+    marketing: recommendations.slice(0, 3).map(item => `${item.title}: ${item.body}`)
+  };
+  return {
+    communityName,
+    reportMonthIdx: normalizedMonthIdx,
+    reportYear: year,
+    reportMonthLabel: formatDlrMonthYear(normalizedMonthIdx, year),
+    reportPeriodLabel: `${formatDlrMonthYear(normalizedMonthIdx, year)} operating snapshot`,
+    generatedAt: new Date(),
+    status,
+    totalUnits,
+    occupiedUnits,
+    leasedUnits,
+    occupancyPct,
+    leasedPct,
+    trendingOccupancyPct,
+    budgetOccPct,
+    moveInGoalPerWeek,
+    moveInsNeeded,
+    trafficMetrics: {
+      guestCards: leadSourceTotal,
+      walkIn: leadSources.walkIn,
+      offSiteEvent: leadSources.offSiteEvent,
+      phoneCalls: leadSources.phoneCalls,
+      emailsOnline: leadSources.emailsOnline,
+      textChatOther: leadSources.textChatOther,
+      rolledGuestCards: leadSourceTotal,
+      tours: Number(monthEntry.tours) || 0,
+      guestToTourPct: normalizedGuestToTourPct,
+      tourToAppPct,
+      applications: appMetrics.applications,
+      approvals: appMetrics.approvals,
+      denials: appMetrics.denials,
+      appToLeasePct: appMetrics.appToLeasePct,
+      moveIns: Number(monthEntry.moveIns) || 0,
+      moveOuts: getEffectiveMoveOutsForMonth(normalizedMonthIdx, scopeMonthlyData).effective,
+      renewals: renewalSummary.signed,
+      notices: renewalSummary.ntv
+    },
+    pricing: {
+      totalUnits,
+      leasedUnits,
+      occupiedUnits,
+      avgBudgetRent: Number(monthEntry.proformaRent) || null,
+      avgInPlaceRent: Number(monthEntry.marketRent) || null,
+      avgNetEffectiveRent: currentNer || null,
+      rentRollTotal: Number(monthEntry.rentRollTotal) || null,
+      concessions: Number(monthEntry.concessions) || null
+    },
+    forwardLook: nextRows,
+    renewalSnapshot: {
+      expirations: renewalSummary.expirations,
+      signed: renewalSummary.signed,
+      undecided: renewalSummary.undecided,
+      projectedAttrition: renewalSummary.projectedAttrition,
+      retentionRate: renewalSummary.retentionRate,
+      previousRetentionRate: prevRenewalSummary.retentionRate
+    },
+    notes,
+    recommendations,
+    sourceSummary: `${communityName} · ${formatDlrMonthYear(normalizedMonthIdx, year)} · generated from operations dashboard`
+  };
+}
+
+function renderDashboardDlrActivityMiniTable(report) {
+  const rows = [
+    {
+      label: "Walk In",
+      actual: report.trafficMetrics.walkIn,
+      goal: null,
+      sub: "MTD lead source"
+    },
+    {
+      label: "Off Site Event",
+      actual: report.trafficMetrics.offSiteEvent,
+      goal: null,
+      sub: "MTD lead source"
+    },
+    {
+      label: "Phone Calls",
+      actual: report.trafficMetrics.phoneCalls,
+      goal: null,
+      sub: "MTD lead source"
+    },
+    {
+      label: "Emails / Online",
+      actual: report.trafficMetrics.emailsOnline,
+      goal: null,
+      sub: "MTD lead source"
+    },
+    {
+      label: "Text / Chat / Other",
+      actual: report.trafficMetrics.textChatOther,
+      goal: null,
+      sub: "MTD lead source"
+    },
+    {
+      label: "Guest Cards",
+      actual: report.trafficMetrics.rolledGuestCards,
+      goal: report.moveInsNeeded > 0 ? Math.max(report.trafficMetrics.rolledGuestCards, Math.ceil(report.moveInsNeeded / Math.max((report.trafficMetrics.appToLeasePct || 1) / 100, 0.01) / 0.6 / 0.5)) : null,
+      sub: `${formatDlrPercent(report.trafficMetrics.guestToTourPct, 0)} to tour`
+    },
+    {
+      label: "Tours",
+      actual: report.trafficMetrics.tours,
+      goal: report.moveInsNeeded > 0 ? Math.max(report.trafficMetrics.tours, Math.ceil(report.moveInsNeeded / Math.max((report.trafficMetrics.appToLeasePct || 1) / 100, 0.01) / 0.6)) : null,
+      sub: `${formatDlrPercent(report.trafficMetrics.tourToAppPct, 0)} to app`
+    },
+    {
+      label: "Applications",
+      actual: report.trafficMetrics.applications,
+      goal: report.moveInsNeeded > 0 ? Math.max(report.trafficMetrics.applications, Math.ceil(report.moveInsNeeded / Math.max((report.trafficMetrics.appToLeasePct || 1) / 100, 0.01))) : null,
+      sub: `${report.trafficMetrics.approvals} approved`
+    },
+    {
+      label: "Move-Ins",
+      actual: report.trafficMetrics.moveIns,
+      goal: report.moveInsNeeded,
+      sub: `${report.trafficMetrics.moveOuts} move-outs`
+    },
+    {
+      label: "Renewals",
+      actual: report.trafficMetrics.renewals,
+      goal: report.renewalSnapshot.expirations,
+      sub: `${formatDlrPercent(report.renewalSnapshot.retentionRate, 0)} retention`
+    }
+  ];
+  return `<table style="width:100%;border-collapse:collapse;font-size:0.72rem">
     <thead>
       <tr>
         <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Metric</th>
-        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Daily</th>
-        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">WTD</th>
-        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">MTD</th>
+        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Actual</th>
+        <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Goal / Need</th>
+        <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Read</th>
       </tr>
     </thead>
     <tbody>
-      ${rows.slice(0, 8).map(([label, values]) => `<tr>
-        <td style="padding:6px 4px;border-top:1px solid var(--border2)">${escapeHtml(label)}</td>
-        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.daily, values?.isPercent ? "%" : "")}</td>
-        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.wtd, values?.isPercent ? "%" : "")}</td>
-        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${formatDlrMetricValue(values?.mtd, values?.isPercent ? "%" : "")}</td>
+      ${rows.map(row => `<tr>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2)">${escapeHtml(row.label)}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center;font-weight:700">${formatDlrMetricValue(row.actual)}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);text-align:center">${row.goal === null ? "—" : formatDlrMetricValue(row.goal)}</td>
+        <td style="padding:6px 4px;border-top:1px solid var(--border2);color:var(--muted)">${escapeHtml(row.sub || "—")}</td>
       </tr>`).join("")}
     </tbody>
   </table>`;
+}
+
+function buildDlrInvestorOverviewDocument(report) {
+  const heroCards = [
+    { label: "Occupancy", value: formatDlrPercent(report.occupancyPct), sub: `${report.occupiedUnits} occupied units` },
+    { label: "Leased", value: formatDlrPercent(report.leasedPct), sub: `${report.leasedUnits} leased units` },
+    { label: "90-Day Trend", value: formatDlrPercent(report.trendingOccupancyPct), sub: "Projected occupancy trend" },
+    { label: "Status", value: report.status, sub: `Budget occ ${formatDlrPercent(report.budgetOccPct)}` },
+    { label: "Move-Ins Needed", value: formatDlrMetricValue(report.moveInsNeeded), sub: `${formatDlrMetricValue(report.moveInGoalPerWeek)} / week target` }
+  ];
+  const heroHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
+    ${heroCards.map(card => `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:14px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:6px">${escapeHtml(card.label)}</div>
+      <div style="font-size:24px;font-weight:700;color:#0f172a;margin-bottom:4px">${escapeHtml(card.value)}</div>
+      <div style="font-size:12px;color:#475569">${escapeHtml(card.sub)}</div>
+    </div>`).join("")}
+  </div>`;
+  const forwardRows = report.forwardLook.map(row => `<tr>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;font-weight:700">${escapeHtml(row.label)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
+    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
+  </tr>`).join("");
+  const recommendationsHtml = report.recommendations.length > 0
+    ? `<ul style="margin:0;padding-left:18px;color:#334155;font-size:12px;line-height:1.7">
+        ${report.recommendations.slice(0, 4).map(item => `<li><strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.body)}</li>`).join("")}
+      </ul>`
+    : `<div style="font-size:12px;color:#64748b">No material watchlist items surfaced from the current dashboard data.</div>`;
+  const notesHtml = [
+    { label: "Tours", items: report.notes.tours },
+    { label: "Applications", items: report.notes.applications },
+    { label: "Highlights / Operating Focus", items: report.notes.marketing }
+  ].map(section => `<div style="margin-bottom:10px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">${escapeHtml(section.label)}</div>
+      <div style="font-size:12px;color:#334155;line-height:1.7">${section.items.length > 0 ? section.items.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No notes surfaced from the current dashboard data."}</div>
+    </div>`).join("");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(report.communityName)} DLR Overview</title><style>
+    *{box-sizing:border-box}
+    body{font-family:'DM Sans',Arial,sans-serif;padding:28px;color:#0f172a;background:#ffffff}
+    table{width:100%;border-collapse:collapse}
+    .section{margin-bottom:18px}
+    .section-card{border:1px solid #dbe4f0;border-radius:16px;padding:16px;background:#ffffff}
+    .grid-2{display:grid;grid-template-columns:1.1fr 0.9fr;gap:14px}
+    @media print { body{padding:18px} .grid-2{grid-template-columns:1fr 1fr} }
+  </style></head><body>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid #dbe4f0">
+      <div style="display:flex;align-items:center;gap:14px">
+        <img src="${EXPORT_BRAND_LOGO_URI}" alt="RISE logo" style="height:38px;width:auto;object-fit:contain;display:block">
+        <div>
+          <div style="font-size:24px;font-weight:700;color:#1d4ed8">Daily Leasing Report Investor Overview</div>
+          <div style="font-size:13px;color:#64748b">${escapeHtml(report.communityName)} · ${escapeHtml(report.reportPeriodLabel)}</div>
+        </div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#64748b">
+        <div>Generated ${escapeHtml(formatPresentationTimestamp(report.generatedAt))}</div>
+        <div>${escapeHtml(report.sourceSummary)}</div>
+      </div>
+    </div>
+    ${heroHtml}
+    <div class="grid-2 section">
+      <div class="section-card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Activity Snapshot</div>
+        ${renderDashboardDlrActivityMiniTable(report)}
+      </div>
+      <div class="section-card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Pricing Snapshot</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;color:#334155">
+          <div><strong>Market / In-Place Rent</strong><br>${formatDlrCurrency(report.pricing.avgInPlaceRent)}</div>
+          <div><strong>Budget Rent</strong><br>${formatDlrCurrency(report.pricing.avgBudgetRent)}</div>
+          <div><strong>Net Effective Rent</strong><br>${formatDlrCurrency(report.pricing.avgNetEffectiveRent)}</div>
+          <div><strong>Concessions</strong><br>${formatDlrCurrency(report.pricing.concessions)}</div>
+          <div><strong>Rent Roll Total</strong><br>${formatDlrCurrency(report.pricing.rentRollTotal)}</div>
+          <div><strong>Total Units</strong><br>${formatDlrMetricValue(report.totalUnits)}</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:12px;color:#475569">
+          Renewal retention is ${formatDlrPercent(report.renewalSnapshot.retentionRate, 0)} with ${formatDlrMetricValue(report.renewalSnapshot.undecided)} undecided / M2M and ${formatDlrMetricValue(report.renewalSnapshot.projectedAttrition)} projected attrition unit(s).
+        </div>
+      </div>
+    </div>
+    <div class="section section-card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:10px">Forward Look</div>
+      <table>
+        <thead>
+          <tr style="background:#eff6ff">
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:left">Month</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Expirations</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Pending Outs</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Pending Ins</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Budget Occ</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Projected Occ</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#475569;text-align:center">Move-Ins Needed</th>
+          </tr>
+        </thead>
+        <tbody>${forwardRows}</tbody>
+      </table>
+    </div>
+    <div class="grid-2 section">
+      <div class="section-card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Leadership Notes</div>
+        ${notesHtml}
+      </div>
+      <div class="section-card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Recommended Focus Areas</div>
+        ${recommendationsHtml}
+      </div>
+    </div>
+  </body></html>`;
+}
+
+function openDlrInvestorOverview(printImmediately = false) {
+  const report = buildDashboardDlrInvestorOverview();
+  const win = window.open("", "_blank");
+  if (!win || !report) return;
+  win.document.write(buildDlrInvestorOverviewDocument(report));
+  win.document.close();
+  if (printImmediately) {
+    win.focus();
+    setTimeout(() => win.print(), 220);
+  }
+}
+
+function downloadDlrInvestorOverviewHtml() {
+  const report = buildDashboardDlrInvestorOverview();
+  if (!report) return;
+  const blob = new Blob([buildDlrInvestorOverviewDocument(report)], { type: "text/html" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${report.communityName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_dlr_investor_overview_${report.reportYear}-${String(report.reportMonthIdx + 1).padStart(2, "0")}.html`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function renderCSVTab() {
@@ -11019,7 +11485,7 @@ function renderCSVTab() {
   const historicalCommunity = getHistoricalImportCommunityName();
   const historicalMonthIdx = getHistoricalImportMonthIndex();
   const historicalYear = getHistoricalImportYear();
-  const historicalDlrSummary = getCommunityDlrSummary(historicalCommunity);
+  const historicalDlrSummary = buildDashboardDlrInvestorOverview(historicalCommunity, historicalMonthIdx, historicalYear);
   const historicalYearOptions = Array.from({ length: 5 }, (_, idx) => new Date().getFullYear() - 2 + idx);
   const selectedReportSections = getSelectedPortfolioReportSections();
   const investorOptions = getInvestorReportFilterOptions();
@@ -11098,30 +11564,30 @@ function renderCSVTab() {
     </label>
     <div style="font-size:0.66rem;color:var(--muted);margin-top:8px">The dashboard still stores values in the current month slots, so the selected year is kept as routing context and preview labeling for historical workflows and future automation hooks.</div>
   </div>`;
-  const dlrForwardMonths = (historicalDlrSummary.forwardLook?.months ?? []).slice(0, 4);
   const dlrExecutiveHTML = `<div class="card mb4">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div>
         <h3 style="font-size:0.85rem;font-weight:600;margin-bottom:6px">📘 RISE Daily Leasing Report (DLR)</h3>
-        <p style="font-size:0.72rem;color:var(--muted)">Investor-ready summary of the latest imported DLR for ${escapeHtml(historicalCommunity)}. This is designed to become the automation-friendly landing zone for a scheduled agent later.</p>
+        <p style="font-size:0.72rem;color:var(--muted)">Generate a clean, investor-facing DLR overview for ${escapeHtml(historicalCommunity)} from the operations dashboard’s saved data. This replaces the old DLR upload workflow and keeps the output tied to your live occupancy, traffic, renewal, and pricing metrics.</p>
       </div>
-      <label class="btn btn-blue btn-sm" style="cursor:pointer">Upload DLR PDF
-        <input type="file" accept=".pdf" id="dlr-input" style="display:none" multiple/>
-      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="downloadDlrInvestorOverviewHtml()">⬇ Editable HTML</button>
+        <button class="btn btn-blue btn-sm" onclick="openDlrInvestorOverview(true)">🖨 Export DLR / Print</button>
+      </div>
     </div>
-    ${historicalDlrSummary.sourceFileName ? `
+    ${historicalDlrSummary ? `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
         <div class="bonus-framework-stat"><div class="k">Report Period</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.reportPeriodLabel || "—")}</div></div>
-        <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.occupancyPct, "%")}</div></div>
-        <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.leasedPct, "%")}</div></div>
-        <div class="bonus-framework-stat"><div class="k">90-Day Trend</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.trendingOccupancyPct, "%")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.occupancyPct)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.leasedPct)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">90-Day Trend</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.trendingOccupancyPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Move-In Goal / Week</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.moveInGoalPerWeek)}</div></div>
-        <div class="bonus-framework-stat"><div class="k">Property Status</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.propertyStatus || "—")}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Property Status</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.status || "—")}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:12px">
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
           <div class="card-title" style="margin-bottom:8px">Activity Snapshot</div>
-          ${renderDlrActivityMiniTable(historicalDlrSummary)}
+          ${renderDashboardDlrActivityMiniTable(historicalDlrSummary)}
         </div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
           <div class="card-title" style="margin-bottom:8px">Pricing Snapshot</div>
@@ -11129,35 +11595,37 @@ function renderCSVTab() {
             <div>Total Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.totalUnits)}</strong></div>
             <div>Leased Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.leasedUnits)}</strong></div>
             <div>Occupied Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.occupiedUnits)}</strong></div>
-            <div>Avg Budget Rent: <strong>${historicalDlrSummary.pricing?.avgBudgetRent ? "$" + Number(historicalDlrSummary.pricing.avgBudgetRent).toLocaleString() : "—"}</strong></div>
-            <div>Avg In-Place Rent: <strong>${historicalDlrSummary.pricing?.avgInPlaceRent ? "$" + Number(historicalDlrSummary.pricing.avgInPlaceRent).toLocaleString() : "—"}</strong></div>
+            <div>Avg Budget Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgBudgetRent)}</strong></div>
+            <div>Avg In-Place Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgInPlaceRent)}</strong></div>
+            <div>Avg Net Effective Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgNetEffectiveRent)}</strong></div>
           </div>
-          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Imported from ${escapeHtml(historicalDlrSummary.sourceFileName)}${historicalDlrSummary.importedAt ? ` · saved ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.importedAt))}` : ""}</div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Built from saved dashboard values for ${escapeHtml(historicalDlrSummary.reportMonthLabel)} · generated ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.generatedAt))}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
           <div class="card-title" style="margin-bottom:8px">Forward Look</div>
-          <div style="display:grid;grid-template-columns:repeat(${Math.max(dlrForwardMonths.length,1)},1fr);gap:8px">
-            ${dlrForwardMonths.map((monthLabel, idx) => `<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px">
-              <div style="font-size:0.68rem;font-weight:700;color:#4493f8">${escapeHtml(monthLabel)}</div>
-              <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">Expirations ${formatDlrMetricValue(historicalDlrSummary.forwardLook.leaseExpirations?.[idx])}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Pending outs ${formatDlrMetricValue(historicalDlrSummary.forwardLook.pendingMoveOuts?.[idx])}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Pending ins ${formatDlrMetricValue(historicalDlrSummary.forwardLook.pendingMoveIns?.[idx])}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Budget occ ${formatDlrMetricValue(historicalDlrSummary.forwardLook.budgetedOccupancy?.[idx], "%")}</div>
-            </div>`).join("") || `<div style="font-size:0.68rem;color:var(--muted)">Forward-looking DLR months were not available in the last upload.</div>`}
+          <div style="display:grid;grid-template-columns:repeat(${Math.max(historicalDlrSummary.forwardLook.length,1)},1fr);gap:8px">
+            ${historicalDlrSummary.forwardLook.map(row => `<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px">
+              <div style="font-size:0.68rem;font-weight:700;color:#4493f8">${escapeHtml(row.label)}</div>
+              <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">Expirations ${formatDlrMetricValue(row.leaseExpirations)}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Pending outs ${formatDlrMetricValue(row.pendingMoveOuts)}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Pending ins ${formatDlrMetricValue(row.pendingMoveIns)}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Budget occ ${formatDlrPercent(row.budgetedOccupancy)}</div>
+              <div style="font-size:0.64rem;color:var(--muted)">Projected occ ${formatDlrPercent(row.projectedOccupancy)}</div>
+            </div>`).join("") || `<div style="font-size:0.68rem;color:var(--muted)">No forward-looking dashboard months are available yet.</div>`}
           </div>
         </div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
           <div class="card-title" style="margin-bottom:8px">Leasing Notes</div>
           <div style="font-size:0.68rem;color:var(--muted);line-height:1.7">
-            <div style="margin-bottom:8px"><strong style="color:var(--text)">Tours</strong><br>${historicalDlrSummary.notes?.tours?.length ? historicalDlrSummary.notes.tours.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No tour notes captured."}</div>
-            <div style="margin-bottom:8px"><strong style="color:var(--text)">Applications</strong><br>${historicalDlrSummary.notes?.applications?.length ? historicalDlrSummary.notes.applications.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No application notes captured."}</div>
-            <div><strong style="color:var(--text)">Marketing / Specials</strong><br>${historicalDlrSummary.notes?.marketing?.length ? historicalDlrSummary.notes.marketing.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No marketing notes captured."}</div>
+            <div style="margin-bottom:8px"><strong style="color:var(--text)">Tours</strong><br>${historicalDlrSummary.notes?.tours?.length ? historicalDlrSummary.notes.tours.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No tour notes surfaced."}</div>
+            <div style="margin-bottom:8px"><strong style="color:var(--text)">Applications</strong><br>${historicalDlrSummary.notes?.applications?.length ? historicalDlrSummary.notes.applications.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No application notes surfaced."}</div>
+            <div><strong style="color:var(--text)">Marketing / Specials</strong><br>${historicalDlrSummary.notes?.marketing?.length ? historicalDlrSummary.notes.marketing.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No operating highlights surfaced."}</div>
           </div>
         </div>
       </div>
-    ` : `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.72rem;color:var(--muted)">Upload a DLR PDF to generate a RISE-branded high-level leasing summary for this community. The parsed values also save back into the mapped dashboard fields.</div>`}
+    ` : `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.72rem;color:var(--muted)">Save community data first, then this section will generate a DLR-style investor overview from the dashboard instead of waiting on an uploaded PDF.</div>`}
   </div>`;
   const ownerFilterSummary = `${(portfolioReportFilters.investorGroups ?? []).length} investor group(s) · ${(portfolioReportFilters.investorCommunities ?? []).length} community selection(s)`;
   const regionalFilterSummary = `${(portfolioReportFilters.regionalScopes ?? []).length} scope(s) · ${(portfolioReportFilters.regionalCommunities ?? []).length} community selection(s)`;
@@ -11420,7 +11888,7 @@ function renderCSVTab() {
     </div>
     <div class="tbl-wrap" style="margin-bottom:0">
       <table>
-        <thead><tr><th class="l">Property</th><th class="c">Month</th><th class="c">Occupied</th><th class="c">Leased</th><th class="c">Move-Outs</th><th class="c">Move-Ins</th><th class="c">Guest Cards</th><th class="c">Tours</th><th class="c">Applications</th><th class="c">Apps Approved</th><th class="c">Leases Signed</th><th class="c">Budget Occ %</th><th class="c">Market Rent</th><th class="c">Budget Rent</th><th class="c">Budget NER</th><th class="c">Rent Roll Total</th><th class="c">Concessions</th><th class="c">NER</th><th class="c">Renewal Exp.</th><th class="c">Renewals Signed</th><th class="c">Renewal NTVs</th><th class="c">Transfers</th><th class="c">Undecided / M2M</th><th class="c">Early Term.</th></tr></thead>
+        <thead><tr><th class="l">Property</th><th class="c">Month</th><th class="c">Occupied</th><th class="c">Leased</th><th class="c">Move-Outs</th><th class="c">Move-Ins</th><th class="c">Guest Cards</th><th class="c">Walk In</th><th class="c">Off Site</th><th class="c">Phone</th><th class="c">Email / Online</th><th class="c">Text / Chat / Other</th><th class="c">Tours</th><th class="c">Applications</th><th class="c">Apps Approved</th><th class="c">Leases Signed</th><th class="c">Budget Occ %</th><th class="c">Market Rent</th><th class="c">Budget Rent</th><th class="c">Budget NER</th><th class="c">Rent Roll Total</th><th class="c">Concessions</th><th class="c">NER</th><th class="c">Renewal Exp.</th><th class="c">Renewals Signed</th><th class="c">Renewal NTVs</th><th class="c">Transfers</th><th class="c">Undecided / M2M</th><th class="c">Early Term.</th></tr></thead>
         <tbody>${extractedDashboardRows.map((row, idx) => `<tr>
           <td class="l"><input type="text" value="${row.property ?? ""}" onchange="updateExtractedDashboardCell(${idx},'property',this.value)" style="width:150px"></td>
           <td><input type="text" value="${row.month ?? ""}" onchange="updateExtractedDashboardCell(${idx},'month',this.value)" style="width:58px;text-align:center"></td>
@@ -11429,6 +11897,11 @@ function renderCSVTab() {
           <td><input type="number" value="${row.move_outs ?? ""}" onchange="updateExtractedDashboardCell(${idx},'move_outs',this.value)" style="width:74px;text-align:center"></td>
           <td><input type="number" value="${row.move_ins ?? ""}" onchange="updateExtractedDashboardCell(${idx},'move_ins',this.value)" style="width:74px;text-align:center"></td>
           <td><input type="number" value="${row.guest_cards ?? ""}" onchange="updateExtractedDashboardCell(${idx},'guest_cards',this.value)" style="width:84px;text-align:center"></td>
+          <td><input type="number" value="${row.walk_in ?? ""}" onchange="updateExtractedDashboardCell(${idx},'walk_in',this.value)" style="width:72px;text-align:center"></td>
+          <td><input type="number" value="${row.off_site_event ?? ""}" onchange="updateExtractedDashboardCell(${idx},'off_site_event',this.value)" style="width:72px;text-align:center"></td>
+          <td><input type="number" value="${row.phone_calls ?? ""}" onchange="updateExtractedDashboardCell(${idx},'phone_calls',this.value)" style="width:72px;text-align:center"></td>
+          <td><input type="number" value="${row.emails_online ?? ""}" onchange="updateExtractedDashboardCell(${idx},'emails_online',this.value)" style="width:84px;text-align:center"></td>
+          <td><input type="number" value="${row.text_chat_other ?? ""}" onchange="updateExtractedDashboardCell(${idx},'text_chat_other',this.value)" style="width:96px;text-align:center"></td>
           <td><input type="number" value="${row.tours ?? ""}" onchange="updateExtractedDashboardCell(${idx},'tours',this.value)" style="width:70px;text-align:center"></td>
           <td><input type="number" value="${row.applications ?? ""}" onchange="updateExtractedDashboardCell(${idx},'applications',this.value)" style="width:92px;text-align:center"></td>
           <td><input type="number" value="${row.applications_approved ?? ""}" onchange="updateExtractedDashboardCell(${idx},'applications_approved',this.value)" style="width:92px;text-align:center"></td>
@@ -11457,6 +11930,11 @@ function renderCSVTab() {
     {field:"Move-Outs",            variants:["move_outs","moveouts","notice_to_vacate","ntv","scheduled_moveouts"],         color:"#f85149"},
     {field:"Move-Ins",             variants:["move_ins","moveins","move_in","scheduled_moveins","net_moveins"],             color:"#2dd4bf"},
     {field:"Guest Cards / Leads",  variants:["guest_cards","guestcards","leads","prospects","traffic"],                    color:"#d29922"},
+    {field:"Walk In",              variants:["walk_in","walkin","walk in"],                                                color:"#60a5fa"},
+    {field:"Off Site Event",       variants:["off_site_event","offsiteevent","off site event"],                            color:"#818cf8"},
+    {field:"Phone Calls",          variants:["phone_calls","phonecalls","phone calls"],                                    color:"#c084fc"},
+    {field:"Emails / Online",      variants:["emails_online","emailsonline","emails/online","email_online"],               color:"#34d399"},
+    {field:"Text / Chat / Other",  variants:["text_chat_other","textchatother","text/chat/other","chat_other"],            color:"#f59e0b"},
     {field:"Tours",                variants:["tours","showings","total_tours"],                                             color:"#fb923c"},
     {field:"Applications",         variants:["applications","apps","total_applications"],                                   color:"#ec4899"},
     {field:"Applications Approved", variants:["applications_approved","approved","approved_apps","apps_approved"],         color:"#3fb950"},
@@ -11478,7 +11956,7 @@ function renderCSVTab() {
     {field:"Property Name",        variants:["property","property_name","community","community_name"],                      color:"var(--text)"},
   ];
 
-  const sampleCSV = `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination\nFlorence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7,1\nFlorence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5,0\nBartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5,2`;
+  const sampleCSV = `property,month,occupied,leased,move_outs,move_ins,guest_cards,walk_in,off_site_event,phone_calls,emails_online,text_chat_other,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination\nFlorence Villa,Mar,87,90,8,6,45,8,3,12,15,7,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7,1\nFlorence Villa,Apr,93,96,10,8,50,10,4,13,16,7,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5,0\nBartram Park,Mar,245,252,12,10,60,12,5,15,18,10,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5,2`;
 
   const importWorkspaceSection = `<div class="card mb4">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
@@ -11543,10 +12021,10 @@ function renderCSVTab() {
     renderWindowshadeCard({
       key: "import_dlr_summary",
       title: "Daily Leasing Report",
-      subtitle: "RISE-branded high-level DLR summary and upload workflow.",
-      countLabel: historicalDlrSummary.sourceFileName ? "DLR loaded" : "No DLR",
+      subtitle: "Generate a DLR-style investor overview from saved dashboard data.",
+      countLabel: historicalDlrSummary ? `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}` : "No data",
       bodyHtml: dlrExecutiveHTML,
-      collapsedPreview: historicalDlrSummary.reportPeriodLabel || "Upload a DLR PDF"
+      collapsedPreview: historicalDlrSummary ? `${historicalDlrSummary.reportMonthLabel} · ${historicalDlrSummary.status}` : "Generate DLR overview"
     }),
     renderWindowshadeCard({
       key: "import_workspace",
@@ -11609,10 +12087,10 @@ function renderCSVTab() {
 
 function downloadTemplate() {
   const csv = [
-    `property,month,occupied,leased,move_outs,move_ins,guest_cards,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination`,
-    `Florence Villa,Mar,87,90,8,6,45,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7`,
-    `Florence Villa,Apr,93,96,10,8,50,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5`,
-    `Bartram Park,Mar,245,252,12,10,60,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5`,
+    `property,month,occupied,leased,move_outs,move_ins,guest_cards,walk_in,off_site_event,phone_calls,emails_online,text_chat_other,tours,applications,applications_approved,leases_signed,budget_occ,market_rent,budget_rent,budget_ner,rent_roll_total,concessions,ner,renewal_expirations,renewals_signed,renewal_ntvs,renewal_transfers,renewal_undecided,renewal_early_termination`,
+    `Florence Villa,Mar,87,90,8,6,45,8,3,12,15,7,22,14,11,6,52,1850,1795,1720,153555,100,1765,14,5,2,0,7,1`,
+    `Florence Villa,Apr,93,96,10,8,50,10,4,13,16,7,25,16,12,8,60,1850,1810,1740,166470,75,1790,12,6,1,0,5,0`,
+    `Bartram Park,Mar,245,252,12,10,60,12,5,15,18,10,30,18,13,9,88,1650,1625,1580,394940,50,1612,18,9,3,1,5,2`,
   ].join('\n');
   const blob = new Blob([csv], {type:"text/csv"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "RISE_leasing_template.csv"; a.click();
@@ -11676,6 +12154,11 @@ function renderExtractFieldMapControls() {
     { key: "move_outs", label: "Move-Outs" },
     { key: "move_ins", label: "Move-Ins" },
     { key: "guest_cards", label: "Guest Cards" },
+    { key: "walk_in", label: "Walk In" },
+    { key: "off_site_event", label: "Off Site Event" },
+    { key: "phone_calls", label: "Phone Calls" },
+    { key: "emails_online", label: "Emails / Online" },
+    { key: "text_chat_other", label: "Text / Chat / Other" },
     { key: "tours", label: "Tours" },
     { key: "applications", label: "Applications" },
     { key: "applications_approved", label: "Applications Approved" },
@@ -11718,6 +12201,11 @@ function buildDlrDashboardRows(dlr, targetMonth) {
     move_outs: dlr.moveOuts ?? "",
     move_ins: dlr.moveIns ?? "",
     guest_cards: dlr.guestCards ?? "",
+    walk_in: dlr.leadSources?.walkIn ?? "",
+    off_site_event: dlr.leadSources?.offSiteEvent ?? "",
+    phone_calls: dlr.leadSources?.phoneCalls ?? "",
+    emails_online: dlr.leadSources?.emailsOnline ?? "",
+    text_chat_other: dlr.leadSources?.textChatOther ?? "",
     tours: dlr.tours ?? "",
     applications: dlr.applications ?? "",
     leases_signed: "",
@@ -11742,6 +12230,11 @@ function buildDlrDashboardRows(dlr, targetMonth) {
       move_outs: dlr.pendingMoveOutsByMonth[monthIdx] ?? "",
       move_ins: dlr.pendingMoveInsByMonth[monthIdx] ?? "",
       guest_cards: "",
+      walk_in: "",
+      off_site_event: "",
+      phone_calls: "",
+      emails_online: "",
+      text_chat_other: "",
       tours: "",
       applications: "",
       leases_signed: "",
@@ -11846,20 +12339,6 @@ async function processHistoricalImportFiles(files) {
       await handlePDF(file, { forcedProperty, forcedMonthIdx, forcedYear });
     } else if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
       await handleCSVFile(file, { forcedProperty, forcedMonthIdx, forcedYear });
-    }
-  }
-}
-
-async function processDlrFiles(files) {
-  const forcedProperty = getHistoricalImportCommunityName();
-  const forcedMonthIdx = getHistoricalImportMonthIndex();
-  const forcedYear = getHistoricalImportYear();
-  for (const file of files) {
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      await handlePDF(file, { forcedProperty, forcedMonthIdx, forcedYear });
-    } else {
-      csvError = `${file.name} is not a supported DLR file. Upload a PDF Daily Leasing Report.`;
-      renderTab();
     }
   }
 }
@@ -12044,7 +12523,14 @@ function parseDlrPdf(sourceText, rawText = sourceText, fileName = "") {
     "emails/online",
     "text/chat/other"
   ];
-  const guestCardValues = guestCardCategories.map(label => findDlrMtdValue(label, sourceText)).filter(val => val !== null);
+  const leadSourceValues = {
+    walkIn: findDlrMtdValue("walk in", sourceText),
+    offSiteEvent: findDlrMtdValue("off site event", sourceText),
+    phoneCalls: findDlrMtdValue("phone calls", sourceText),
+    emailsOnline: findDlrMtdValue("emails/online", sourceText),
+    textChatOther: findDlrMtdValue("text/chat/other", sourceText)
+  };
+  const guestCardValues = Object.values(leadSourceValues).filter(val => val !== null);
   const guestCards = guestCardValues.length > 0 ? guestCardValues.reduce((sum, val) => sum + val, 0) : null;
   return {
     summary: buildDlrSummary(rawText, fileName),
@@ -12054,6 +12540,7 @@ function parseDlrPdf(sourceText, rawText = sourceText, fileName = "") {
     moveOuts: findDlrNumberNear("move-outs", sourceText) ?? findDlrNumberNear("move outs", sourceText),
     moveIns: findDlrNumberNear("move-ins", sourceText) ?? findDlrNumberNear("move ins", sourceText),
     guestCards,
+    leadSources: leadSourceValues,
     tours: findDlrNumberNear("tours", sourceText),
     applications: findDlrNumberNear("applications", sourceText) ?? findDlrNumberNear("application", sourceText),
     marketRent: findDlrCurrencyNear("avg in place rent", sourceText),
@@ -12129,6 +12616,11 @@ async function handlePDF(file, options = {}) {
       if (dlr.moveOuts !== null) { md.moveOuts = Math.round(dlr.moveOuts); matched++; log.push(`→ ${MONTHS[targetMonth]} move-outs: ${md.moveOuts}`); }
       if (dlr.moveIns !== null) { md.moveIns = Math.round(dlr.moveIns); matched++; log.push(`→ ${MONTHS[targetMonth]} move-ins: ${md.moveIns}`); }
       if (dlr.guestCards !== null) { md.guestCards = Math.round(dlr.guestCards); matched++; log.push(`→ ${MONTHS[targetMonth]} guest cards: ${md.guestCards} (MTD source rollup)`); }
+      if (dlr.leadSources?.walkIn !== null && dlr.leadSources?.walkIn !== undefined) { md.walkIn = Math.round(dlr.leadSources.walkIn || 0); matched++; log.push(`→ ${MONTHS[targetMonth]} walk in leads: ${md.walkIn}`); }
+      if (dlr.leadSources?.offSiteEvent !== null && dlr.leadSources?.offSiteEvent !== undefined) { md.offSiteEvent = Math.round(dlr.leadSources.offSiteEvent || 0); matched++; log.push(`→ ${MONTHS[targetMonth]} off-site event leads: ${md.offSiteEvent}`); }
+      if (dlr.leadSources?.phoneCalls !== null && dlr.leadSources?.phoneCalls !== undefined) { md.phoneCalls = Math.round(dlr.leadSources.phoneCalls || 0); matched++; log.push(`→ ${MONTHS[targetMonth]} phone call leads: ${md.phoneCalls}`); }
+      if (dlr.leadSources?.emailsOnline !== null && dlr.leadSources?.emailsOnline !== undefined) { md.emailsOnline = Math.round(dlr.leadSources.emailsOnline || 0); matched++; log.push(`→ ${MONTHS[targetMonth]} emails / online leads: ${md.emailsOnline}`); }
+      if (dlr.leadSources?.textChatOther !== null && dlr.leadSources?.textChatOther !== undefined) { md.textChatOther = Math.round(dlr.leadSources.textChatOther || 0); matched++; log.push(`→ ${MONTHS[targetMonth]} text / chat / other leads: ${md.textChatOther}`); }
       if (dlr.tours !== null) { md.tours = Math.round(dlr.tours); matched++; log.push(`→ ${MONTHS[targetMonth]} tours: ${md.tours}`); }
       if (dlr.applications !== null) { md.applications = Math.round(dlr.applications); matched++; log.push(`→ ${MONTHS[targetMonth]} applications: ${md.applications}`); }
       if (dlr.marketRent !== null) { md.marketRent = dlr.marketRent; matched++; log.push(`→ ${MONTHS[targetMonth]} market rent: $${md.marketRent}`); }
@@ -12212,6 +12704,11 @@ async function handlePDF(file, options = {}) {
       { field: "moveOuts", keywords: ["move-outs","move outs","moveouts","notice to vacate","ntv","scheduled move-out"], pct: false },
       { field: "moveIns", keywords: ["move-ins","move ins","moveins","move-in","scheduled move-in"], pct: false },
       { field: "guestCards", keywords: ["guest cards","guest card","leads","prospects","traffic","inquiries"], pct: false },
+      { field: "walkIn", keywords: ["walk in"], pct: false },
+      { field: "offSiteEvent", keywords: ["off site event"], pct: false },
+      { field: "phoneCalls", keywords: ["phone calls"], pct: false },
+      { field: "emailsOnline", keywords: ["emails/online","emails online"], pct: false },
+      { field: "textChatOther", keywords: ["text/chat/other","text chat other"], pct: false },
       { field: "tours", keywords: ["tours","showings","total tours"], pct: false },
       { field: "applications", keywords: ["applications","apps","total applications","total apps"], pct: false },
       { field: "leasesSignedActual", keywords: ["leases signed","new leases","signed leases","executed leases","total leases"], pct: false },
@@ -12267,6 +12764,11 @@ async function handlePDF(file, options = {}) {
       move_outs: foundValues.moveOuts ?? "",
       move_ins: foundValues.moveIns ?? "",
       guest_cards: foundValues.guestCards ?? "",
+      walk_in: foundValues.walkIn ?? "",
+      off_site_event: foundValues.offSiteEvent ?? "",
+      phone_calls: foundValues.phoneCalls ?? "",
+      emails_online: foundValues.emailsOnline ?? "",
+      text_chat_other: foundValues.textChatOther ?? "",
       tours: foundValues.tours ?? "",
       applications: foundValues.applications ?? "",
       leases_signed: foundValues.leasesSignedActual ?? "",
@@ -12306,6 +12808,11 @@ async function handleCSVFile(file, options = {}) {
         moveOuts: ["move_outs","moveouts","move_out","notice_to_vacate","ntv","scheduled_moveouts"],
         moveIns:  ["move_ins","moveins","move_in","scheduled_moveins","net_moveins"],
         guestCards: ["guest_cards","guestcards","leads","prospects","traffic","inquiries"],
+        walkIn: ["walk_in","walkin","walk_in_mtd","walk in"],
+        offSiteEvent: ["off_site_event","offsiteevent","off_site","off site event"],
+        phoneCalls: ["phone_calls","phonecalls","phone calls"],
+        emailsOnline: ["emails_online","emailsonline","emails/online","email_online"],
+        textChatOther: ["text_chat_other","textchatother","text/chat/other","chat_other"],
         tours: ["tours","showings","total_tours"],
         applications: ["applications","apps","total_applications"],
         applicationsApproved: ["applications_approved","approved","approved_apps","apps_approved"],
@@ -12367,6 +12874,11 @@ async function handleCSVFile(file, options = {}) {
           move_outs: findVal(row, fieldMap.moveOuts) ?? "",
           move_ins: findVal(row, fieldMap.moveIns) ?? "",
           guest_cards: findVal(row, fieldMap.guestCards) ?? "",
+          walk_in: findVal(row, fieldMap.walkIn) ?? "",
+          off_site_event: findVal(row, fieldMap.offSiteEvent) ?? "",
+          phone_calls: findVal(row, fieldMap.phoneCalls) ?? "",
+          emails_online: findVal(row, fieldMap.emailsOnline) ?? "",
+          text_chat_other: findVal(row, fieldMap.textChatOther) ?? "",
           tours: findVal(row, fieldMap.tours) ?? "",
           applications: findVal(row, fieldMap.applications) ?? "",
           applications_approved: findVal(row, fieldMap.applicationsApproved) ?? "",
