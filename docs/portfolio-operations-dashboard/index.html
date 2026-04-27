@@ -1287,11 +1287,88 @@ function normalizeHistoricalImportTarget(input = {}) {
   };
 }
 
+function defaultDlrBoxScoreSnapshot() {
+  return {
+    sourceFileName: "",
+    importedAt: "",
+    reportDateIso: "",
+    reportDateLabel: "",
+    guestCards: null,
+    walkIn: null,
+    offSiteEvent: null,
+    phoneCalls: null,
+    emailsOnline: null,
+    textChatOther: null,
+    tours: null,
+    applications: null,
+    applicationsApproved: null,
+    leasesSigned: null,
+    moveIns: null,
+    moveOuts: null,
+    renewals: null
+  };
+}
+
+function normalizeOptionalNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeDlrBoxScoreSnapshot(input = {}) {
+  const defaults = defaultDlrBoxScoreSnapshot();
+  return {
+    ...defaults,
+    sourceFileName: String(input.sourceFileName ?? defaults.sourceFileName).trim(),
+    importedAt: String(input.importedAt ?? defaults.importedAt).trim(),
+    reportDateIso: String(input.reportDateIso ?? defaults.reportDateIso).trim(),
+    reportDateLabel: String(input.reportDateLabel ?? defaults.reportDateLabel).trim(),
+    guestCards: normalizeOptionalNumber(input.guestCards),
+    walkIn: normalizeOptionalNumber(input.walkIn),
+    offSiteEvent: normalizeOptionalNumber(input.offSiteEvent),
+    phoneCalls: normalizeOptionalNumber(input.phoneCalls),
+    emailsOnline: normalizeOptionalNumber(input.emailsOnline),
+    textChatOther: normalizeOptionalNumber(input.textChatOther),
+    tours: normalizeOptionalNumber(input.tours),
+    applications: normalizeOptionalNumber(input.applications),
+    applicationsApproved: normalizeOptionalNumber(input.applicationsApproved),
+    leasesSigned: normalizeOptionalNumber(input.leasesSigned),
+    moveIns: normalizeOptionalNumber(input.moveIns),
+    moveOuts: normalizeOptionalNumber(input.moveOuts),
+    renewals: normalizeOptionalNumber(input.renewals)
+  };
+}
+
+function hasDlrBoxScoreSnapshot(snapshot) {
+  const normalized = normalizeDlrBoxScoreSnapshot(snapshot);
+  return Boolean(
+    normalized.reportDateIso ||
+    normalized.reportDateLabel ||
+    normalized.sourceFileName ||
+    [
+      normalized.guestCards,
+      normalized.walkIn,
+      normalized.offSiteEvent,
+      normalized.phoneCalls,
+      normalized.emailsOnline,
+      normalized.textChatOther,
+      normalized.tours,
+      normalized.applications,
+      normalized.applicationsApproved,
+      normalized.leasesSigned,
+      normalized.moveIns,
+      normalized.moveOuts,
+      normalized.renewals
+    ].some(value => value !== null && value !== undefined)
+  );
+}
+
 function defaultDlrSummary() {
   return {
     sourceFileName: "",
     importedAt: "",
     reportPeriodLabel: "",
+    reportDateIso: "",
+    reportDateLabel: "",
     occupancyStartMonth: "",
     propertyStatus: "",
     leasedPct: null,
@@ -1320,7 +1397,8 @@ function defaultDlrSummary() {
       occupiedUnits: null,
       avgBudgetRent: null,
       avgInPlaceRent: null
-    }
+    },
+    dailyBoxScore: defaultDlrBoxScoreSnapshot()
   };
 }
 
@@ -1333,6 +1411,8 @@ function normalizeDlrSummary(data) {
     sourceFileName: String(input.sourceFileName ?? defaults.sourceFileName).trim(),
     importedAt: String(input.importedAt ?? defaults.importedAt).trim(),
     reportPeriodLabel: String(input.reportPeriodLabel ?? defaults.reportPeriodLabel).trim(),
+    reportDateIso: String(input.reportDateIso ?? defaults.reportDateIso).trim(),
+    reportDateLabel: String(input.reportDateLabel ?? defaults.reportDateLabel).trim(),
     occupancyStartMonth: String(input.occupancyStartMonth ?? defaults.occupancyStartMonth).trim(),
     propertyStatus: String(input.propertyStatus ?? defaults.propertyStatus).trim(),
     leasedPct: Number.isFinite(Number(input.leasedPct)) ? Number(input.leasedPct) : null,
@@ -1361,7 +1441,8 @@ function normalizeDlrSummary(data) {
       occupiedUnits: Number.isFinite(Number(input.pricing?.occupiedUnits)) ? Number(input.pricing.occupiedUnits) : null,
       avgBudgetRent: Number.isFinite(Number(input.pricing?.avgBudgetRent)) ? Number(input.pricing.avgBudgetRent) : null,
       avgInPlaceRent: Number.isFinite(Number(input.pricing?.avgInPlaceRent)) ? Number(input.pricing.avgInPlaceRent) : null
-    }
+    },
+    dailyBoxScore: normalizeDlrBoxScoreSnapshot(input.dailyBoxScore)
   };
 }
 
@@ -4629,6 +4710,13 @@ function attachEventListeners() {
     processMarketSurveyFiles(files);
     e.target.value = "";
   });
+  const dlrBoxScoreInput = document.getElementById("dlr-box-score-input");
+  if (dlrBoxScoreInput) dlrBoxScoreInput.addEventListener("change", function(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    processDlrBoxScoreFiles(files);
+    e.target.value = "";
+  });
 }
 
 function getImportTargetMonth() {
@@ -6273,6 +6361,296 @@ function formatSavedTimestampLabel(value) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function buildDlrDateInputValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function formatDlrReportDateLabel(value) {
+  const input = buildDlrDateInputValue(value);
+  if (!input) return "";
+  const parsed = new Date(`${input}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? "" : formatPresentationDate(parsed);
+}
+
+function parseDlrSpecificDate(value) {
+  const input = buildDlrDateInputValue(value);
+  if (!input) return null;
+  const parsed = new Date(`${input}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function updateCommunityDlrSummary(communityName, updater, options = {}) {
+  const matchedName = matchPropertyName(communityName, { fallbackToCurrent: false }) || getProp().name;
+  const record = getPropertyRecordForApply(matchedName);
+  const currentSummary = normalizeDlrSummary(record.latestDlrSummary);
+  const nextSummary = normalizeDlrSummary(typeof updater === "function" ? updater(currentSummary) : updater);
+  record.latestDlrSummary = nextSummary;
+  savedData[matchedName] = normalizeSavedCommunityRecord(matchedName, record);
+  if (matchedName === getProp().name) latestDlrSummary = nextSummary;
+  const savedResult = persistSaved();
+  if (savedResult?.ok === false) {
+    alert(`⚠️ ${savedResult.message}`);
+    return false;
+  }
+  renderPropGrid();
+  if (options.render !== false) renderTab();
+  return true;
+}
+
+function setDlrReportDateFromInput(value) {
+  const parsed = parseDlrSpecificDate(value);
+  const matchedCommunity = getHistoricalImportCommunityName();
+  updateCommunityDlrSummary(matchedCommunity, summary => {
+    const nextSummary = normalizeDlrSummary(summary);
+    const nextDaily = normalizeDlrBoxScoreSnapshot(nextSummary.dailyBoxScore);
+    nextSummary.reportDateIso = parsed ? buildDlrDateInputValue(parsed) : "";
+    nextSummary.reportDateLabel = parsed ? formatPresentationDate(parsed) : "";
+    nextSummary.reportPeriodLabel = nextSummary.reportDateLabel || nextSummary.reportPeriodLabel || "";
+    nextDaily.reportDateIso = nextSummary.reportDateIso;
+    nextDaily.reportDateLabel = nextSummary.reportDateLabel;
+    nextSummary.dailyBoxScore = nextDaily;
+    return nextSummary;
+  });
+  if (parsed) {
+    historicalImportTarget = normalizeHistoricalImportTarget({
+      ...historicalImportTarget,
+      community: matchedCommunity,
+      month: parsed.getMonth(),
+      year: parsed.getFullYear()
+    });
+    renderTab();
+  }
+}
+
+function parseOptionalWorkbookMetric(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/[$,%(),]/g, "").trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractDatesFromText(value) {
+  const text = String(value ?? "");
+  if (!text) return [];
+  const matches = [...text.matchAll(/\b(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\b/g)];
+  return matches.map(match => {
+    const candidate = match[1].replace(/\./g, "/").replace(/-/g, "/");
+    const parsed = new Date(candidate);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }).filter(Boolean);
+}
+
+function pickDailyBoxScoreReportDate(rows = [], fileName = "", rawText = "") {
+  const candidates = [
+    ...extractDatesFromText(fileName),
+    ...extractDatesFromText(rawText),
+    ...rows.flatMap(row => Array.isArray(row) ? row.flatMap(cell => extractDatesFromText(cell)) : [])
+  ];
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.getTime() - b.getTime());
+  return candidates[candidates.length - 1];
+}
+
+function buildBoxScoreSheetCandidates(workbook) {
+  if (!workbook || !Array.isArray(workbook.SheetNames)) return [];
+  return workbook.SheetNames.map(sheetName => ({
+    sheetName,
+    rows: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", raw: false })
+  }));
+}
+
+function findDailyBoxScoreColumnIndex(rows = []) {
+  for (const row of rows.slice(0, 12)) {
+    const cells = (row ?? []).map(cell => String(cell ?? "").trim().toLowerCase());
+    const idx = cells.findIndex(cell => cell === "daily" || cell === "today" || cell.includes("daily"));
+    if (idx > -1) return idx;
+  }
+  return null;
+}
+
+function matchDailyBoxScoreRow(rows = [], aliases = []) {
+  const normalizedAliases = aliases.map(alias => String(alias).toLowerCase());
+  return rows.find(row => {
+    const joined = (row ?? []).slice(0, 4).map(cell => String(cell ?? "").trim().toLowerCase()).join(" ");
+    return joined && normalizedAliases.some(alias => joined.includes(alias));
+  }) ?? null;
+}
+
+function extractMetricFromRow(row, preferredColumnIdx = null) {
+  if (!Array.isArray(row)) return null;
+  const tryIndices = [];
+  if (Number.isInteger(preferredColumnIdx) && preferredColumnIdx >= 0 && preferredColumnIdx < row.length) {
+    tryIndices.push(preferredColumnIdx);
+  }
+  for (let idx = 1; idx < row.length; idx += 1) {
+    if (!tryIndices.includes(idx)) tryIndices.push(idx);
+  }
+  for (const idx of tryIndices) {
+    const value = parseOptionalWorkbookMetric(row[idx]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function extractMetricFromRowsOrText(rows, rawText, aliases, dlrLabels = []) {
+  for (const label of dlrLabels) {
+    const activityRow = extractDlrActivityRow(rawText, label);
+    if (activityRow && Number.isFinite(activityRow.daily)) return activityRow.daily;
+  }
+  const dailyColumnIdx = findDailyBoxScoreColumnIndex(rows);
+  const row = matchDailyBoxScoreRow(rows, aliases);
+  if (row) {
+    const value = extractMetricFromRow(row, dailyColumnIdx);
+    if (value !== null) return value;
+  }
+  for (const alias of aliases) {
+    const direct = findDlrNumberNear(alias, rawText);
+    if (direct !== null) return direct;
+  }
+  return null;
+}
+
+function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = "") {
+  const reportDate = pickDailyBoxScoreReportDate(rows, fileName, rawText);
+  const dailySnapshot = normalizeDlrBoxScoreSnapshot({
+    sourceFileName: fileName,
+    importedAt: new Date().toISOString(),
+    reportDateIso: reportDate ? buildDlrDateInputValue(reportDate) : "",
+    reportDateLabel: reportDate ? formatPresentationDate(reportDate) : ""
+  });
+  dailySnapshot.walkIn = extractMetricFromRowsOrText(rows, rawText, ["walk in", "walk-in"], ["Walk In"]);
+  dailySnapshot.offSiteEvent = extractMetricFromRowsOrText(rows, rawText, ["off site event", "off-site event"], ["Off Site Event"]);
+  dailySnapshot.phoneCalls = extractMetricFromRowsOrText(rows, rawText, ["phone calls", "phone call"], ["Phone Calls"]);
+  dailySnapshot.emailsOnline = extractMetricFromRowsOrText(rows, rawText, ["emails/online", "emails online", "email/online"], ["Emails/Online"]);
+  dailySnapshot.textChatOther = extractMetricFromRowsOrText(rows, rawText, ["text/chat/other", "text chat other", "chat other"], ["Text/Chat/Other"]);
+  dailySnapshot.guestCards = extractMetricFromRowsOrText(rows, rawText, ["guest cards", "guest card", "total leads", "leads"], ["Guest Cards"]);
+  dailySnapshot.tours = extractMetricFromRowsOrText(rows, rawText, ["tours", "tour"], ["Tours"]);
+  dailySnapshot.applications = extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]);
+  dailySnapshot.applicationsApproved = extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]);
+  dailySnapshot.leasesSigned = extractMetricFromRowsOrText(rows, rawText, ["leases signed", "signed leases", "leases"], ["Leases Signed"]);
+  dailySnapshot.moveIns = extractMetricFromRowsOrText(rows, rawText, ["move-ins", "move ins"], ["Move-Ins"]);
+  dailySnapshot.moveOuts = extractMetricFromRowsOrText(rows, rawText, ["move-outs", "move outs"], ["Move-Outs"]);
+  dailySnapshot.renewals = extractMetricFromRowsOrText(rows, rawText, ["renewals", "renewals signed"], ["Renewals"]);
+  const leadSourceRollup = [
+    dailySnapshot.walkIn,
+    dailySnapshot.offSiteEvent,
+    dailySnapshot.phoneCalls,
+    dailySnapshot.emailsOnline,
+    dailySnapshot.textChatOther
+  ].filter(value => value !== null && value !== undefined);
+  if ((dailySnapshot.guestCards === null || dailySnapshot.guestCards === undefined) && leadSourceRollup.length > 0) {
+    dailySnapshot.guestCards = leadSourceRollup.reduce((sum, value) => sum + value, 0);
+  }
+  return dailySnapshot;
+}
+
+function scoreDailyBoxScoreSnapshot(snapshot) {
+  return [
+    snapshot.guestCards,
+    snapshot.walkIn,
+    snapshot.offSiteEvent,
+    snapshot.phoneCalls,
+    snapshot.emailsOnline,
+    snapshot.textChatOther,
+    snapshot.tours,
+    snapshot.applications,
+    snapshot.applicationsApproved,
+    snapshot.leasesSigned,
+    snapshot.moveIns,
+    snapshot.moveOuts,
+    snapshot.renewals
+  ].filter(value => value !== null && value !== undefined).length;
+}
+
+function chooseBestDailyBoxScoreSnapshot(candidates = []) {
+  return candidates
+    .filter(candidate => candidate && hasDlrBoxScoreSnapshot(candidate.snapshot))
+    .sort((a, b) => b.score - a.score)[0] ?? null;
+}
+
+async function parseDailyBoxScoreFile(file) {
+  const lowerName = String(file?.name ?? "").toLowerCase();
+  if (!file) return null;
+  if (lowerName.endsWith(".pdf")) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      fullText += textContent.items.map(item => item.str).join(" ") + "\n";
+    }
+    const rows = fullText.split(/\r?\n/).map(line => [line]);
+    return buildDailyBoxScoreSnapshotFromRows(rows, file.name, fullText);
+  }
+  if (typeof XLSX === "undefined") {
+    throw new Error("The XLSX library did not load, so the daily box score parser is unavailable.");
+  }
+  const workbook = lowerName.endsWith(".csv")
+    ? XLSX.read(await file.text(), { type: "string" })
+    : XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const candidates = buildBoxScoreSheetCandidates(workbook).map(candidate => {
+    const rawText = candidate.rows.map(row => (row ?? []).join(" ")).join("\n");
+    const snapshot = buildDailyBoxScoreSnapshotFromRows(candidate.rows, file.name, rawText);
+    return {
+      ...candidate,
+      snapshot,
+      score: scoreDailyBoxScoreSnapshot(snapshot)
+    };
+  });
+  const best = chooseBestDailyBoxScoreSnapshot(candidates);
+  return best?.snapshot ?? null;
+}
+
+async function processDlrBoxScoreFiles(files) {
+  const targetCommunity = getHistoricalImportCommunityName();
+  const acceptedFiles = Array.from(files || []);
+  if (acceptedFiles.length === 0) return;
+  const messages = [];
+  for (const file of acceptedFiles) {
+    try {
+      const snapshot = await parseDailyBoxScoreFile(file);
+      if (!snapshot || !hasDlrBoxScoreSnapshot(snapshot)) {
+        messages.push(`⚠️ ${file.name} did not surface any recognizable daily leasing metrics for the DLR.`);
+        continue;
+      }
+      updateCommunityDlrSummary(targetCommunity, summary => {
+        const nextSummary = normalizeDlrSummary(summary);
+        const nextDateIso = snapshot.reportDateIso || nextSummary.reportDateIso;
+        const nextDateLabel = snapshot.reportDateLabel || nextSummary.reportDateLabel;
+        nextSummary.reportDateIso = nextDateIso;
+        nextSummary.reportDateLabel = nextDateLabel;
+        nextSummary.reportPeriodLabel = nextDateLabel || nextSummary.reportPeriodLabel || `${formatDlrMonthYear(getHistoricalImportMonthIndex(), getHistoricalImportYear())} operating snapshot`;
+        nextSummary.dailyBoxScore = snapshot;
+        return nextSummary;
+      }, { render: false });
+      const parsedDate = parseDlrSpecificDate(snapshot.reportDateIso);
+      if (parsedDate) {
+        historicalImportTarget = normalizeHistoricalImportTarget({
+          ...historicalImportTarget,
+          community: targetCommunity,
+          month: parsedDate.getMonth(),
+          year: parsedDate.getFullYear()
+        });
+      }
+      messages.push(`✅ ${file.name} mapped into the DLR for ${targetCommunity}${snapshot.reportDateLabel ? ` · ${snapshot.reportDateLabel}` : ""}.`);
+    } catch (error) {
+      messages.push(`⚠️ ${file.name} could not be read for the DLR: ${error?.message || error}`);
+    }
+  }
+  csvLog = [...messages, ...csvLog].slice(0, 8);
+  renderTab();
 }
 
 function guessCommunityNameFromMarketFileName(fileName) {
@@ -11116,9 +11494,229 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
   return runningUnits;
 }
 
+function formatDlrSignedNumber(value) {
+  const numeric = Number(value) || 0;
+  return numeric > 0 ? `+${numeric}` : `${numeric}`;
+}
+
+function getTopLeadSourceFacts(leadSources = {}) {
+  return Object.entries(leadSources)
+    .map(([key, value]) => ({
+      key,
+      label: ({
+        walkIn: "Walk In",
+        offSiteEvent: "Off Site Event",
+        phoneCalls: "Phone Calls",
+        emailsOnline: "Emails / Online",
+        textChatOther: "Text / Chat / Other"
+      })[key] || key,
+      value: Number(value) || 0
+    }))
+    .filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+function buildDlrInvestorNotes({
+  leadSources,
+  leadSourceTotal,
+  appMetrics,
+  prevAppMetrics,
+  tourCount,
+  moveIns,
+  moveOuts,
+  occupancyPct,
+  leasedPct,
+  trendingOccupancyPct,
+  budgetOccPct,
+  avgInPlaceRent,
+  avgBudgetRent,
+  retentionRate,
+  renewalsSigned,
+  expirations
+}) {
+  const topSources = getTopLeadSourceFacts(leadSources);
+  const primarySource = topSources[0] || null;
+  const secondarySource = topSources[1] || null;
+  const netAbsorption = (Number(moveIns) || 0) - (Number(moveOuts) || 0);
+  const appApprovalDelta = (appMetrics.approvalPct || 0) - (prevAppMetrics.approvalPct || 0);
+  const appVolumeDelta = (appMetrics.applications || 0) - (prevAppMetrics.applications || 0);
+  const budgetRentDelta = (Number(avgInPlaceRent) || 0) - (Number(avgBudgetRent) || 0);
+  const tours = [
+    leadSourceTotal > 0
+      ? `${leadSourceTotal} total guest cards were recorded month to date, producing ${tourCount} tours (${formatDlrPercent(leadSourceTotal > 0 ? (tourCount / leadSourceTotal) * 100 : 0, 0)} guest card to tour conversion).`
+      : `${tourCount} tours were recorded month to date.`,
+    primarySource
+      ? `${primarySource.label} led the source mix with ${primarySource.value} lead${primarySource.value === 1 ? "" : "s"}${secondarySource ? `, followed by ${secondarySource.label} at ${secondarySource.value}` : ""}.`
+      : "Lead-source activity is ready to be tracked in the new DLR-aligned source buckets.",
+    trendingOccupancyPct >= occupancyPct
+      ? `The 90-day occupancy trend is pacing ${formatDlrPercent(trendingOccupancyPct, 1)}, ahead of the current ${formatDlrPercent(occupancyPct, 1)} snapshot.`
+      : `The 90-day occupancy trend is pacing ${formatDlrPercent(trendingOccupancyPct, 1)} against a current ${formatDlrPercent(occupancyPct, 1)} snapshot.`
+  ].filter(Boolean);
+  const applications = [
+    `Applications approved totaled ${appMetrics.approvals}/${appMetrics.applications || 0} month to date (${formatDlrPercent(appMetrics.approvalPct, 0)} approval rate).`,
+    appVolumeDelta > 0
+      ? `Application volume improved by ${appVolumeDelta} versus the prior month.`
+      : appVolumeDelta < 0
+        ? `Application volume trended ${Math.abs(appVolumeDelta)} lower than the prior month.`
+        : `Application volume is pacing flat to the prior month.`,
+    prevAppMetrics.applications > 0
+      ? `${appApprovalDelta >= 0 ? "Approval mix improved" : "Approval mix trended lower"} by ${formatDlrPercent(Math.abs(appApprovalDelta), 0)} versus the prior month.`
+      : `This is the first month in the current saved sequence with tracked application approvals.`
+  ].filter(Boolean);
+  const highlights = [
+    `${netAbsorption >= 0 ? "Net absorption remained positive" : "Net absorption was negative"} at ${formatDlrSignedNumber(netAbsorption)} unit${Math.abs(netAbsorption) === 1 ? "" : "s"} from ${moveIns} move-in${Number(moveIns) === 1 ? "" : "s"} and ${moveOuts} move-out${Number(moveOuts) === 1 ? "" : "s"}.`,
+    budgetOccPct > 0
+      ? `Physical occupancy is ${formatDlrPercent(occupancyPct, 1)} against a budget position of ${formatDlrPercent(budgetOccPct, 1)}, while leased exposure sits at ${formatDlrPercent(leasedPct, 1)}.`
+      : `Physical occupancy is ${formatDlrPercent(occupancyPct, 1)} with leased exposure at ${formatDlrPercent(leasedPct, 1)}.`,
+    Number(avgInPlaceRent) > 0
+      ? `${budgetRentDelta >= 0 ? "In-place rent is pacing above budget" : "In-place rent is pacing below budget"} by ${formatDlrCurrency(Math.abs(budgetRentDelta))} (${formatDlrCurrency(avgInPlaceRent)} vs. ${formatDlrCurrency(avgBudgetRent)} budget).`
+      : `Budget rent is currently set at ${formatDlrCurrency(avgBudgetRent)}.`
+  ].filter(Boolean);
+  const wins = [
+    netAbsorption > 0 ? `Positive absorption of ${formatDlrSignedNumber(netAbsorption)} units supported month-to-date occupancy performance.` : "",
+    retentionRate >= 50 && expirations > 0 ? `${renewalsSigned} renewals were secured from ${expirations} expirations (${formatDlrPercent(retentionRate, 0)} retention).` : "",
+    primarySource && primarySource.value >= 5 ? `${primarySource.label} delivered the strongest lead-source contribution this month with ${primarySource.value} leads.` : "",
+    appMetrics.approvals >= 5 ? `${appMetrics.approvals} applications have already been approved month to date.` : ""
+  ].filter(Boolean);
+  return { tours, applications, highlights, wins };
+}
+
+function buildDlrEmailSnapshotSvg(report) {
+  const metrics = [
+    { label: "Occupancy", value: formatDlrPercent(report.occupancyPct, 1), sub: `${report.occupiedUnits} occupied units` },
+    { label: "Leased", value: formatDlrPercent(report.leasedPct, 1), sub: `${report.leasedUnits} leased units` },
+    { label: "Guest Cards", value: String(report.trafficMetrics.rolledGuestCards ?? 0), sub: `${report.trafficMetrics.tours ?? 0} tours` },
+    { label: "Approved Apps", value: String(report.trafficMetrics.approvals ?? 0), sub: `${formatDlrPercent(report.trafficMetrics.appToLeasePct, 0)} app to lease` },
+    { label: "Net Absorption", value: formatDlrSignedNumber((report.trafficMetrics.moveIns ?? 0) - (report.trafficMetrics.moveOuts ?? 0)), sub: `${report.trafficMetrics.moveIns ?? 0} ins / ${report.trafficMetrics.moveOuts ?? 0} outs` }
+  ];
+  const noteLines = (report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).slice(0, 3);
+  const metricBlocks = metrics.map((card, idx) => {
+    const x = 42 + (idx * 224);
+    return `
+      <rect x="${x}" y="138" width="200" height="108" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+      <text x="${x + 18}" y="166" font-size="18" font-weight="700" fill="#64748b">${escapeHtml(card.label)}</text>
+      <text x="${x + 18}" y="205" font-size="34" font-weight="800" fill="#0f172a">${escapeHtml(card.value)}</text>
+      <text x="${x + 18}" y="228" font-size="16" fill="#475569">${escapeHtml(card.sub)}</text>
+    `;
+  }).join("");
+  const activityRows = [
+    ["Walk In", report.trafficMetrics.walkIn],
+    ["Off Site Event", report.trafficMetrics.offSiteEvent],
+    ["Phone Calls", report.trafficMetrics.phoneCalls],
+    ["Emails / Online", report.trafficMetrics.emailsOnline],
+    ["Text / Chat / Other", report.trafficMetrics.textChatOther],
+    ["Applications", report.trafficMetrics.applications],
+    ["Approvals", report.trafficMetrics.approvals],
+    ["Renewals", report.trafficMetrics.renewals]
+  ].map((row, idx) => `
+      <text x="78" y="${324 + (idx * 34)}" font-size="18" fill="#334155">${escapeHtml(row[0])}</text>
+      <text x="510" y="${324 + (idx * 34)}" font-size="20" font-weight="700" text-anchor="end" fill="#0f172a">${escapeHtml(String(row[1] ?? 0))}</text>
+  `).join("");
+  const forwardRows = (report.forwardLook || []).slice(0, 3).map((row, idx) => `
+      <text x="648" y="${324 + (idx * 56)}" font-size="20" font-weight="700" fill="#1d4ed8">${escapeHtml(row.label)}</text>
+      <text x="648" y="${348 + (idx * 56)}" font-size="16" fill="#475569">Exp ${escapeHtml(String(row.leaseExpirations ?? 0))} · Outs ${escapeHtml(String(row.pendingMoveOuts ?? 0))} · Ins ${escapeHtml(String(row.pendingMoveIns ?? 0))}</text>
+      <text x="648" y="${370 + (idx * 56)}" font-size="16" fill="#475569">Budget ${escapeHtml(formatDlrPercent(row.budgetedOccupancy, 1))} · Projected ${escapeHtml(formatDlrPercent(row.projectedOccupancy, 1))}</text>
+  `).join("");
+  const highlights = noteLines.map((line, idx) => `
+      <text x="78" y="${652 + (idx * 36)}" font-size="18" fill="#334155">• ${escapeHtml(line)}</text>
+  `).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780">
+    <rect width="1200" height="780" fill="#ffffff"/>
+    <rect x="0" y="0" width="1200" height="110" fill="#0f2f57"/>
+    <image href="${EXPORT_BRAND_LOGO_URI}" x="42" y="28" width="92" height="44" preserveAspectRatio="xMinYMid meet"/>
+    <text x="156" y="48" font-size="32" font-weight="800" fill="#ffffff">Daily Leasing Report Investor Overview</text>
+    <text x="156" y="79" font-size="20" fill="#dbeafe">${escapeHtml(report.communityName)} · ${escapeHtml(report.reportPeriodLabel)}</text>
+    <text x="1128" y="48" font-size="16" fill="#dbeafe" text-anchor="end">Generated ${escapeHtml(formatPresentationTimestamp(report.generatedAt))}</text>
+    <text x="1128" y="74" font-size="16" fill="#dbeafe" text-anchor="end">${escapeHtml(report.status)} · Budget ${escapeHtml(formatDlrPercent(report.budgetOccPct, 1))}</text>
+    ${metricBlocks}
+    <rect x="42" y="276" width="510" height="308" rx="18" fill="#ffffff" stroke="#dbe4f0"/>
+    <text x="78" y="312" font-size="24" font-weight="700" fill="#0f172a">Activity Snapshot</text>
+    ${activityRows}
+    <rect x="606" y="276" width="552" height="308" rx="18" fill="#ffffff" stroke="#dbe4f0"/>
+    <text x="642" y="312" font-size="24" font-weight="700" fill="#0f172a">Forward Look</text>
+    ${forwardRows}
+    <rect x="42" y="616" width="1116" height="118" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text x="78" y="648" font-size="24" font-weight="700" fill="#0f172a">Highlights & Wins</text>
+    ${highlights || `<text x="78" y="688" font-size="18" fill="#334155">• Dashboard highlights will populate here as activity is saved.</text>`}
+  </svg>`;
+}
+
+function buildDlrEmailPlainTextBody(report) {
+  const bulletLines = (report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).map(line => `- ${line}`);
+  return [
+    `RISE DLR Investor Overview - ${report.communityName}`,
+    report.reportPeriodLabel,
+    "",
+    `Occupancy: ${formatDlrPercent(report.occupancyPct, 1)} | Leased: ${formatDlrPercent(report.leasedPct, 1)} | 90-Day Trend: ${formatDlrPercent(report.trendingOccupancyPct, 1)}`,
+    `Guest Cards: ${report.trafficMetrics.rolledGuestCards || 0} | Tours: ${report.trafficMetrics.tours || 0} | Approved Apps: ${report.trafficMetrics.approvals || 0}`,
+    `Move-Ins: ${report.trafficMetrics.moveIns || 0} | Move-Outs: ${report.trafficMetrics.moveOuts || 0} | Renewals: ${report.trafficMetrics.renewals || 0}`,
+    "",
+    "Highlights & Wins",
+    ...(bulletLines.length ? bulletLines : ["- Investor-facing highlights will populate here as activity is saved."]),
+    "",
+    "The branded DLR snapshot image has been prepared from the dashboard data for email sharing."
+  ].join("\n");
+}
+
+async function copyDlrEmailAssetsToClipboard(report) {
+  const svgMarkup = buildDlrEmailSnapshotSvg(report);
+  const htmlBody = `<div style="font-family:DM Sans,Arial,sans-serif;color:#0f172a">
+    <p style="font-size:14px;margin:0 0 12px">Attached below is the latest RISE Daily Leasing Report investor overview for <strong>${escapeHtml(report.communityName)}</strong> covering <strong>${escapeHtml(report.reportPeriodLabel)}</strong>.</p>
+    <img src="data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgMarkup)))}" alt="${escapeHtml(report.communityName)} DLR snapshot" style="max-width:100%;height:auto;border:1px solid #dbe4f0;border-radius:12px;display:block;margin:0 0 16px">
+    <p style="font-size:14px;margin:0 0 8px"><strong>Highlights & Wins</strong></p>
+    <ul style="font-size:14px;line-height:1.6;margin:0;padding-left:18px">
+      ${(report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || ["Investor-facing highlights will populate here as activity is saved."]).map(line => `<li>${escapeHtml(line)}</li>`).join("")}
+    </ul>
+  </div>`;
+  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+    const items = {
+      "text/html": new Blob([htmlBody], { type: "text/html" }),
+      "text/plain": new Blob([buildDlrEmailPlainTextBody(report)], { type: "text/plain" }),
+      "image/svg+xml": new Blob([svgMarkup], { type: "image/svg+xml" })
+    };
+    await navigator.clipboard.write([new ClipboardItem(items)]);
+    return true;
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(buildDlrEmailPlainTextBody(report));
+    return false;
+  }
+  return false;
+}
+
+async function draftDlrOutlookEmail() {
+  const report = buildDashboardDlrInvestorOverview();
+  if (!report) return;
+  const copiedRichContent = await copyDlrEmailAssetsToClipboard(report).catch(() => false);
+  const subject = `RISE DLR Investor Overview | ${report.communityName} | ${report.reportDateLabel || report.reportMonthLabel}`;
+  const body = copiedRichContent
+    ? [
+        `RISE DLR Investor Overview`,
+        `${report.communityName} · ${report.reportPeriodLabel}`,
+        ``,
+        `The branded DLR snapshot image and highlights have been copied to your clipboard.`,
+        `Open the Outlook draft and paste once in the body to place the investor-ready image inline.`,
+        ``,
+        ...((report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).map(line => `- ${line}`))
+      ].join("\n")
+    : buildDlrEmailPlainTextBody(report);
+  const params = new URLSearchParams();
+  params.set("subject", subject);
+  params.set("body", body);
+  window.location.href = `ms-outlook://compose?${params.toString()}`;
+  setTimeout(() => {
+    alert(copiedRichContent
+      ? "Outlook draft requested. The DLR image and investor-facing highlights were copied to your clipboard, so you can paste once into the email body to place the report inline."
+      : "Outlook draft requested. Your browser only copied the plain-text summary automatically, so use Export DLR / Print if you also want the branded image view.");
+  }, 250);
+}
+
 function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommunityName(), monthIdx = getHistoricalImportMonthIndex(), year = getHistoricalImportYear()) {
   const communityName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const record = getCommunityRecordForScope(communityName);
+  const dlrSummary = getCommunityDlrSummary(communityName);
+  const dailyBoxScore = normalizeDlrBoxScoreSnapshot(dlrSummary.dailyBoxScore);
+  const hasDailyBoxScore = hasDlrBoxScoreSnapshot(dailyBoxScore);
   const prop = getPropertyByName(communityName);
   const totalUnits = getTotalUnitsFor(prop, record.customUnits);
   const scopeMonthlyData = Array.isArray(record.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
@@ -11176,10 +11774,56 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const budgetOccPct = Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
-  const tourToAppPct = Number(monthEntry.tours) > 0 ? (appMetrics.applications / Number(monthEntry.tours)) * 100 : 0;
-  const leadSources = getLeadSourceBreakdown(monthEntry);
-  const leadSourceTotal = getLeadSourceTotal(monthEntry);
-  const normalizedGuestToTourPct = leadSourceTotal > 0 ? ((Number(monthEntry.tours) || 0) / leadSourceTotal) * 100 : 0;
+  const dashboardLeadSources = getLeadSourceBreakdown(monthEntry);
+  const dashboardLeadSourceTotal = getLeadSourceTotal(monthEntry);
+  const leadSources = hasDailyBoxScore
+    ? {
+        walkIn: Math.max(0, Number(dailyBoxScore.walkIn) || 0),
+        offSiteEvent: Math.max(0, Number(dailyBoxScore.offSiteEvent) || 0),
+        phoneCalls: Math.max(0, Number(dailyBoxScore.phoneCalls) || 0),
+        emailsOnline: Math.max(0, Number(dailyBoxScore.emailsOnline) || 0),
+        textChatOther: Math.max(0, Number(dailyBoxScore.textChatOther) || 0)
+      }
+    : dashboardLeadSources;
+  const leadSourceTotal = hasDailyBoxScore
+    ? (
+        dailyBoxScore.guestCards !== null && dailyBoxScore.guestCards !== undefined
+          ? Math.max(0, Number(dailyBoxScore.guestCards) || 0)
+          : [leadSources.walkIn, leadSources.offSiteEvent, leadSources.phoneCalls, leadSources.emailsOnline, leadSources.textChatOther]
+              .reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
+      )
+    : dashboardLeadSourceTotal;
+  const reportTours = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.tours) || 0) : (Number(monthEntry.tours) || 0);
+  const rawDailyApplications = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.applications) || 0) : appMetrics.applications;
+  const reportApprovals = hasDailyBoxScore
+    ? Math.max(0, Number(dailyBoxScore.applicationsApproved) || 0)
+    : appMetrics.approvals;
+  const reportLeases = hasDailyBoxScore
+    ? Math.max(0, Number(dailyBoxScore.leasesSigned) || 0)
+    : appMetrics.leases;
+  const reportApplications = hasDailyBoxScore
+    ? Math.max(rawDailyApplications, reportApprovals, reportLeases)
+    : rawDailyApplications;
+  const normalizedApprovals = Math.min(reportApprovals, reportApplications || Number.MAX_SAFE_INTEGER);
+  const reportDenials = Math.max(reportApplications - normalizedApprovals, 0);
+  const reportMoveIns = hasDailyBoxScore && dailyBoxScore.moveIns !== null ? Math.max(0, Number(dailyBoxScore.moveIns) || 0) : (Number(monthEntry.moveIns) || 0);
+  const reportMoveOuts = hasDailyBoxScore && dailyBoxScore.moveOuts !== null
+    ? Math.max(0, Number(dailyBoxScore.moveOuts) || 0)
+    : getEffectiveMoveOutsForMonth(normalizedMonthIdx, scopeMonthlyData).effective;
+  const reportRenewals = hasDailyBoxScore && dailyBoxScore.renewals !== null
+    ? Math.max(0, Number(dailyBoxScore.renewals) || 0)
+    : renewalSummary.signed;
+  const dailyAppMetrics = {
+    applications: reportApplications,
+    approvals: normalizedApprovals,
+    denials: reportDenials,
+    leases: reportLeases,
+    approvalPct: reportApplications > 0 ? (normalizedApprovals / reportApplications) * 100 : 0,
+    denialPct: reportApplications > 0 ? (reportDenials / reportApplications) * 100 : 0,
+    appToLeasePct: reportApplications > 0 ? (reportLeases / reportApplications) * 100 : 0
+  };
+  const tourToAppPct = reportTours > 0 ? (reportApplications / reportTours) * 100 : 0;
+  const normalizedGuestToTourPct = leadSourceTotal > 0 ? (reportTours / leadSourceTotal) * 100 : 0;
   const currentNer = (Number(monthEntry.rentRollTotal) || 0) > 0 && occupiedUnits > 0
     ? Number(monthEntry.rentRollTotal) / occupiedUnits
     : (Number(monthEntry.nerActual) || 0);
@@ -11188,24 +11832,39 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     : occupancyPct + 2 >= budgetOccPct
       ? "Watch"
       : "Needs Attention";
-  const recommendations = buildRecommendationsForRecord(communityName, record);
-  const notes = {
-    tours: recommendations.filter(item => item.source === "Traffic").map(item => `${item.title}: ${item.body}`).slice(0, 3),
-    applications: [
-      `Applications approved: ${appMetrics.approvals}/${appMetrics.applications || 0} (${formatDlrPercent(appMetrics.approvalPct, 0)})`,
-      `Application to lease: ${formatDlrPercent(appMetrics.appToLeasePct, 0)}`,
-      prevAppMetrics.applications > 0 || prevAppMetrics.approvals > 0
-        ? `Prior month approvals: ${prevAppMetrics.approvals}/${prevAppMetrics.applications || 0} (${formatDlrPercent(prevAppMetrics.approvalPct, 0)})`
-        : ""
-    ].filter(Boolean),
-    marketing: recommendations.slice(0, 3).map(item => `${item.title}: ${item.body}`)
-  };
+  const notes = buildDlrInvestorNotes({
+    leadSources,
+    leadSourceTotal,
+    appMetrics: dailyAppMetrics,
+    prevAppMetrics,
+    tourCount: reportTours,
+    moveIns: reportMoveIns,
+    moveOuts: reportMoveOuts,
+    occupancyPct,
+    leasedPct,
+    trendingOccupancyPct,
+    budgetOccPct,
+    avgInPlaceRent: Number(monthEntry.marketRent) || 0,
+    avgBudgetRent: Number(monthEntry.proformaRent) || 0,
+    retentionRate: renewalSummary.retentionRate,
+    renewalsSigned: reportRenewals,
+    expirations: renewalSummary.expirations
+  });
+  const reportDateIso = hasDailyBoxScore
+    ? (dailyBoxScore.reportDateIso || dlrSummary.reportDateIso)
+    : dlrSummary.reportDateIso;
+  const reportDateLabel = hasDailyBoxScore
+    ? (dailyBoxScore.reportDateLabel || dlrSummary.reportDateLabel)
+    : dlrSummary.reportDateLabel;
+  const reportPeriodLabel = reportDateLabel || dlrSummary.reportPeriodLabel || `${formatDlrMonthYear(normalizedMonthIdx, year)} operating snapshot`;
   return {
     communityName,
     reportMonthIdx: normalizedMonthIdx,
     reportYear: year,
     reportMonthLabel: formatDlrMonthYear(normalizedMonthIdx, year),
-    reportPeriodLabel: `${formatDlrMonthYear(normalizedMonthIdx, year)} operating snapshot`,
+    reportPeriodLabel,
+    reportDateIso,
+    reportDateLabel,
     generatedAt: new Date(),
     status,
     totalUnits,
@@ -11225,17 +11884,18 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
       emailsOnline: leadSources.emailsOnline,
       textChatOther: leadSources.textChatOther,
       rolledGuestCards: leadSourceTotal,
-      tours: Number(monthEntry.tours) || 0,
+      tours: reportTours,
       guestToTourPct: normalizedGuestToTourPct,
       tourToAppPct,
-      applications: appMetrics.applications,
-      approvals: appMetrics.approvals,
-      denials: appMetrics.denials,
-      appToLeasePct: appMetrics.appToLeasePct,
-      moveIns: Number(monthEntry.moveIns) || 0,
-      moveOuts: getEffectiveMoveOutsForMonth(normalizedMonthIdx, scopeMonthlyData).effective,
-      renewals: renewalSummary.signed,
-      notices: renewalSummary.ntv
+      applications: reportApplications,
+      approvals: normalizedApprovals,
+      denials: reportDenials,
+      appToLeasePct: dailyAppMetrics.appToLeasePct,
+      moveIns: reportMoveIns,
+      moveOuts: reportMoveOuts,
+      renewals: reportRenewals,
+      notices: renewalSummary.ntv,
+      sourceMode: hasDailyBoxScore ? "daily_box_score" : "dashboard_mtd"
     },
     pricing: {
       totalUnits,
@@ -11256,43 +11916,45 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
       retentionRate: renewalSummary.retentionRate,
       previousRetentionRate: prevRenewalSummary.retentionRate
     },
+    dailyBoxScoreSourceFile: dailyBoxScore.sourceFileName || "",
+    dailyBoxScoreImportedAt: dailyBoxScore.importedAt || "",
     notes,
-    recommendations,
-    sourceSummary: `${communityName} · ${formatDlrMonthYear(normalizedMonthIdx, year)} · generated from operations dashboard`
+    sourceSummary: `${communityName} · ${reportPeriodLabel} · ${hasDailyBoxScore ? "daily leasing effort imported from box score + dashboard context" : "generated from operations dashboard"}`
   };
 }
 
 function renderDashboardDlrActivityMiniTable(report) {
+  const activityWindowLabel = report.trafficMetrics.sourceMode === "daily_box_score" ? "Daily box score" : "MTD lead source";
   const rows = [
     {
       label: "Walk In",
       actual: report.trafficMetrics.walkIn,
       goal: null,
-      sub: "MTD lead source"
+      sub: activityWindowLabel
     },
     {
       label: "Off Site Event",
       actual: report.trafficMetrics.offSiteEvent,
       goal: null,
-      sub: "MTD lead source"
+      sub: activityWindowLabel
     },
     {
       label: "Phone Calls",
       actual: report.trafficMetrics.phoneCalls,
       goal: null,
-      sub: "MTD lead source"
+      sub: activityWindowLabel
     },
     {
       label: "Emails / Online",
       actual: report.trafficMetrics.emailsOnline,
       goal: null,
-      sub: "MTD lead source"
+      sub: activityWindowLabel
     },
     {
       label: "Text / Chat / Other",
       actual: report.trafficMetrics.textChatOther,
       goal: null,
-      sub: "MTD lead source"
+      sub: activityWindowLabel
     },
     {
       label: "Guest Cards",
@@ -11369,15 +12031,16 @@ function buildDlrInvestorOverviewDocument(report) {
     <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
     <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
   </tr>`).join("");
-  const recommendationsHtml = report.recommendations.length > 0
-    ? `<ul style="margin:0;padding-left:18px;color:#334155;font-size:12px;line-height:1.7">
-        ${report.recommendations.slice(0, 4).map(item => `<li><strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.body)}</li>`).join("")}
-      </ul>`
-    : `<div style="font-size:12px;color:#64748b">No material watchlist items surfaced from the current dashboard data.</div>`;
   const notesHtml = [
     { label: "Tours", items: report.notes.tours },
     { label: "Applications", items: report.notes.applications },
-    { label: "Highlights / Operating Focus", items: report.notes.marketing }
+    { label: "Highlights / Wins", items: report.notes.highlights }
+  ].map(section => `<div style="margin-bottom:10px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">${escapeHtml(section.label)}</div>
+      <div style="font-size:12px;color:#334155;line-height:1.7">${section.items.length > 0 ? section.items.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No notes surfaced from the current dashboard data."}</div>
+    </div>`).join("");
+  const winsHtml = [
+    { label: "Standout Wins", items: report.notes.wins }
   ].map(section => `<div style="margin-bottom:10px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">${escapeHtml(section.label)}</div>
       <div style="font-size:12px;color:#334155;line-height:1.7">${section.items.length > 0 ? section.items.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No notes surfaced from the current dashboard data."}</div>
@@ -11448,8 +12111,8 @@ function buildDlrInvestorOverviewDocument(report) {
         ${notesHtml}
       </div>
       <div class="section-card">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Recommended Focus Areas</div>
-        ${recommendationsHtml}
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Standout Wins</div>
+        ${winsHtml}
       </div>
     </div>
   </body></html>`;
@@ -11528,6 +12191,11 @@ function renderCSVTab() {
   const weeklyBaselineText = weeklyBaseline?.exportedAt
     ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
     : "No weekly baseline synced yet. Use Sync This Week as Baseline after you send this week’s report so next week’s export has a true week-over-week comparison.";
+  const dlrReportDateInput = escapeHtml(buildDlrDateInputValue(historicalDlrSummary.reportDateIso));
+  const dlrReportDateLabel = historicalDlrSummary.reportDateLabel || historicalDlrSummary.reportPeriodLabel || "No specific daily report date saved";
+  const dlrSourceLine = historicalDlrSummary.dailyBoxScoreSourceFile
+    ? `${historicalDlrSummary.dailyBoxScoreSourceFile}${historicalDlrSummary.dailyBoxScoreImportedAt ? ` · uploaded ${formatSavedTimestampLabel(historicalDlrSummary.dailyBoxScoreImportedAt)}` : ""}`
+    : "No daily box score uploaded yet";
   const historicalImportHTML = `<div class="card mb4">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div>
@@ -11568,16 +12236,28 @@ function renderCSVTab() {
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div>
         <h3 style="font-size:0.85rem;font-weight:600;margin-bottom:6px">📘 RISE Daily Leasing Report (DLR)</h3>
-        <p style="font-size:0.72rem;color:var(--muted)">Generate a clean, investor-facing DLR overview for ${escapeHtml(historicalCommunity)} from the operations dashboard’s saved data. This replaces the old DLR upload workflow and keeps the output tied to your live occupancy, traffic, renewal, and pricing metrics.</p>
+        <p style="font-size:0.72rem;color:var(--muted)">Generate a clean, investor-facing DLR overview for ${escapeHtml(historicalCommunity)} from the operations dashboard’s saved data. Upload that day’s Box Score into the report-period box so daily leasing effort comes from the report date you choose, while occupancy, renewals, pricing, and the forward look stay tied to the saved dashboard metrics.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="draftDlrOutlookEmail()">✉ Draft Outlook Email</button>
         <button class="btn btn-gray btn-sm" onclick="downloadDlrInvestorOverviewHtml()">⬇ Editable HTML</button>
         <button class="btn btn-blue btn-sm" onclick="openDlrInvestorOverview(true)">🖨 Export DLR / Print</button>
       </div>
     </div>
     ${historicalDlrSummary ? `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
-        <div class="bonus-framework-stat"><div class="k">Report Period</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.reportPeriodLabel || "—")}</div></div>
+        <div class="bonus-framework-stat" style="grid-column:span 2;min-width:260px">
+          <div class="k">Report Period</div>
+          <div class="v" style="font-size:1rem">${escapeHtml(dlrReportDateLabel)}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <input type="date" value="${dlrReportDateInput}" onchange="setDlrReportDateFromInput(this.value)" style="max-width:180px">
+            <label class="btn btn-gray btn-sm" style="cursor:pointer">⬆ Upload Daily Box Score
+              <input type="file" accept=".csv,.pdf,.xlsx,.xls,.xlsm" id="dlr-box-score-input" style="display:none" multiple>
+            </label>
+          </div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">The uploaded box score sets the daily leasing effort date and activity for this DLR, while occupancy, pricing, renewals, and the forward look continue to pull from the saved dashboard data.</div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:4px">${escapeHtml(dlrSourceLine)}</div>
+        </div>
         <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.occupancyPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.leasedPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">90-Day Trend</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.trendingOccupancyPct)}</div></div>
@@ -11599,7 +12279,7 @@ function renderCSVTab() {
             <div>Avg In-Place Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgInPlaceRent)}</strong></div>
             <div>Avg Net Effective Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgNetEffectiveRent)}</strong></div>
           </div>
-          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Built from saved dashboard values for ${escapeHtml(historicalDlrSummary.reportMonthLabel)} · generated ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.generatedAt))}</div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Built from saved dashboard values for ${escapeHtml(historicalDlrSummary.reportMonthLabel)} · ${historicalDlrSummary.trafficMetrics?.sourceMode === "daily_box_score" ? "daily leasing effort is sourced from the uploaded box score" : "leasing effort is currently using the dashboard’s saved MTD values"} · generated ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.generatedAt))}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -11621,7 +12301,8 @@ function renderCSVTab() {
           <div style="font-size:0.68rem;color:var(--muted);line-height:1.7">
             <div style="margin-bottom:8px"><strong style="color:var(--text)">Tours</strong><br>${historicalDlrSummary.notes?.tours?.length ? historicalDlrSummary.notes.tours.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No tour notes surfaced."}</div>
             <div style="margin-bottom:8px"><strong style="color:var(--text)">Applications</strong><br>${historicalDlrSummary.notes?.applications?.length ? historicalDlrSummary.notes.applications.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No application notes surfaced."}</div>
-            <div><strong style="color:var(--text)">Marketing / Specials</strong><br>${historicalDlrSummary.notes?.marketing?.length ? historicalDlrSummary.notes.marketing.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No operating highlights surfaced."}</div>
+            <div><strong style="color:var(--text)">Highlights & Wins</strong><br>${historicalDlrSummary.notes?.highlights?.length ? historicalDlrSummary.notes.highlights.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No operating highlights surfaced."}</div>
+            <div style="margin-top:8px"><strong style="color:var(--text)">Standout Wins</strong><br>${historicalDlrSummary.notes?.wins?.length ? historicalDlrSummary.notes.wins.map(item => `• ${escapeHtml(item)}`).join("<br>") : "Wins will populate here as positive leasing activity is saved."}</div>
           </div>
         </div>
       </div>
@@ -12474,6 +13155,7 @@ function parseDlrReportPeriod(sourceText, fileName = "") {
 }
 
 function buildDlrSummary(rawText, fileName = "") {
+  const reportDate = parseDlrReportDate(rawText) || pickDailyBoxScoreReportDate([], fileName, rawText);
   const activityLabels = [
     "Tours",
     "Walk In",
@@ -12496,6 +13178,8 @@ function buildDlrSummary(rawText, fileName = "") {
     sourceFileName: fileName,
     importedAt: new Date().toISOString(),
     reportPeriodLabel: parseDlrReportPeriod(rawText, fileName),
+    reportDateIso: reportDate ? buildDlrDateInputValue(reportDate) : "",
+    reportDateLabel: reportDate ? formatPresentationDate(reportDate) : "",
     occupancyStartMonth: String(rawText.match(/Occupancy Start Month\s+([A-Za-z]+-\d{2,4})/i)?.[1] ?? "").trim(),
     propertyStatus: String(rawText.match(/Property Status\s+([A-Za-z ]+)/i)?.[1] ?? "").trim(),
     leasedPct: Number(rawText.match(/Leased %\s+([\d.]+)%/i)?.[1] ?? NaN),
