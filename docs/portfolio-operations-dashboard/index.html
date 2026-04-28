@@ -1585,13 +1585,12 @@ function defaultJacsTeamBonus() {
   });
   return [
     role("vp_ops", "VP of Property Management Operations", 150000, 20, "Leadership", [
-      metric("Physical Occ % vs Budget",          20, 100,  { syncKey:"avgBudgetOccAttainmentPct", sourceLabel:"Overview", format:"pct", direction:"up", tiers:getBudgetTierSet(), hideGoalInput:true }),
-      metric("NER Growth vs Prior Year %",         20,  3,  { sourceLabel:"Manual",     format:"pct",    direction:"up" }),
-      metric("Tour-to-Lease Conversion %",         20,  28, { syncKey:"tourToLeasePct", sourceLabel:"Traffic", format:"pct", direction:"up" }),
+      metric("Physical Occ % vs Budget",          25, 100,  { syncKey:"avgBudgetOccAttainmentPct", sourceLabel:"Overview", format:"pct", direction:"up", tiers:getBudgetTierSet(), hideGoalInput:true }),
+      metric("NER Growth vs Prior Year %",         25,  3,  { sourceLabel:"Manual",     format:"pct",    direction:"up" }),
       metric("ORA Score",                          20,  62, { syncKey:"oraScore",       sourceLabel:"Reputation", format:"decimal", direction:"up", tiers:getOraTierSet(), hideGoalInput:true }),
-      metric("Operations Budget Adherence %",      10,  95, { sourceLabel:"Manual",     format:"pct",    direction:"up",
+      metric("Operations Budget Adherence %",      15,  95, { sourceLabel:"Manual",     format:"pct",    direction:"up",
                                                               partial:true, partialThreshold:90 }),
-      metric("Employee Turnover %",                10,  40, { syncKey:"employeeTurnoverPct", sourceLabel:"Community Setup", format:"pct", direction:"down",
+      metric("Employee Turnover %",                15,  40, { syncKey:"employeeTurnoverPct", sourceLabel:"Community Setup", format:"pct", direction:"down",
                                                               partial:true, partialThreshold:55 })
     ]),
     role("regional_1", "Regional Manager 1", 110000, 15, "Regionals", [
@@ -1716,7 +1715,7 @@ function normalizeJacsTeamBonus(data) {
 function defaultRegionalAssignments() {
   return Object.fromEntries(
     defaultJacsTeamBonus()
-      .filter(role => role.id.startsWith("regional_"))
+      .filter(role => role.id === "vp_ops" || role.id.startsWith("regional_"))
       .map(role => [role.id, []])
   );
 }
@@ -3314,8 +3313,10 @@ function aggregateCommunityPerformancePlans(plans) {
 }
 
 function getJacRoleScope(role) {
-  const assignedNames = role.id.startsWith("regional_")
-    ? (regionalAssignments[role.id] ?? [])
+  const isAssignedScopeRole = role.id === "vp_ops" || role.id.startsWith("regional_");
+  const explicitAssignments = isAssignedScopeRole ? (regionalAssignments[role.id] ?? []) : [];
+  const assignedNames = isAssignedScopeRole
+    ? (explicitAssignments.length > 0 ? explicitAssignments : getSavedCommunityNames())
     : getSavedCommunityNames();
   const savedNames = assignedNames.filter(name => !!savedData[name]);
   const summaries = savedNames.map(name => getCommunitySummary(name, savedData[name])).filter(Boolean);
@@ -3331,6 +3332,7 @@ function getJacRoleScope(role) {
   }
   return {
     assignedNames,
+    explicitAssignments,
     savedNames,
     summaries,
     metrics,
@@ -3339,6 +3341,14 @@ function getJacRoleScope(role) {
 }
 
 function getJacRoleScopeLabel(role, scope) {
+  if (role.id === "vp_ops") {
+    if ((scope.explicitAssignments?.length || 0) > 0) {
+      if (scope.savedNames.length === 0) return `${scope.explicitAssignments.length} communities selected · save data to activate VP rollup`;
+      return `${scope.savedNames.length} saved communities from ${scope.explicitAssignments.length} VP selections · ${scope.metrics.totalUnits || 0} units`;
+    }
+    if (scope.savedNames.length === 0) return "Portfolio rollup will activate once communities are saved";
+    return `Portfolio rollup across ${scope.savedNames.length} saved communities · ${scope.metrics.totalUnits || 0} units`;
+  }
   if (role.id.startsWith("regional_")) {
     if (scope.assignedNames.length === 0) return "No communities assigned yet";
     if (scope.savedNames.length === 0) return `${scope.assignedNames.length} communities selected · save data to activate rollup`;
@@ -8008,10 +8018,10 @@ function formatJacMetricSource(metric, scopeTypeLabel, scope) {
   return metric.syncKey ? `↔ ${scopeTypeLabel} · ${formatJacMetricDisplay(metric, metric.actual)}` : `Manual · ${metric.sourceLabel}`;
 }
 
-function renderRegionalAssignmentMatrix(regionalRoles, roleScopeMap) {
+function renderRegionalAssignmentMatrix(scopedRoles, roleScopeMap) {
   const communities = getAllCommunityNames();
-  if (regionalRoles.length === 0) return "";
-  const totalAssigned = regionalRoles.reduce((sum, role) => sum + (regionalAssignments[role.id] ?? []).length, 0);
+  if (scopedRoles.length === 0) return "";
+  const totalAssigned = scopedRoles.reduce((sum, role) => sum + (regionalAssignments[role.id] ?? []).length, 0);
   const isCollapsed = regionalAssignmentCollapsed;
   return `<div class="bonus-tab-section">
     <div class="bonus-role-card" style="padding:0;overflow:hidden">
@@ -8028,7 +8038,7 @@ function renderRegionalAssignmentMatrix(regionalRoles, roleScopeMap) {
       </div>
       <div class="bonus-role-body ${isCollapsed?"collapsed":""}" id="regional-assign-body" style="padding:${isCollapsed?"0":"14px 16px"}">
         <div class="bonus-assignment-grid" style="margin-bottom:0">
-          ${regionalRoles.map(role => {
+          ${scopedRoles.map(role => {
             const assigned = regionalAssignments[role.id] ?? [];
             const scope = roleScopeMap[role.id];
             return `<div class="bonus-assignment-card">
@@ -8063,6 +8073,7 @@ function renderJacsTeamBonusTab() {
   const salaryAccessAllowed = isSalaryAccessAllowed();
   const roleScopeMap = Object.fromEntries(roles.map(role => [role.id, getJacRoleScope(role)]));
   const rolePayoutMap = Object.fromEntries(roles.map(role => [role.id, calcRolePayout(role)]));
+  const assignedScopeRoles = roles.filter(role => role.id === "vp_ops" || role.id.startsWith("regional_"));
   const regionalRoles = roles.filter(role => role.id.startsWith("regional_"));
   const portfolioScope = getJacRoleScope({ id: "portfolio" });
   const quarterSelector = `<div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -8072,8 +8083,8 @@ function renderJacsTeamBonusTab() {
   const totalEarned = roles.reduce((sum, role) => sum + rolePayoutMap[role.id].earned, 0);
   const totalMissed = totalPotential - totalEarned;
   const autoMetricCount = roles.reduce((sum, role) => sum + role.metrics.filter(metric => !!metric.syncKey).length, 0);
-  const configuredRegionals = regionalRoles.filter(role => (regionalAssignments[role.id] ?? []).length > 0).length;
-  const totalRegionalSelections = regionalRoles.reduce((sum, role) => sum + (regionalAssignments[role.id] ?? []).length, 0);
+  const configuredAssignedScopes = assignedScopeRoles.filter(role => (regionalAssignments[role.id] ?? []).length > 0).length;
+  const totalAssignedSelections = assignedScopeRoles.reduce((sum, role) => sum + (regionalAssignments[role.id] ?? []).length, 0);
   const groupedRoles = roles.reduce((acc, role) => {
     acc[role.group] = acc[role.group] || [];
     acc[role.group].push(role);
@@ -8083,7 +8094,7 @@ function renderJacsTeamBonusTab() {
   const summaryStats = [
     { label: "Roles In Framework", value: roles.length, sub: `${autoMetricCount} auto-synced metrics across Jac's team` },
     { label: "Saved Communities", value: portfolioScope.savedNames.length, sub: portfolioScope.savedNames.length > 0 ? `${portfolioScope.metrics.totalUnits.toLocaleString()} units powering portfolio-wide roles` : "Save community data to activate portfolio rollups" },
-    { label: "Assigned Scope Coverage", value: `${configuredRegionals}/${regionalRoles.length}`, sub: `${totalRegionalSelections} community selections mapped to assigned-community roles` },
+    { label: "Assigned Scope Coverage", value: `${configuredAssignedScopes}/${assignedScopeRoles.length}`, sub: `${totalAssignedSelections} community selections mapped to VP and Regional scopes` },
     { label: `${bonusQuarter} Earned`, value: `$${totalEarned.toLocaleString(undefined,{maximumFractionDigits:0})}`, sub: `Potential $${totalPotential.toLocaleString(undefined,{maximumFractionDigits:0})} · Open $${totalMissed.toLocaleString(undefined,{maximumFractionDigits:0})}` }
   ].map(stat => `<div class="bonus-framework-stat"><div class="k">${stat.label}</div><div class="v">${stat.value}</div><div style="font-size:0.68rem;color:var(--muted);margin-top:4px">${stat.sub}</div></div>`).join("");
 
@@ -8091,7 +8102,7 @@ function renderJacsTeamBonusTab() {
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
         <h2 style="font-size:0.95rem;font-weight:700">👥 Jac's Team Bonus Framework</h2>
-        <p style="font-size:0.72rem;color:var(--muted);margin-top:2px">Free-standing from the community selector. Regionals use assigned communities, and all other roles use the saved portfolio as a whole.</p>
+        <p style="font-size:0.72rem;color:var(--muted);margin-top:2px">Free-standing from the community selector. The VP and Regional roles can use assigned communities, while the remaining roles continue to use their broader saved portfolio or community rollups.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         ${quarterSelector}
@@ -8105,7 +8116,7 @@ function renderJacsTeamBonusTab() {
     <strong style="color:#4493f8">Framework note:</strong> this tab now ignores whichever community is selected above. Save each community after updating Overview or Traffic &amp; Funnel data so the portfolio rollups and Regional assignments stay current.
   </div>`;
 
-  const assignmentSection = renderRegionalAssignmentMatrix(regionalRoles, roleScopeMap);
+  const assignmentSection = renderRegionalAssignmentMatrix(assignedScopeRoles, roleScopeMap);
   const turnoverRollupSection = renderQuarterlyTurnoverRollupSection(portfolioScope, regionalRoles, roleScopeMap);
   const regionalPointSystemSection = renderRegionalPointSystemSection(regionalRoles, roleScopeMap);
   const leasingLeaderboardSection = renderLeasingLeaderboardSection(getLeasingLeaderboardEntries(bonusQuarter), bonusQuarter);
@@ -8120,8 +8131,9 @@ function renderJacsTeamBonusTab() {
         const isCollapsed = bonusCollapsed[role.id] ?? false;
         const rolePhoto = normalizePhotoAsset(role.photo);
         const isPresentationLeader = isPresentationLeadershipRole(role);
-        const scopeTypeLabel = role.id.startsWith("regional_") ? "Assigned Communities" : "Portfolio Rollup";
-        const syncSourceLabel = role.id.startsWith("regional_") ? "assigned community rollup" : "saved portfolio rollup";
+        const vpUsesAssignedScope = role.id === "vp_ops" && (scope.explicitAssignments?.length || 0) > 0;
+        const scopeTypeLabel = role.id.startsWith("regional_") || vpUsesAssignedScope ? "Assigned Communities" : "Portfolio Rollup";
+        const syncSourceLabel = role.id.startsWith("regional_") || vpUsesAssignedScope ? "assigned community rollup" : "saved portfolio rollup";
         const metricsHTML = role.metrics.map((metric, mi) => {
           const outcome = getMetricOutcome(metric);
           const status = outcome.status;
