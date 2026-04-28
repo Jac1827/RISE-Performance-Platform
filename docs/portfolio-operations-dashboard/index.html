@@ -6946,6 +6946,22 @@ function extractLeadActivityTotals(rawText = "") {
   };
 }
 
+function extractLeadConversionTotals(rawText = "") {
+  const normalized = String(rawText ?? "").replace(/\s+/g, " ").trim();
+  if (!/lead conversions/i.test(normalized)) return null;
+  const totalMatch = normalized.match(/Total:?\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/i);
+  if (!totalMatch) return null;
+  const values = totalMatch.slice(1).map(value => Number(value) || 0);
+  return {
+    completed: values[0],
+    partiallyCompleted: values[1],
+    completedCancelled: values[2],
+    denied: values[3],
+    approved: values[4],
+    approvedCancelled: values[5]
+  };
+}
+
 function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = "") {
   const reportDate = pickDailyBoxScoreReportDate(rows, fileName, rawText);
   const dailySnapshot = normalizeDlrBoxScoreSnapshot({
@@ -6955,6 +6971,7 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
     reportDateLabel: reportDate ? formatPresentationDate(reportDate) : ""
   });
   const leadActivityTotals = extractLeadActivityTotals(rawText);
+  const leadConversionTotals = extractLeadConversionTotals(rawText);
   if (leadActivityTotals) {
     dailySnapshot.newLeads = leadActivityTotals.newLeads;
     dailySnapshot.walkIn = leadActivityTotals.walkIn;
@@ -6970,6 +6987,13 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
     dailySnapshot.guestCards = leadActivityTotals.newLeads;
     dailySnapshot.tours = leadActivityTotals.firstVisitsTours;
   }
+  if (leadConversionTotals) {
+    dailySnapshot.applications = leadConversionTotals.completed;
+    dailySnapshot.pendingDecision = leadConversionTotals.partiallyCompleted;
+    dailySnapshot.applicationsApproved = leadConversionTotals.approved;
+    dailySnapshot.denied = leadConversionTotals.denied;
+    dailySnapshot.cancelled = (leadConversionTotals.completedCancelled || 0) + (leadConversionTotals.approvedCancelled || 0);
+  }
   dailySnapshot.walkIn = extractMetricFromRowsOrText(rows, rawText, ["walk in", "walk-in"], ["Walk In"]) ?? dailySnapshot.walkIn;
   dailySnapshot.offSiteEvent = extractMetricFromRowsOrText(rows, rawText, ["off site event", "off-site event"], ["Off Site Event"]) ?? dailySnapshot.offSiteEvent;
   dailySnapshot.phoneCalls = extractMetricFromRowsOrText(rows, rawText, ["phone calls", "phone call"], ["Phone Calls"]) ?? dailySnapshot.phoneCalls;
@@ -6983,11 +7007,11 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
   dailySnapshot.firstVisitsTours = extractMetricFromRowsOrText(rows, rawText, ["first visits/tours", "first visits", "first visit tours"], ["First Visits/Tours"]) ?? dailySnapshot.firstVisitsTours;
   dailySnapshot.guestCards = extractMetricFromRowsOrText(rows, rawText, ["guest cards", "guest card", "total leads", "leads"], ["Guest Cards"]) ?? dailySnapshot.guestCards;
   dailySnapshot.tours = extractMetricFromRowsOrText(rows, rawText, ["tours", "tour"], ["Tours"]) ?? dailySnapshot.tours;
-  dailySnapshot.applications = extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]) ?? dailySnapshot.applications;
-  dailySnapshot.applicationsApproved = extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]) ?? dailySnapshot.applicationsApproved;
-  dailySnapshot.denied = extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]) ?? dailySnapshot.denied;
-  dailySnapshot.cancelled = extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]) ?? dailySnapshot.cancelled;
-  dailySnapshot.pendingDecision = extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]) ?? dailySnapshot.pendingDecision;
+  dailySnapshot.applications = dailySnapshot.applications ?? extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]);
+  dailySnapshot.applicationsApproved = dailySnapshot.applicationsApproved ?? extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]);
+  dailySnapshot.denied = dailySnapshot.denied ?? extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]);
+  dailySnapshot.cancelled = dailySnapshot.cancelled ?? extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]);
+  dailySnapshot.pendingDecision = dailySnapshot.pendingDecision ?? extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]);
   dailySnapshot.leasesSigned = extractMetricFromRowsOrText(rows, rawText, ["leases signed", "signed leases", "leases"], ["Leases Signed"]) ?? dailySnapshot.leasesSigned;
   dailySnapshot.moveIns = extractMetricFromRowsOrText(rows, rawText, ["move-ins", "move ins"], ["Move-Ins"]) ?? dailySnapshot.moveIns;
   dailySnapshot.moveOuts = extractMetricFromRowsOrText(rows, rawText, ["move-outs", "move outs"], ["Move-Outs"]) ?? dailySnapshot.moveOuts;
