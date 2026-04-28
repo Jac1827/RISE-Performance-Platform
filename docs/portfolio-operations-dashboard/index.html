@@ -4633,11 +4633,18 @@ function getCommunityRegionalLeadName(communityName) {
 function buildCommunityMapDetails(name) {
   const record = getCommunityRecordForScope(name);
   const prop = getPropertyByName(name);
-  const summary = buildCommunitySummarySnapshot(name, currentMonth, record);
+  const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+  const scopedRecord = {
+    ...record,
+    currentMonth,
+    currentOccupied: estimateSnapshotUnitsForRecordMonth(record, totalUnits, currentMonth, "occupiedSnapshot"),
+    currentLeased: estimateSnapshotUnitsForRecordMonth(record, totalUnits, currentMonth, "leasedSnapshot")
+  };
+  const summary = getCommunitySummary(name, scopedRecord) || {};
   return {
     name,
     icon: getCommunityMarkerIcon(name),
-    units: getTotalUnitsFor(prop, record.customUnits),
+    units: totalUnits,
     address: String(record.communityAddress ?? "").trim(),
     geo: record.communityGeo && Number.isFinite(Number(record.communityGeo?.lat)) && Number.isFinite(Number(record.communityGeo?.lng))
       ? { lat: Number(record.communityGeo.lat), lng: Number(record.communityGeo.lng) }
