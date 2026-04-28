@@ -3488,6 +3488,7 @@ function getJacRoleScope(role) {
     metrics.employeeTurnoverPct = maintenanceHeadcount > 0 ? (maintenanceTurnover / maintenanceHeadcount) * 100 : 0;
   }
   return {
+    roleId: role.id,
     assignedNames,
     explicitAssignments,
     savedNames,
@@ -7849,7 +7850,7 @@ function getJacsMetricRecommendation(role, metric, scope) {
   let reason = "Current benchmark remains the recommended target.";
   if (cat === "Occ vs Budget (pts)" || cat === "Physical Occ % vs Budget") {
     primary = 100;
-    reason = `Uses the same saved-budget occupancy on-track logic from each community Overview tab, averaged across the assigned communities.`;
+    reason = `Scores each saved community independently using the occupancy budget attainment tiers, then sums the earned share of this metric across the assigned scope.`;
   } else if (cat === "Leased vs Target (pts)") {
     primary = 0;
     reason = `Keep leased position at target or better across the assigned scope.`;
@@ -7968,6 +7969,102 @@ function getMetricOutcome(m) {
   return { status: "miss", multiplier: 0, label: "Below Goal", tier: null };
 }
 
+function isVpCommunityBudgetMetric(role, metric) {
+  return role?.id === "vp_ops" && String(metric?.cat ?? "") === "Physical Occ % vs Budget";
+}
+
+function getTierMatchForActual(actual, tiers = []) {
+  const ordered = Array.isArray(tiers) ? [...tiers].sort((a, b) => Number(b.threshold) - Number(a.threshold)) : [];
+  const matched = ordered.find(tier => Number(actual) >= Number(tier.threshold)) || null;
+  return matched
+    ? {
+        label: matched.label ?? "Tier Met",
+        threshold: Number(matched.threshold) || 0,
+        multiplier: Number(matched.multiplier ?? 0)
+      }
+    : {
+        label: "Below Target",
+        threshold: Number(ordered[ordered.length - 1]?.threshold ?? 0),
+        multiplier: 0
+      };
+}
+
+function getVpCommunityBudgetMetricContext(role, metric, scope, metricPayout) {
+  const summaries = Array.isArray(scope?.summaries) ? scope.summaries.filter(Boolean) : [];
+  const totalCommunities = Math.max(0, Number(scope?.savedNames?.length || summaries.length || 0));
+  const perCommunityValue = totalCommunities > 0 ? metricPayout / totalCommunities : 0;
+  const tiers = Array.isArray(metric?.tiers) && metric.tiers.length > 0 ? metric.tiers : getBudgetTierSet();
+  const counts = {
+    atAbove: 0,
+    withinReach: 0,
+    justUnder: 0,
+    below: 0
+  };
+  const perCommunity = summaries.map(summary => {
+    const attainment = Number(summary?.budgetOccAttainmentPct ?? 0);
+    const tier = getTierMatchForActual(attainment, tiers);
+    const earned = perCommunityValue * tier.multiplier;
+    if (tier.label === "At / Above Budget") counts.atAbove += 1;
+    else if (tier.label === "Within Reach") counts.withinReach += 1;
+    else if (tier.label === "Just Under Budget") counts.justUnder += 1;
+    else counts.below += 1;
+    return {
+      name: summary?.propName || "Community",
+      attainment,
+      tier,
+      earned
+    };
+  });
+  const missingCommunityCount = Math.max(totalCommunities - perCommunity.length, 0);
+  if (missingCommunityCount > 0) counts.below += missingCommunityCount;
+  const earned = perCommunity.reduce((sum, item) => sum + item.earned, 0);
+  const avgAttainment = Number(scope?.metrics?.avgBudgetOccAttainmentPct ?? metric.actual ?? 0);
+  const onTrack = Number(scope?.metrics?.onTrackBudgetOccCount ?? 0);
+  const tracked = Number(scope?.metrics?.trackedBudgetOccCount ?? 0);
+  const allAtOrAbove = totalCommunities > 0 && counts.atAbove === totalCommunities;
+  const anyEarned = earned > 0;
+  return {
+    earned,
+    potential: metricPayout,
+    actual: avgAttainment,
+    perCommunityValue,
+    totalCommunities,
+    perCommunity,
+    counts,
+    onTrack,
+    tracked,
+    status: allAtOrAbove ? "hit" : anyEarned ? "partial" : "miss",
+    label: allAtOrAbove ? "All Communities At / Above Budget" : anyEarned ? "Tiered Community Payout" : "Below Target",
+    summaryText: `${counts.atAbove} at/above · ${counts.withinReach} within reach · ${counts.justUnder} just under · ${counts.below} below`,
+    detailText: totalCommunities > 0
+      ? `$${perCommunityValue.toFixed(2)} per community across ${totalCommunities} communit${totalCommunities === 1 ? "y" : "ies"}`
+      : "Assign and save communities to activate tiered payout."
+  };
+}
+
+function getJacMetricScoring(role, metric, scope, metricPayout = null) {
+  const payoutValue = Number(metricPayout ?? metric?.payout ?? 0) || 0;
+  if (isVpCommunityBudgetMetric(role, metric)) {
+    const vpContext = getVpCommunityBudgetMetricContext(role, metric, scope, payoutValue);
+    return {
+      earned: vpContext.earned,
+      outcome: {
+        status: vpContext.status,
+        multiplier: payoutValue > 0 ? vpContext.earned / payoutValue : 0,
+        label: vpContext.label,
+        tier: null
+      },
+      special: vpContext
+    };
+  }
+  const outcome = getMetricOutcome(metric);
+  return {
+    earned: payoutValue * outcome.multiplier,
+    outcome,
+    special: null
+  };
+}
+
 function buildMetricTierGuide(metric) {
   const tiers = Array.isArray(metric?.tiers) ? [...metric.tiers].sort((a, b) => Number(b.threshold) - Number(a.threshold)) : [];
   if (tiers.length === 0) return "";
@@ -7984,15 +8081,16 @@ function getMetricStatus(m) {
   return getMetricOutcome(m).status;
 }
 
-function calcRolePayout(role) {
+function calcRolePayout(role, scopeOverride = null) {
   const annualBonus = role.salary * (role.bonusRate / 100);
   const quarterlyPotential = annualBonus / 4;
   let earned = 0;
+  const scope = scopeOverride ?? getJacRoleScope(role);
   role.metrics.forEach(m => {
     const metricPayout = quarterlyPotential * (m.weight / 100);
     m.payout = metricPayout;
-    const outcome = getMetricOutcome(m);
-    earned += metricPayout * outcome.multiplier;
+    const scoring = getJacMetricScoring(role, m, scope, metricPayout);
+    earned += scoring.earned;
   });
   return { potential: quarterlyPotential, earned, missed: Math.max(0, quarterlyPotential - earned) };
 }
@@ -8057,16 +8155,20 @@ function calcCommissionPayout() {
 }
 
 function getEarnedMetricDetails(role) {
+  const scope = getJacRoleScope(role);
   return role.metrics
-    .filter(metric => isMetricHit(metric))
-    .map(metric => ({
+    .map(metric => ({ metric, scoring: getJacMetricScoring(role, metric, scope, metric.payout) }))
+    .filter(({ scoring }) => scoring.earned > 0)
+    .map(({ metric, scoring }) => ({
       cat: metric.cat,
       actual: metric.actual,
       goal: metric.goal,
       payout: metric.payout,
-      earned: metric.payout * getMetricOutcome(metric).multiplier,
-      summary: Array.isArray(metric.tiers) && metric.tiers.length > 0
-        ? `${getMetricOutcome(metric).label} · Actual ${formatRecommendedGoalValue(metric, metric.actual)}`
+      earned: scoring.earned,
+      summary: isVpCommunityBudgetMetric(role, metric)
+        ? `${scoring.special.summaryText} · Avg ${formatRecommendedGoalValue(metric, scoring.special.actual)} · ${scoring.special.detailText}`
+        : Array.isArray(metric.tiers) && metric.tiers.length > 0
+        ? `${scoring.outcome.label} · Actual ${formatRecommendedGoalValue(metric, metric.actual)}`
         : isCombinedAbsorptionMetric(metric)
         ? `Absorption ${Number(metric.actual || 0).toFixed(1).replace(/\.0$/, "")}/${Number(metric.goal || 0).toFixed(1).replace(/\.0$/, "")} · ${metric.secondaryLabel} ${Number(metric.secondaryActual || 0).toFixed(1)}%/${Number(metric.secondaryGoal || 0).toFixed(1)}%`
         : `Actual ${Number(metric.actual || 0).toFixed(1).replace(/\.0$/, "")} vs Goal ${Number(metric.goal || 0).toFixed(1).replace(/\.0$/, "")}`
@@ -8542,6 +8644,12 @@ function formatJacMetricSource(metric, scopeTypeLabel, scope) {
     const tracked = Number(scope?.metrics?.trackedBudgetOccCount || 0);
     const onTrack = Number(scope?.metrics?.onTrackBudgetOccCount || 0);
     const rate = Number(scope?.metrics?.avgBudgetOccAttainmentPct || 0);
+    if (scope?.roleId === "vp_ops") {
+      const vpTierContext = getVpCommunityBudgetMetricContext({ id: "vp_ops" }, metric, scope, Number(metric?.payout ?? 0));
+      if (vpTierContext.totalCommunities > 0) {
+        return `↔ ${scopeTypeLabel} · ${rate.toFixed(1)}% avg attainment · ${vpTierContext.summaryText}`;
+      }
+    }
     if (tracked > 0) {
       return `↔ ${scopeTypeLabel} · ${rate.toFixed(1)}% avg budget attainment · ${onTrack}/${tracked} communities on track`;
     }
@@ -8684,8 +8792,10 @@ function renderJacsTeamBonusTab() {
         const scopeTypeLabel = role.id.startsWith("regional_") || vpUsesAssignedScope ? "Assigned Communities" : "Portfolio Rollup";
         const syncSourceLabel = role.id.startsWith("regional_") || vpUsesAssignedScope ? "assigned community rollup" : "saved portfolio rollup";
         const metricsHTML = role.metrics.map((metric, mi) => {
-          const outcome = getMetricOutcome(metric);
+          const scoring = getJacMetricScoring(role, metric, scope, metric.payout);
+          const outcome = scoring.outcome;
           const status = outcome.status;
+          const special = scoring.special;
           const isCombined = isCombinedAbsorptionMetric(metric);
           const hasTiers = Array.isArray(metric.tiers) && metric.tiers.length > 0;
           const isVP = role.id === "vp_ops";
@@ -8695,13 +8805,19 @@ function renderJacsTeamBonusTab() {
                              : status === "hit"     ? "#3fb950"
                              : status === "partial" ? "#d29922"
                              : "#f85149";
-          const earnedAmt = metric.payout * outcome.multiplier;
+          const earnedAmt = scoring.earned;
           const statusLabel  = isCombined
                              ? (status === "hit"
                                 ? `✅ HIT — absorption and renewal goals met · $${earnedAmt.toFixed(0)}`
                                 : status === "partial"
                                   ? `⚠️ PARTIAL — one of the two goals hit · $${earnedAmt.toFixed(0)}`
                                   : "Open / Below Goal")
+                             : isVpCommunityBudgetMetric(role, metric)
+                               ? (status === "hit"
+                                  ? `✅ ${outcome.label} — $${earnedAmt.toFixed(0)}`
+                                  : status === "partial"
+                                    ? `⚠️ ${outcome.label} — $${earnedAmt.toFixed(0)}`
+                                    : "Open / Below Goal")
                              : hasTiers           ? (status === "hit"
                                 ? `✅ ${outcome.label} — $${earnedAmt.toFixed(0)}`
                                 : status === "partial"
@@ -8755,7 +8871,9 @@ function renderJacsTeamBonusTab() {
             <div class="bonus-metric-source">${formatJacMetricSource(metric, scopeTypeLabel, scope)}</div>
             ${recommendation ? `<div class="bonus-metric-detail" style="margin-top:4px;color:#58a6ff">Recommended Goal: ${recommendation.primaryText}${recommendation.secondaryText ? ` · ${recommendation.secondaryText}` : ""}</div>` : ""}
             ${recommendation?.reason ? `<div class="bonus-metric-detail" style="margin-top:4px;color:var(--muted)">${recommendation.reason}</div>` : ""}
+            ${special ? `<div class="bonus-metric-detail" style="margin-top:4px;color:var(--muted)">${special.detailText}</div>` : ""}
             <div class="bonus-metric-status" style="color:${statusColor}">${statusLabel}</div>
+            ${special ? `<div class="bonus-metric-detail" style="margin-top:4px;color:#58a6ff">${special.summaryText}</div>` : ""}
             ${thresholdHTML}
           </div>`;
         }).join("");
@@ -13245,7 +13363,7 @@ function renderCSVTab() {
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div>
         <h3 style="font-size:0.85rem;font-weight:600;margin-bottom:6px">📘 ATLAS Daily Leasing Report (DLR)</h3>
-        <p style="font-size:0.72rem;color:var(--muted)">Generate a clean, investor-facing DLR overview for ${escapeHtml(historicalCommunity)} from the saved ATLAS community data. Upload that day’s Box Score into the report-period box so today’s leasing activity comes from the selected report date, while occupancy, renewals, pricing, and forward-look projections stay tied to the saved community metrics.</p>
+        <p style="font-size:0.72rem;color:var(--muted)">Generate a clean, investor-facing DLR overview for the selected community from the saved ATLAS data. Choose the community here first, then upload that day’s Box Score so today’s leasing activity comes from the selected report date while occupancy, renewals, pricing, and forward-look projections stay tied to the saved community metrics.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-gray btn-sm" onclick="draftDlrOutlookEmail()">✉ Draft Outlook Email</button>
@@ -13254,6 +13372,29 @@ function renderCSVTab() {
       </div>
     </div>
     ${historicalDlrSummary ? `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:6px">DLR Community</div>
+          <select onchange="updateHistoricalImportTargetField('community',this.value)">
+            ${reportCommunityOptions.map(name => `<option value="${escapeHtml(name)}" ${name===historicalCommunity?"selected":""}>${escapeHtml(name)}</option>`).join("")}
+          </select>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">The export, email draft, and editable HTML all follow this community selection.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:6px">Reporting Month</div>
+          <select onchange="updateHistoricalImportTargetField('month',Number(this.value))">
+            ${MONTHS.map((month, idx) => `<option value="${idx}" ${idx===historicalMonthIdx?"selected":""}>${month}</option>`).join("")}
+          </select>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">Use this when the DLR should read a different saved month than the active workspace month.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div class="card-title" style="margin-bottom:6px">Reporting Year</div>
+          <select onchange="updateHistoricalImportTargetField('year',Number(this.value))">
+            ${historicalYearOptions.map(year => `<option value="${year}" ${year===historicalYear?"selected":""}>${year}</option>`).join("")}
+          </select>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">The DLR keeps this as report context for exports and uploaded daily box scores.</div>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
         <div class="bonus-framework-stat" style="grid-column:span 2;min-width:260px">
           <div class="k">Report Period</div>
