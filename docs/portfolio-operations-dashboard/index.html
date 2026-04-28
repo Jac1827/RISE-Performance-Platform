@@ -330,6 +330,31 @@
   .bonus-community-chip span { font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; }
   .bonus-community-chip.active span { color:#cfe2ff; }
   .bonus-scope-pill { display:inline-flex; align-items:center; gap:6px; font-size:0.64rem; color:#4493f8; background:rgba(68,147,248,0.08); border:1px solid rgba(68,147,248,0.22); padding:4px 8px; border-radius:999px; }
+  .dashboard-home-grid { display:grid; grid-template-columns:1.3fr 0.9fr; gap:16px; }
+  @media(max-width:1100px) { .dashboard-home-grid { grid-template-columns:1fr; } }
+  .portfolio-hero { background:linear-gradient(135deg,#163047 0%, #22465f 62%, #2c6985 100%); color:#f8fbff; border-radius:18px; padding:22px; border:1px solid rgba(255,255,255,0.1); box-shadow:0 18px 40px rgba(8,20,30,0.16); }
+  .portfolio-hero h2 { font-size:1.4rem; margin-bottom:8px; }
+  .portfolio-hero p { color:rgba(240,247,255,0.82); font-size:0.78rem; line-height:1.65; }
+  .portfolio-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-top:16px; }
+  .portfolio-kpi-card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:14px; min-height:108px; }
+  .portfolio-kpi-card .k { font-size:0.65rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:6px; }
+  .portfolio-kpi-card .v { font-size:1.45rem; font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--text); margin-bottom:5px; }
+  .portfolio-kpi-card .s { font-size:0.68rem; color:var(--muted); line-height:1.45; }
+  .portfolio-section-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  @media(max-width:950px) { .portfolio-section-grid { grid-template-columns:1fr; } }
+  .portfolio-list-card { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .portfolio-list-card h3 { font-size:0.85rem; font-weight:700; margin-bottom:6px; }
+  .portfolio-list-card p { font-size:0.7rem; color:var(--muted); margin-bottom:12px; line-height:1.55; }
+  .portfolio-rank-list { display:flex; flex-direction:column; gap:10px; }
+  .portfolio-rank-item { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:11px 12px; border:1px solid var(--border); border-radius:12px; background:var(--bg3); }
+  .portfolio-rank-item .meta { font-size:0.68rem; color:var(--muted); margin-top:4px; line-height:1.5; }
+  .portfolio-rank-item .metric { text-align:right; font-family:'JetBrains Mono',monospace; font-size:0.88rem; font-weight:700; }
+  .portfolio-rank-item .metric-sub { font-size:0.64rem; color:var(--muted); margin-top:4px; }
+  .portfolio-shortcut-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .report-hub-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .report-hub-card { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .report-hub-card h3 { font-size:0.8rem; font-weight:700; margin-bottom:6px; }
+  .report-hub-card p { font-size:0.68rem; color:var(--muted); line-height:1.55; margin-bottom:10px; }
 
   /* NER card */
   .ner-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 12px; }
@@ -355,9 +380,20 @@
       <button class="btn btn-gray" onclick="openFinancialAccountabilityPage()">💼 Financial Accountability</button>
       <button class="btn btn-green" onclick="saveBudgetCurve()">📋 Save as Budget Curve</button>
       <button class="btn btn-blue" onclick="saveCommunityData()">💾 Save Community Data</button>
-      <button class="btn btn-gray" onclick="publishWeeklySnapshot()">📡 Sync Weekly Baseline</button>
-      <button class="btn btn-gray" onclick="exportWeeklySnapshotJSON()">⬇ VP Snapshot JSON</button>
     </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs" style="margin-top:-4px;margin-bottom:16px">
+    <button class="tab active" onclick="setTab(0)">📈 Portfolio Home</button>
+    <button class="tab" onclick="setTab(1)">🏢 Community Setup</button>
+    <button class="tab" onclick="setTab(2)">📊 Overview</button>
+    <button class="tab" onclick="setTab(3)">🔍 Traffic &amp; Funnel</button>
+    <button class="tab" onclick="setTab(4)">🔁 Renewals</button>
+    <button class="tab" onclick="setTab(5)">⭐ Reputation</button>
+    <button class="tab" onclick="setTab(6)">📁 Data Import</button>
+    <button class="tab" onclick="setTab(7)">🗂 Reporting</button>
+    <button class="tab" onclick="setTab(8)">🏆 Bonus Calc</button>
   </div>
 
   <!-- Property Selector -->
@@ -405,25 +441,16 @@
     <div class="prop-grid" id="prop-grid"></div>
   </div>
 
-  <!-- Tabs -->
-  <div class="tabs" id="tabs">
-    <button class="tab" onclick="setTab(0)">🏢 Community Setup</button>
-    <button class="tab active" onclick="setTab(1)">📊 Overview</button>
-    <button class="tab" onclick="setTab(2)">🔍 Traffic &amp; Funnel</button>
-    <button class="tab" onclick="setTab(3)">🔁 Renewals</button>
-    <button class="tab" onclick="setTab(4)">⭐ Reputation</button>
-    <button class="tab" onclick="setTab(5)">📁 Data Import</button>
-    <button class="tab" onclick="setTab(6)">🏆 Bonus Calc</button>
-  </div>
-
   <!-- TAB CONTENT -->
   <div id="tab-panel-0" class="tab-panel"></div>
-  <div id="tab-panel-1" class="tab-panel"></div>
+  <div id="tab-panel-1" class="tab-panel" style="display:none"></div>
   <div id="tab-panel-2" class="tab-panel" style="display:none"></div>
   <div id="tab-panel-3" class="tab-panel" style="display:none"></div>
   <div id="tab-panel-4" class="tab-panel" style="display:none"></div>
   <div id="tab-panel-5" class="tab-panel" style="display:none"></div>
   <div id="tab-panel-6" class="tab-panel" style="display:none"></div>
+  <div id="tab-panel-7" class="tab-panel" style="display:none"></div>
+  <div id="tab-panel-8" class="tab-panel" style="display:none"></div>
 
 </div>
 
@@ -661,7 +688,7 @@ const PROPERTY_TEAM_ROLE_DEFS = {
 let selectedPropIdx = 7;
 let customUnits = "";
 let investorName = "";
-let activeTab = 1;
+let activeTab = 0;
 let reputationData = defaultReputationData();
 let communityPhotoBank = [];
 let marketSurveyData = defaultMarketSurveyData();
@@ -3994,13 +4021,13 @@ async function ensurePhotoAssetsLoaded(assets = []) {
 }
 
 function getActiveTabPhotoAssets() {
-  if (activeTab === 0) {
+  if (activeTab === 1) {
     return [
       ...normalizeCommunityPhotoBank(communityPhotoBank),
       ...getConfiguredCommunityTeamProfiles(propertyTeamConfig, communityTeamProfiles).map(profile => profile.photo)
     ];
   }
-  if (activeTab === 6) {
+  if (activeTab === 8) {
     return getJacsTeamRoles().map(role => role.photo);
   }
   return [];
@@ -4499,7 +4526,7 @@ function autoPopulateLeasingPace() {
 
 // ─── Tab ──────────────────────────────────────────────────────────────────────
 function setTab(i) {
-  activeTab = Math.max(0, Math.min(6, Number(i) || 0));
+  activeTab = Math.max(0, Math.min(8, Number(i) || 0));
   document.querySelectorAll(".tab").forEach((t, j) => t.classList.toggle("active", activeTab === j));
   document.querySelectorAll(".tab-panel").forEach((p, j) => p.style.display = activeTab === j ? "" : "none");
   renderTab();
@@ -4507,12 +4534,14 @@ function setTab(i) {
 
 function renderTab() {
   const renderers = [
+    renderPortfolioHomeTab,
     renderSetupTab,
     renderOverviewTab,
     renderTrafficTab,
     renderRenewalsTab,
     renderReputationTab,
     renderCSVTab,
+    renderReportingTab,
     renderBonusTab
   ];
   if (activeTab >= renderers.length) activeTab = renderers.length - 1;
@@ -4570,7 +4599,7 @@ function saveCommunityData(silent = false) {
   const savedResult = persistSaved();
   const globalResult = persistOpsGlobalData();
   renderPropGrid();
-  if (activeTab === 6 && bonusCalcView === "jac") renderTab();
+  if (activeTab === 8 && bonusCalcView === "jac") renderTab();
   const failures = [savedResult, globalResult].filter(result => result && result.ok === false).map(result => result.message);
   if (failures.length > 0) {
     alert(`⚠️ ${failures.join(" ")}`);
@@ -8295,6 +8324,295 @@ function renderBonusTab() {
   return innerTabs + (bonusCalcView === "jac" ? renderJacsTeamBonusTab() : renderPropertyBonusTab());
 }
 
+function renderPortfolioHomeTab() {
+  const selectedMonth = currentMonth;
+  const selectedLabel = FULL_MONTHS[selectedMonth];
+  const details = buildPortfolioDetailsForMonth(selectedMonth);
+  const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
+  const previousMonthIdx = Math.max(selectedMonth - 1, 0);
+  const previousAggregate = selectedMonth > 0
+    ? aggregateCommunitySummaries(buildPortfolioDetailsForMonth(previousMonthIdx).map(detail => detail.summary))
+    : null;
+  const investorGroups = buildInvestorPortfolioGroups(details);
+  const topApplications = [...details]
+    .sort((a, b) => (b.summary.applicationsApproved ?? 0) - (a.summary.applicationsApproved ?? 0))
+    .slice(0, 4);
+  const watchlist = [...details]
+    .filter(detail => (detail.summary.occGapUnits ?? 0) > 0 || (detail.summary.renewalUndecided ?? 0) > 0 || (detail.summary.applicationApprovalPct ?? 0) < 70)
+    .sort((a, b) => ((b.summary.occGapUnits ?? 0) + (b.summary.renewalUndecided ?? 0)) - ((a.summary.occGapUnits ?? 0) + (a.summary.renewalUndecided ?? 0)))
+    .slice(0, 4);
+  const tiles = [
+    {
+      label: "Saved Communities",
+      value: `${details.length}`,
+      sub: `${aggregate.totalUnits.toLocaleString()} units represented across the portfolio`
+    },
+    {
+      label: "Approved Applications",
+      value: `${Math.round(aggregate.applicationsApproved ?? 0)}`,
+      sub: previousAggregate ? formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, previousAggregate.applicationsApproved ?? 0, "count_pct").replace("MoM", "vs prior month") : "Month-to-date approved applications"
+    },
+    {
+      label: "Net Absorption",
+      value: formatSignedDisplay(aggregate.monthAbsorption ?? 0),
+      sub: previousAggregate ? formatPortfolioTrendValue(aggregate.monthAbsorption ?? 0, previousAggregate.monthAbsorption ?? 0, "number_diff").replace("MoM", "vs prior month") : "Move-ins minus move-outs"
+    },
+    {
+      label: "Renewal Retention",
+      value: `${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%`,
+      sub: `${Math.round(aggregate.renewalsSigned ?? 0)} signed from ${Math.round(aggregate.renewalExpirations ?? 0)} expirations`
+    },
+    {
+      label: "Physical Occupancy",
+      value: `${getSummaryOccPct(aggregate).toFixed(1)}%`,
+      sub: `${Math.max(aggregate.occGapUnits ?? 0, 0)} unit${Math.abs(aggregate.occGapUnits ?? 0) === 1 ? "" : "s"} below saved budget`
+    },
+    {
+      label: "Leased Occupancy",
+      value: `${getSummaryLeasedPct(aggregate).toFixed(1)}%`,
+      sub: `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} unit${Math.abs(aggregate.leasedGapUnits ?? 0) === 1 ? "" : "s"} behind leased target`
+    },
+    {
+      label: "Tour To Lease",
+      value: `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`,
+      sub: `${Math.round(aggregate.tours ?? 0)} tours and ${Math.round(aggregate.leasesSigned ?? 0)} signed leases`
+    },
+    {
+      label: "ORA Average",
+      value: (aggregate.oraScore ?? 0) > 0 ? (aggregate.oraScore ?? 0).toFixed(1) : "—",
+      sub: `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities pacing on saved occupancy budget`
+    }
+  ];
+  const topAppHtml = topApplications.length > 0
+    ? topApplications.map(detail => `<div class="portfolio-rank-item">
+        <div>
+          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+          <div class="meta">${escapeHtml(getInvestorPortfolioName(detail.record))} · ${detail.summary.totalUnits} units · ${detail.summary.applications} apps MTD</div>
+        </div>
+        <div style="text-align:right">
+          <div class="metric">${Math.round(detail.summary.applicationsApproved ?? 0)}</div>
+          <div class="metric-sub">approved apps</div>
+        </div>
+      </div>`).join("")
+    : `<div class="alert alert-info">No saved communities are available yet for portfolio rollup.</div>`;
+  const watchlistHtml = watchlist.length > 0
+    ? watchlist.map(detail => `<div class="portfolio-rank-item">
+        <div>
+          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+          <div class="meta">${detail.recommendations?.[0]?.body ? escapeHtml(detail.recommendations[0].body) : "Review occupancy, renewals, and funnel pacing."}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="metric" style="color:${(detail.summary.occGapUnits ?? 0) > 0 ? "#f85149" : "#d29922"}">${Math.max(detail.summary.occGapUnits ?? 0, 0)}</div>
+          <div class="metric-sub">occ gap units</div>
+        </div>
+      </div>`).join("")
+    : `<div class="alert-green">Portfolio watchlist is clear for the selected month snapshot.</div>`;
+  const investorRollupHtml = investorGroups.length > 0
+    ? investorGroups.slice(0, 6).map(group => `<div class="portfolio-rank-item">
+        <div>
+          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(group.name)}</div>
+          <div class="meta">${group.communityCount} communit${group.communityCount === 1 ? "y" : "ies"} · ${getSummaryOccPct(group.aggregate).toFixed(1)}% physical · ${(group.aggregate.renewalRetentionRate ?? 0).toFixed(1)}% retention</div>
+        </div>
+        <div style="text-align:right">
+          <div class="metric">${Math.round(group.aggregate.applicationsApproved ?? 0)}</div>
+          <div class="metric-sub">approved apps</div>
+        </div>
+      </div>`).join("")
+    : `<div class="alert alert-info">Add investor names in Community Setup to unlock grouped ownership rollups here.</div>`;
+  return `<div class="dashboard-home-grid">
+    <div>
+      <div class="portfolio-hero">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(240,247,255,0.72);margin-bottom:8px">Portfolio Command Center</div>
+            <h2>${escapeHtml(selectedLabel)} portfolio snapshot</h2>
+            <p>This landing view gives you the whole-book read before you drop into a single community. It uses the same saved community records that power the existing tabs, so nothing is being re-keyed or stored separately.</p>
+          </div>
+          <div style="min-width:210px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:14px 16px">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,247,255,0.7);margin-bottom:6px">Current Selection</div>
+            <div style="font-size:1.2rem;font-weight:700">${escapeHtml(getProp().name)}</div>
+            <div style="font-size:0.7rem;color:rgba(240,247,255,0.78);margin-top:4px">${details.length} saved communit${details.length === 1 ? "y" : "ies"} feeding the portfolio view</div>
+          </div>
+        </div>
+        <div class="portfolio-shortcut-row">
+          <button class="btn btn-gray btn-sm" onclick="setTab(2)">Open Overview</button>
+          <button class="btn btn-gray btn-sm" onclick="setTab(3)">Open Traffic &amp; Funnel</button>
+          <button class="btn btn-gray btn-sm" onclick="setTab(7)">Open Reporting Hub</button>
+          <button class="btn btn-blue btn-sm" onclick="setTab(8)">Open Bonus Calc</button>
+        </div>
+      </div>
+      <div class="portfolio-kpi-grid" style="margin-top:16px">
+        ${tiles.map(tile => `<div class="portfolio-kpi-card">
+          <div class="k">${escapeHtml(tile.label)}</div>
+          <div class="v">${escapeHtml(tile.value)}</div>
+          <div class="s">${escapeHtml(tile.sub)}</div>
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="portfolio-list-card">
+      <h3>Portfolio priorities</h3>
+      <p>Use this list as the first management read for the selected month before drilling into any one asset.</p>
+      <div class="portfolio-rank-list">${watchlistHtml}</div>
+    </div>
+  </div>
+  <div class="portfolio-section-grid" style="margin-top:16px">
+    <div class="portfolio-list-card">
+      <h3>Top application drivers</h3>
+      <p>Highest approved-application communities for the selected month-to-date snapshot.</p>
+      <div class="portfolio-rank-list">${topAppHtml}</div>
+    </div>
+    <div class="portfolio-list-card">
+      <h3>Investor portfolio rollup</h3>
+      <p>Grouped ownership performance so you can spot which portfolios are strongest or need follow-up.</p>
+      <div class="portfolio-rank-list">${investorRollupHtml}</div>
+    </div>
+  </div>`;
+}
+
+function renderReportingTab() {
+  const weeklyBaseline = getStoredWeeklySnapshotPayload();
+  const weeklyBaselineText = weeklyBaseline?.exportedAt
+    ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
+    : "No weekly baseline is synced yet. Use the weekly report controls below after this week’s send so next week can compare correctly.";
+  const selectedReportSections = getSelectedPortfolioReportSections();
+  const ownerFilterSummary = `${(portfolioReportFilters.investorGroups ?? []).length} investor group(s) · ${(portfolioReportFilters.investorCommunities ?? []).length} community selection(s)`;
+  const regionalFilterSummary = `${(portfolioReportFilters.regionalScopes ?? []).length} scope(s) · ${(portfolioReportFilters.regionalCommunities ?? []).length} community selection(s)`;
+  const scopeFilterHTML = portfolioReportMode === "owner"
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+        <div class="report-hub-card">
+          <div class="card-title" style="margin-bottom:8px">Investor Groups</div>
+          <div class="bonus-assignment-chip-wrap">
+            ${getInvestorReportFilterOptions().length > 0 ? getInvestorReportFilterOptions().map(name => {
+              const isActive = (portfolioReportFilters.investorGroups ?? []).includes(name);
+              return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("investorGroups", ${JSON.stringify(name)})'>${escapeHtml(name)}</button>`;
+            }).join("") : `<div style="font-size:0.72rem;color:var(--muted)">Add investor names in Community Setup to group communities here.</div>`}
+          </div>
+        </div>
+        <div class="report-hub-card">
+          <div class="card-title" style="margin-bottom:8px">Communities</div>
+          <div class="bonus-assignment-chip-wrap">
+            ${getCurrentPortfolioDetails().map(detail => {
+              const name = detail.name;
+              const isActive = (portfolioReportFilters.investorCommunities ?? []).includes(name);
+              return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("investorCommunities", ${JSON.stringify(name)})'>${escapeHtml(name)}</button>`;
+            }).join("") || `<div style="font-size:0.72rem;color:var(--muted)">Save communities to filter them here.</div>`}
+          </div>
+        </div>
+      </div>`
+    : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+        <div class="report-hub-card">
+          <div class="card-title" style="margin-bottom:8px">Regional Roles</div>
+          <div class="bonus-assignment-chip-wrap">
+            ${getRegionalReportFilterOptions().length > 0 ? getRegionalReportFilterOptions().map(option => {
+              const isActive = (portfolioReportFilters.regionalScopes ?? []).includes(option.id);
+              return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("regionalScopes", ${JSON.stringify(option.id)})'>${escapeHtml(option.title)}</button>`;
+            }).join("") : `<div style="font-size:0.72rem;color:var(--muted)">Assign communities to Regionals in Community Setup or Bonus Calc first.</div>`}
+          </div>
+        </div>
+        <div class="report-hub-card">
+          <div class="card-title" style="margin-bottom:8px">Communities</div>
+          <div class="bonus-assignment-chip-wrap">
+            ${getCurrentPortfolioDetails().map(detail => {
+              const name = detail.name;
+              const isActive = (portfolioReportFilters.regionalCommunities ?? []).includes(name);
+              return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("regionalCommunities", ${JSON.stringify(name)})'>${escapeHtml(name)}</button>`;
+            }).join("") || `<div style="font-size:0.72rem;color:var(--muted)">Save communities to filter them here.</div>`}
+          </div>
+        </div>
+      </div>`;
+  const bonusPayoutCard = `<div class="report-hub-card">
+    <h3>Bonus payout reporting</h3>
+    <p>Pull payroll-ready bonus payout views from the same commission and bonus logic already used in Bonus Calc.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gray btn-sm" onclick="downloadBonusPayoutCSV()">⬇ CSV</button>
+      <button class="btn btn-gray btn-sm" onclick="openBonusPayoutReport(false)">🧾 Printable HTML</button>
+      <button class="btn btn-blue btn-sm" onclick="openBonusPayoutReport(true)">🖨 PDF / Print</button>
+      <button class="btn btn-gray btn-sm" onclick="setTab(8)">Open Bonus Calc</button>
+    </div>
+  </div>`;
+  const executiveCard = `<div class="report-hub-card">
+    <h3>Weekly leadership reporting</h3>
+    <p>${escapeHtml(weeklyBaselineText)}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gray btn-sm" onclick="publishWeeklySnapshot()">📡 Sync This Week as Baseline</button>
+      <button class="btn btn-gray btn-sm" onclick="openWeeklyExecutiveReport(false)">👁 Preview Weekly Report</button>
+      <button class="btn btn-blue btn-sm" onclick="openWeeklyExecutiveReport(true)">🖨 Weekly PDF / Print</button>
+      <button class="btn btn-gray btn-sm" onclick="draftWeeklyExecutiveOutlookEmail()">✉ Draft Outlook Email</button>
+    </div>
+  </div>`;
+  const investorCard = `<div class="report-hub-card">
+    <h3>Investor-facing output</h3>
+    <p>Generate branded investor deliverables from saved dashboard data without disturbing any community records.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gray btn-sm" onclick="openMonthlyInvestorPresentation(false)">👁 Preview Deck</button>
+      <button class="btn btn-blue btn-sm" onclick="openMonthlyInvestorPresentation(true)">🖨 Investor PDF / Print</button>
+      <button class="btn btn-gray btn-sm" onclick="exportMonthlyInvestorPresentationPptx()">🪄 Export for Canva</button>
+      <button class="btn btn-gray btn-sm" onclick="openDlrInvestorOverview(true)">📘 Export DLR</button>
+    </div>
+  </div>`;
+  return `<div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:4px">🗂 Reporting Hub</h2>
+        <p style="font-size:0.72rem;color:var(--muted)">This is the cleaner front door for internal operations reporting, investor-facing reporting, and bonus payout output. The underlying exports still read from the same saved dashboard data by community.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="setTab(6)">Open Data Import</button>
+        <button class="btn btn-gray btn-sm" onclick="setTab(0)">Back to Portfolio Home</button>
+      </div>
+    </div>
+    <div class="report-hub-grid">
+      ${executiveCard}
+      ${investorCard}
+      ${bonusPayoutCard}
+      <div class="report-hub-card">
+        <h3>Data staging + historical backfill</h3>
+        <p>Historical PDF / CSV staging, DLR box score imports, and market survey uploads stay in Data Import so reporting and ingestion are now easier to navigate separately.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-blue btn-sm" onclick="setTab(6)">Open Data Import Workspace</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <h3 style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📦 Portfolio report builder</h3>
+        <p style="font-size:0.72rem;color:var(--muted)">Filter the report by investor ownership, Regional scope, or individual communities, then export the selected sections in the format you need.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="exportPortfolioReportCSV()" ${selectedReportSections.length===0?"disabled":""}>⬇ CSV</button>
+        <button class="btn btn-gray btn-sm" onclick="exportPortfolioReportExcel()" ${selectedReportSections.length===0?"disabled":""}>📊 Excel</button>
+        <button class="btn btn-blue btn-sm" onclick="openPortfolioPerformanceReport(true)" ${selectedReportSections.length===0?"disabled":""}>🖨 PDF / Print</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div class="report-hub-card">
+        <div class="card-title" style="margin-bottom:6px">Report Audience</div>
+        <select onchange="setPortfolioReportMode(this.value)">
+          <option value="owner" ${portfolioReportMode==="owner"?"selected":""}>Investor Report</option>
+          <option value="regional" ${portfolioReportMode==="regional"?"selected":""}>Regional Detailed + Recommendations</option>
+        </select>
+        <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">${portfolioReportMode==="owner"?"High-level investor-facing summary for the selected ownership scope.":"Detailed internal package for Regional accountability and recommendations."}</div>
+      </div>
+      <div class="report-hub-card" style="grid-column:span 2">
+        <div class="card-title" style="margin-bottom:8px">Sections to Include</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+          ${Object.keys(portfolioReportSections).map(sectionKey => `<label style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:var(--text)">
+            <input type="checkbox" ${portfolioReportSections[sectionKey]?"checked":""} onchange="setPortfolioReportSection('${sectionKey}',this.checked)">
+            <span>${getPortfolioReportSectionLabel(sectionKey)}</span>
+          </label>`).join("")}
+        </div>
+      </div>
+    </div>
+    <div class="report-hub-card" style="margin-top:12px">
+      <div class="card-title" style="margin-bottom:6px">${portfolioReportMode==="owner"?"Investor Scope Builder":"Regional Scope Builder"}</div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-bottom:10px">${portfolioReportMode==="owner"?ownerFilterSummary:regionalFilterSummary}</div>
+      ${scopeFilterHTML}
+    </div>
+  </div>`;
+}
+
 // ─── CSV Tab ───────────────────────────────────────────────────────────────────
 function parseMonthIndexValue(value) {
   if (value === null || value === undefined) return null;
@@ -8679,6 +8997,49 @@ function buildPortfolioDetailsFromRecordMap(recordMap) {
       recommendations: buildRecommendationsForRecord(name, record)
     } : null;
   }).filter(Boolean);
+}
+
+function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
+  saveCommunityData(true);
+  const map = (recordMap && typeof recordMap === "object") ? recordMap : {};
+  let details = Object.keys(map).map(name => {
+    const record = normalizeSavedCommunityRecord(name, map[name]);
+    const prop = getPropertyByName(name);
+    const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+    const scopedRecord = {
+      ...record,
+      currentMonth: monthIdx,
+      currentOccupied: estimateSnapshotUnitsForRecordMonth(record, totalUnits, monthIdx, "occupiedSnapshot"),
+      currentLeased: estimateSnapshotUnitsForRecordMonth(record, totalUnits, monthIdx, "leasedSnapshot")
+    };
+    const summary = getCommunitySummary(name, scopedRecord);
+    return summary ? {
+      name,
+      record: scopedRecord,
+      summary,
+      recommendations: buildRecommendationsForRecord(name, scopedRecord)
+    } : null;
+  }).filter(Boolean);
+  if (details.length === 0) {
+    const currentName = getProp().name;
+    const baseRecord = normalizeSavedCommunityRecord(currentName, getCurrentCommunityRecord());
+    const prop = getPropertyByName(currentName);
+    const totalUnits = getTotalUnitsFor(prop, baseRecord.customUnits);
+    const scopedRecord = {
+      ...baseRecord,
+      currentMonth: monthIdx,
+      currentOccupied: estimateSnapshotUnitsForRecordMonth(baseRecord, totalUnits, monthIdx, "occupiedSnapshot"),
+      currentLeased: estimateSnapshotUnitsForRecordMonth(baseRecord, totalUnits, monthIdx, "leasedSnapshot")
+    };
+    const summary = getCommunitySummary(currentName, scopedRecord);
+    details = summary ? [{
+      name: currentName,
+      record: scopedRecord,
+      summary,
+      recommendations: buildRecommendationsForRecord(currentName, scopedRecord)
+    }] : [];
+  }
+  return details;
 }
 
 function getCurrentPortfolioDetails() {
@@ -12728,14 +13089,6 @@ function renderCSVTab() {
       collapsedPreview: extractedDashboardRows.length > 0 ? `${extractedDashboardRows.length} staged row${extractedDashboardRows.length === 1 ? "" : "s"} waiting in preview` : "No staged rows yet"
     }),
     renderWindowshadeCard({
-      key: "import_report_export",
-      title: "Portfolio Report Export",
-      subtitle: "Investor and Regional report export tools with scope filters.",
-      countLabel: portfolioReportMode === "owner" ? "Investor mode" : "Regional mode",
-      bodyHtml: reportBuilderHTML,
-      collapsedPreview: `${selectedReportSections.length} section${selectedReportSections.length === 1 ? "" : "s"} selected · ${portfolioReportMode === "owner" ? ownerFilterSummary : regionalFilterSummary}`
-    }),
-    renderWindowshadeCard({
       key: "import_monthly_presentation",
       title: "Monthly Investor Presentation",
       subtitle: "Community-scoped investor deck builder, market survey upload, and Canva-ready exports.",
@@ -12752,12 +13105,22 @@ function renderCSVTab() {
       collapsedPreview: `${imageInventory.communityPhotos} community photos · ${imageInventory.teamHeadshots} site headshots · ${imageInventory.leadershipHeadshots} leadership headshots`
     }),
     renderWindowshadeCard({
-      key: "import_weekly_report",
-      title: "Weekly C-Suite Report",
-      subtitle: "Weekly leadership report builder, Outlook draft helper, and baseline sync.",
-      countLabel: weeklyBaseline?.exportedAt ? "Baseline ready" : "No baseline",
-      bodyHtml: weeklyExecutiveHTML,
-      collapsedPreview: weeklyBaselineText
+      key: "import_report_export",
+      title: "Reporting Moved",
+      subtitle: "The report builder, weekly leadership exports, and bonus payout reporting now live in the Reporting tab.",
+      countLabel: "Open Reporting",
+      bodyHtml: `<div class="report-hub-grid">
+        <div class="report-hub-card">
+          <h3>Cleaner reporting workflow</h3>
+          <p>We moved the main reporting controls out of Data Import so ingestion and reporting are easier to maneuver separately. Historical imports, DLR support, and survey uploads stay here.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-blue btn-sm" onclick="setTab(7)">Open Reporting Hub</button>
+            <button class="btn btn-gray btn-sm" onclick="openPortfolioPerformanceReport(true)">Quick Portfolio PDF</button>
+            <button class="btn btn-gray btn-sm" onclick="openWeeklyExecutiveReport(true)">Quick Weekly PDF</button>
+          </div>
+        </div>
+      </div>`,
+      collapsedPreview: "Use Reporting tab for exports and filtered report pulls"
     }),
     extractedDashboardRows.length > 0 ? renderWindowshadeCard({
       key: "import_extract_preview",
