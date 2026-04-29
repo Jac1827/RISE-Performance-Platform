@@ -6970,6 +6970,38 @@ function extractLeadConversionTotals(rawText = "") {
   };
 }
 
+function extractLeadConversionTotalsFromRows(rows = []) {
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    const row = Array.isArray(rows[idx]) ? rows[idx].map(cell => String(cell ?? "").trim()) : [];
+    const hasApplicationAnchor = row.some(cell => /^application$/i.test(cell));
+    if (!hasApplicationAnchor) continue;
+    for (let headerIdx = idx + 1; headerIdx < Math.min(rows.length, idx + 4); headerIdx += 1) {
+      const headerRow = Array.isArray(rows[headerIdx]) ? rows[headerIdx].map(cell => String(cell ?? "").trim()) : [];
+      const completedIdx = headerRow.findIndex(cell => /^completed$/i.test(cell));
+      const partialIdx = headerRow.findIndex(cell => /partially completed/i.test(cell));
+      const completedCancelledIdx = headerRow.findIndex(cell => /completed\s*\(cancelled\)/i.test(cell));
+      const deniedIdx = headerRow.findIndex(cell => /^denied$/i.test(cell));
+      const approvedIdx = headerRow.findIndex(cell => /^approved$/i.test(cell));
+      const approvedCancelledIdx = headerRow.findIndex(cell => /approved\s*\(cancelled\)/i.test(cell));
+      if (completedIdx === -1 || approvedIdx === -1) continue;
+      for (let totalIdx = headerIdx + 1; totalIdx < Math.min(rows.length, headerIdx + 8); totalIdx += 1) {
+        const totalRow = Array.isArray(rows[totalIdx]) ? rows[totalIdx] : [];
+        const totalLabel = String(totalRow[0] ?? "").trim();
+        if (!/^total:?$/i.test(totalLabel)) continue;
+        return {
+          completed: Number(parseOptionalWorkbookMetric(totalRow[completedIdx]) ?? 0),
+          partiallyCompleted: Number(parseOptionalWorkbookMetric(totalRow[partialIdx]) ?? 0),
+          completedCancelled: Number(parseOptionalWorkbookMetric(totalRow[completedCancelledIdx]) ?? 0),
+          denied: Number(parseOptionalWorkbookMetric(totalRow[deniedIdx]) ?? 0),
+          approved: Number(parseOptionalWorkbookMetric(totalRow[approvedIdx]) ?? 0),
+          approvedCancelled: Number(parseOptionalWorkbookMetric(totalRow[approvedCancelledIdx]) ?? 0)
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = "") {
   const reportDate = pickDailyBoxScoreReportDate(rows, fileName, rawText);
   const dailySnapshot = normalizeDlrBoxScoreSnapshot({
@@ -6979,7 +7011,7 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
     reportDateLabel: reportDate ? formatPresentationDate(reportDate) : ""
   });
   const leadActivityTotals = extractLeadActivityTotals(rawText);
-  const leadConversionTotals = extractLeadConversionTotals(rawText);
+  const leadConversionTotals = extractLeadConversionTotalsFromRows(rows) || extractLeadConversionTotals(rawText);
   if (leadActivityTotals) {
     dailySnapshot.newLeads = leadActivityTotals.newLeads;
     dailySnapshot.walkIn = leadActivityTotals.walkIn;
@@ -12797,6 +12829,78 @@ function buildDlrForwardLookChart(report) {
   </svg>`;
 }
 
+function buildDlrOccupancyPositionChart(report) {
+  const metrics = [
+    { label: "Occupied", pct: Number(report.occupancyPct) || 0, color: "#1d4ed8", detail: `${formatDlrMetricValue(report.occupiedUnits)} units` },
+    { label: "Leased", pct: Number(report.leasedPct) || 0, color: "#0f766e", detail: `${formatDlrMetricValue(report.leasedUnits)} units` },
+    { label: "90-Day", pct: Number(report.trendingOccupancyPct) || 0, color: "#7c3aed", detail: "ending physical occ" },
+    { label: "Budget", pct: Number(report.budgetOccPct) || 0, color: "#94a3b8", detail: "current target" }
+  ];
+  const bars = metrics.map(item => `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#334155;margin-bottom:5px">
+        <span style="font-weight:700">${escapeHtml(item.label)}</span>
+        <span>${formatDlrPercent(item.pct, 1)} · ${escapeHtml(item.detail)}</span>
+      </div>
+      <div style="height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden">
+        <div style="height:100%;width:${Math.max(0, Math.min(item.pct, 100))}%;background:${item.color};border-radius:999px"></div>
+      </div>
+    </div>
+  `).join("");
+  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:linear-gradient(180deg,#f8fbff 0%,#eef5ff 100%)">
+    <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Occupancy Position</div>
+        <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">${formatDlrPercent(report.occupancyPct, 1)} occupied</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#475569">
+        <div>${formatSignedDisplay((Number(report.occupancyPct) || 0) - (Number(report.budgetOccPct) || 0), 1, " pts").replace("pts", "pts vs budget")}</div>
+        <div style="margin-top:4px">${formatDlrPercent(report.leasedPct, 1)} leased</div>
+      </div>
+    </div>
+    ${bars}
+  </div>`;
+}
+
+function buildDlrRenewalHealthChart(report) {
+  const expirations = Math.max(0, Number(report.renewalSnapshot?.expirations) || 0);
+  const signed = Math.max(0, Number(report.renewalSnapshot?.signed) || 0);
+  const undecided = Math.max(0, Number(report.renewalSnapshot?.undecided) || 0);
+  const projectedAttrition = Math.max(0, Number(report.renewalSnapshot?.projectedAttrition) || 0);
+  const segments = expirations > 0
+    ? [
+        { label: "Signed", value: signed, color: "#059669" },
+        { label: "Undecided / M2M", value: undecided, color: "#f59e0b" },
+        { label: "Projected Attrition", value: projectedAttrition, color: "#dc2626" }
+      ]
+    : [];
+  const total = expirations || 1;
+  const segmentHtml = segments.map(segment => `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#334155;margin-bottom:5px">
+        <span style="font-weight:700">${escapeHtml(segment.label)}</span>
+        <span>${formatDlrMetricValue(segment.value)} units</span>
+      </div>
+      <div style="height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden">
+        <div style="height:100%;width:${Math.max(0, Math.min((segment.value / total) * 100, 100))}%;background:${segment.color};border-radius:999px"></div>
+      </div>
+    </div>
+  `).join("");
+  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
+    <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Renewal Health</div>
+        <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">${formatDlrPercent(report.renewalSnapshot?.retentionRate, 0)} retention</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#475569">
+        <div>${formatDlrMetricValue(expirations)} expirations</div>
+        <div style="margin-top:4px">${formatDlrMetricValue(projectedAttrition)} projected attrition</div>
+      </div>
+    </div>
+    ${segments.length > 0 ? segmentHtml : `<div style="font-size:12px;color:#64748b">No renewal expirations are saved for this report period yet.</div>`}
+  </div>`;
+}
+
 function buildDlrInvestorNotes({
   reportDateLabel,
   monthLabel,
@@ -12874,9 +12978,9 @@ function buildDlrEmailSnapshotSvg(report) {
   const metrics = [
     { label: "Occupancy", value: formatDlrPercent(report.occupancyPct, 1), sub: `${report.occupiedUnits} occupied units` },
     { label: "Leased", value: formatDlrPercent(report.leasedPct, 1), sub: `${report.leasedUnits} leased units` },
-    { label: "Today's Leads", value: String(today.guestCards ?? 0), sub: `${today.tours ?? 0} tours on ${report.reportDateLabel || report.reportMonthLabel}` },
+    { label: "90-Day Projection", value: formatDlrPercent(report.trendingOccupancyPct, 1), sub: "ending physical occ" },
     { label: "Today's Apps", value: String(today.applications ?? 0), sub: `${today.approvals ?? 0} approved · ${today.denials ?? 0} denied` },
-    { label: "MTD Absorption", value: formatDlrSignedNumber((mtd.moveIns ?? 0) - (mtd.moveOuts ?? 0)), sub: `${mtd.moveIns ?? 0} ins / ${mtd.moveOuts ?? 0} outs month to date` }
+    { label: "Retention", value: formatDlrPercent(report.renewalSnapshot?.retentionRate, 0), sub: `${report.renewalSnapshot?.signed ?? 0} signed / ${report.renewalSnapshot?.expirations ?? 0} exp` }
   ];
   const noteLines = (report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).slice(0, 3);
   const metricBlocks = metrics.map((card, idx) => {
@@ -12922,11 +13026,12 @@ function buildDlrEmailSnapshotSvg(report) {
     <text x="78" y="312" font-size="24" font-weight="700" fill="#0f172a">Activity Snapshot</text>
     ${activityRows}
     <rect x="606" y="276" width="552" height="308" rx="18" fill="#ffffff" stroke="#dbe4f0"/>
-    <text x="642" y="312" font-size="24" font-weight="700" fill="#0f172a">Forward Look</text>
+    <text x="642" y="312" font-size="24" font-weight="700" fill="#0f172a">Forward Look & Renewal Risk</text>
     ${forwardRows}
     <rect x="42" y="616" width="1116" height="118" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
     <text x="78" y="648" font-size="24" font-weight="700" fill="#0f172a">Highlights & Wins</text>
     ${highlights || `<text x="78" y="688" font-size="18" fill="#334155">• Dashboard highlights will populate here as activity is saved.</text>`}
+    <text x="642" y="520" font-size="16" fill="#475569">Retention ${escapeHtml(formatDlrPercent(report.renewalSnapshot?.retentionRate, 0))} · Undecided ${escapeHtml(formatDlrMetricValue(report.renewalSnapshot?.undecided))} · Projected attrition ${escapeHtml(formatDlrMetricValue(report.renewalSnapshot?.projectedAttrition))}</text>
   </svg>`;
 }
 
@@ -13332,14 +13437,16 @@ function renderDashboardDlrActivityMiniTable(report) {
 }
 
 function buildDlrInvestorOverviewDocument(report) {
+  const netAbsorption = (Number(report.trafficMetrics?.moveIns) || 0) - (Number(report.trafficMetrics?.moveOuts) || 0);
   const heroCards = [
-    { label: "Occupancy", value: formatDlrPercent(report.occupancyPct), sub: `${report.occupiedUnits} occupied units` },
-    { label: "Leased", value: formatDlrPercent(report.leasedPct), sub: `${report.leasedUnits} leased units` },
-    { label: "90-Day Projection", value: formatDlrPercent(report.trendingOccupancyPct), sub: "Projected ending physical occupancy" },
-    { label: "Status", value: report.status, sub: `Budget occ ${formatDlrPercent(report.budgetOccPct)}` },
-    { label: "Move-Ins Needed", value: formatDlrMetricValue(report.moveInsNeeded), sub: `${formatDlrMetricValue(report.moveInGoalPerWeek)} / week target` }
+    { label: "Physical Occupancy", value: formatDlrPercent(report.occupancyPct), sub: `${report.occupiedUnits} occupied units` },
+    { label: "Leased Exposure", value: formatDlrPercent(report.leasedPct), sub: `${report.leasedUnits} leased units` },
+    { label: "90-Day Projection", value: formatDlrPercent(report.trendingOccupancyPct), sub: "ending physical occupancy" },
+    { label: "Net Absorption", value: formatDlrSignedNumber(netAbsorption), sub: `${formatDlrMetricValue(report.trafficMetrics?.moveIns)} ins / ${formatDlrMetricValue(report.trafficMetrics?.moveOuts)} outs` },
+    { label: "Renewal Retention", value: formatDlrPercent(report.renewalSnapshot.retentionRate, 0), sub: `${formatDlrMetricValue(report.renewalSnapshot.signed)} signed of ${formatDlrMetricValue(report.renewalSnapshot.expirations)}` },
+    { label: "Renewal Risk", value: formatDlrMetricValue(report.renewalSnapshot.projectedAttrition), sub: `${formatDlrMetricValue(report.renewalSnapshot.undecided)} undecided / M2M` }
   ];
-  const heroHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
+  const heroHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px">
     ${heroCards.map(card => `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:14px 16px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:6px">${escapeHtml(card.label)}</div>
       <div style="font-size:24px;font-weight:700;color:#0f172a;margin-bottom:4px">${escapeHtml(card.value)}</div>
@@ -13376,29 +13483,36 @@ function buildDlrInvestorOverviewDocument(report) {
     .section{margin-bottom:18px}
     .section-card{border:1px solid #dbe4f0;border-radius:16px;padding:16px;background:#ffffff}
     .grid-2{display:grid;grid-template-columns:1.1fr 0.9fr;gap:14px}
-    @media print { body{padding:18px} .grid-2{grid-template-columns:1fr 1fr} }
+    .grid-equal{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media print { body{padding:18px} .grid-2,.grid-equal{grid-template-columns:1fr 1fr} }
   </style></head><body>
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid #dbe4f0">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;padding:18px 20px;border:1px solid #dbe4f0;border-radius:20px;background:linear-gradient(135deg,#f8fbff 0%,#eef5ff 100%)">
       <div style="display:flex;align-items:center;gap:14px">
         <img src="${EXPORT_BRAND_LOGO_URI}" alt="RISE logo" style="height:38px;width:auto;object-fit:contain;display:block">
         <div>
-          <div style="font-size:24px;font-weight:700;color:#1d4ed8">ATLAS Daily Leasing Report Investor Overview</div>
+          <div style="font-size:24px;font-weight:700;color:#1d4ed8">RISE Investor Daily Leasing Report</div>
           <div style="font-size:13px;color:#64748b">${escapeHtml(report.communityName)} · ${escapeHtml(report.reportPeriodLabel)}</div>
+          <div style="font-size:12px;color:#475569;margin-top:6px;max-width:520px">A one-page investor view of daily leasing activity, renewal risk, occupancy pacing, and near-term move-in / move-out pressure.</div>
         </div>
       </div>
       <div style="text-align:right;font-size:11px;color:#64748b">
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:${report.status === "On Track" ? "#dcfce7" : report.status === "Watch" ? "#fef3c7" : "#fee2e2"};color:${report.status === "On Track" ? "#166534" : report.status === "Watch" ? "#92400e" : "#991b1b"};font-weight:700;margin-bottom:8px">${escapeHtml(report.status)} · Budget ${formatDlrPercent(report.budgetOccPct)}</div>
         <div>Generated ${escapeHtml(formatPresentationTimestamp(report.generatedAt))}</div>
         <div>${escapeHtml(report.sourceSummary)}</div>
       </div>
     </div>
     ${heroHtml}
+    <div class="grid-equal section">
+      <div>${buildDlrOccupancyPositionChart(report)}</div>
+      <div>${buildDlrRenewalHealthChart(report)}</div>
+    </div>
     <div class="grid-2 section">
       <div class="section-card">
         <div style="font-size:14px;font-weight:700;margin-bottom:10px">Activity Snapshot</div>
         ${renderDashboardDlrActivityMiniTable(report)}
       </div>
       <div class="section-card">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Pricing Snapshot</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Pricing & Retention Snapshot</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;color:#334155">
           <div><strong>Market / In-Place Rent</strong><br>${formatDlrCurrency(report.pricing.avgInPlaceRent)}</div>
           <div><strong>Budget Rent</strong><br>${formatDlrCurrency(report.pricing.avgBudgetRent)}</div>
@@ -13406,9 +13520,10 @@ function buildDlrInvestorOverviewDocument(report) {
           <div><strong>Concessions</strong><br>${formatDlrCurrency(report.pricing.concessions)}</div>
           <div><strong>Rent Roll Total</strong><br>${formatDlrCurrency(report.pricing.rentRollTotal)}</div>
           <div><strong>Total Units</strong><br>${formatDlrMetricValue(report.totalUnits)}</div>
+          <div><strong>Move-In Goal / Week</strong><br>${formatDlrMetricValue(report.moveInGoalPerWeek)}</div>
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:12px;color:#475569">
-          Renewal retention is ${formatDlrPercent(report.renewalSnapshot.retentionRate, 0)} with ${formatDlrMetricValue(report.renewalSnapshot.undecided)} undecided / M2M and ${formatDlrMetricValue(report.renewalSnapshot.projectedAttrition)} projected attrition unit(s).
+          Renewal retention is ${formatDlrPercent(report.renewalSnapshot.retentionRate, 0)} with ${formatDlrMetricValue(report.renewalSnapshot.undecided)} undecided / M2M, ${formatDlrMetricValue(report.renewalSnapshot.projectedAttrition)} projected attrition unit(s), and ${formatDlrMetricValue(report.moveInsNeeded)} move-ins still needed to hit the current occupancy target.
         </div>
       </div>
     </div>
@@ -13609,6 +13724,8 @@ function renderCSVTab() {
         <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.occupancyPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.leasedPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">90-Day Projection</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.trendingOccupancyPct)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Retention</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.renewalSnapshot?.retentionRate,0)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">Projected Attrition</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.renewalSnapshot?.projectedAttrition)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Move-In Goal / Week</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.moveInGoalPerWeek)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Property Status</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.status || "—")}</div></div>
       </div>
@@ -13618,7 +13735,7 @@ function renderCSVTab() {
           ${renderDashboardDlrActivityMiniTable(historicalDlrSummary)}
         </div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div class="card-title" style="margin-bottom:8px">Pricing Snapshot</div>
+          <div class="card-title" style="margin-bottom:8px">Pricing & Renewal Snapshot</div>
           <div style="font-size:0.72rem;line-height:1.7">
             <div>Total Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.totalUnits)}</strong></div>
             <div>Leased Units: <strong>${formatDlrMetricValue(historicalDlrSummary.pricing?.leasedUnits)}</strong></div>
@@ -13626,8 +13743,10 @@ function renderCSVTab() {
             <div>Avg Budget Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgBudgetRent)}</strong></div>
             <div>Avg In-Place Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgInPlaceRent)}</strong></div>
             <div>Avg Net Effective Rent: <strong>${formatDlrCurrency(historicalDlrSummary.pricing?.avgNetEffectiveRent)}</strong></div>
+            <div>Renewals Signed: <strong>${formatDlrMetricValue(historicalDlrSummary.renewalSnapshot?.signed)}</strong></div>
+            <div>Undecided / M2M: <strong>${formatDlrMetricValue(historicalDlrSummary.renewalSnapshot?.undecided)}</strong></div>
           </div>
-          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Built from saved ATLAS values for ${escapeHtml(historicalDlrSummary.reportMonthLabel)} · ${historicalDlrSummary.trafficMetrics?.sourceMode === "daily_box_score" ? "today's leasing activity is sourced from the uploaded box score while month-to-date values stay tied to the dashboard" : "leasing activity is currently using the saved month-to-date values"} · generated ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.generatedAt))}</div>
+          <div style="font-size:0.64rem;color:var(--muted);margin-top:8px">Built from saved ATLAS values for ${escapeHtml(historicalDlrSummary.reportMonthLabel)} · ${historicalDlrSummary.trafficMetrics?.sourceMode === "daily_box_score" ? "today's leasing activity is sourced from the uploaded box score while month-to-date values stay tied to the dashboard" : "leasing activity is currently using the saved month-to-date values"} · ${formatDlrPercent(historicalDlrSummary.renewalSnapshot?.retentionRate,0)} retention across ${formatDlrMetricValue(historicalDlrSummary.renewalSnapshot?.expirations)} expirations · generated ${escapeHtml(formatSavedTimestampLabel(historicalDlrSummary.generatedAt))}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
