@@ -3111,25 +3111,25 @@ function renderPropGrid() {
           ${isPortfolioWorkspaceSelected() ? `<span class="workspace-snapshot-chip">${details.length} communities</span>` : ""}
         </div>
       </div>
-      <button type="button" class="workspace-snapshot-tile" onclick="setTab(2)">
+      <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
         <div class="workspace-snapshot-label">Physical Occupancy</div>
         <div class="workspace-snapshot-value">${occupiedPct.toFixed(1)}%</div>
         <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${totalUnitsForCurrent || 0} units</div>
         <div class="workspace-snapshot-link">Open Overview</div>
       </button>
-      <button type="button" class="workspace-snapshot-tile" onclick="setTab(2)">
+      <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
         <div class="workspace-snapshot-label">Leased Occupancy</div>
         <div class="workspace-snapshot-value">${leasedPct.toFixed(1)}%</div>
         <div class="workspace-snapshot-sub">${leasedUnits} leased units in the current snapshot</div>
         <div class="workspace-snapshot-link">Review pacing</div>
       </button>
-      <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
+      <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(3)">
         <div class="workspace-snapshot-label">Applications MTD</div>
         <div class="workspace-snapshot-value">${applicationsMtd}</div>
         <div class="workspace-snapshot-sub">${approvalsMtd} approved · ${pendingMtd} pending</div>
         <div class="workspace-snapshot-link">Open Traffic &amp; Funnel</div>
       </button>
-      <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
+      <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(3)">
         <div class="workspace-snapshot-label">Tour To Lease</div>
         <div class="workspace-snapshot-value">${tourToLeasePct.toFixed(1)}%</div>
         <div class="workspace-snapshot-sub">${isPortfolioWorkspaceSelected() ? "Average across the selected portfolio scope" : "Selected month or historical funnel average"}</div>
@@ -4123,6 +4123,64 @@ function openCommunityWorkspace(name, tabIdx = null) {
     return;
   }
   renderTab();
+}
+
+let pendingWorkspaceNavigation = null;
+
+function focusWorkspaceSection(windowshadeKey = "", anchorId = "") {
+  const applyFocus = () => {
+    if (windowshadeKey && windowshadeState[windowshadeKey]) {
+      windowshadeState[windowshadeKey] = false;
+      persistOpsGlobalData();
+      renderTab();
+    }
+    if (!anchorId) return;
+    setTimeout(() => {
+      const target = document.getElementById(anchorId);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 40);
+  };
+  setTimeout(applyFocus, 40);
+}
+
+function flushWorkspaceNavigation() {
+  const pending = pendingWorkspaceNavigation;
+  if (!pending) return;
+  pendingWorkspaceNavigation = null;
+  if (pending.portfolio) {
+    workspaceScopeValue = PORTFOLIO_SCOPE_VALUE;
+    persistOperationsWorkspaceContext();
+    renderPropGrid();
+    if (pending.tabIdx !== null) setTab(pending.tabIdx);
+    else renderTab();
+  } else if (pending.scopeValue) {
+    openCommunityWorkspace(pending.scopeValue, pending.tabIdx);
+  } else if (pending.tabIdx !== null) {
+    setTab(pending.tabIdx);
+  }
+  if (pending.windowshadeKey || pending.anchorId) {
+    focusWorkspaceSection(pending.windowshadeKey, pending.anchorId);
+  }
+}
+
+function queueWorkspaceNavigation(scopeValue = "", tabIdx = null, options = {}) {
+  pendingWorkspaceNavigation = {
+    scopeValue: typeof scopeValue === "string" ? scopeValue : "",
+    tabIdx: tabIdx === null || tabIdx === undefined ? null : Math.max(0, Math.min(8, Number(tabIdx) || 0)),
+    portfolio: options?.portfolio === true,
+    windowshadeKey: String(options?.windowshadeKey || ""),
+    anchorId: String(options?.anchorId || "")
+  };
+  setTimeout(flushWorkspaceNavigation, 0);
+  return false;
+}
+
+function queueCurrentWorkspaceTab(tabIdx, options = {}) {
+  return queueWorkspaceNavigation(
+    isPortfolioWorkspaceSelected() ? "" : getProp().name,
+    tabIdx,
+    { ...options, portfolio: isPortfolioWorkspaceSelected() }
+  );
 }
 
 function onCustomUnitsChange(val) {
@@ -5556,8 +5614,8 @@ function renderPortfolioScopePanel(title, subtitle, cardsHtml, bodyHtml) {
         <p style="font-size:0.72rem;color:var(--muted)">${subtitle}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(getProp().name)}, ${activeTab})">Open ${escapeHtml(getProp().name)}</button>
-        <button class="btn btn-blue btn-sm" onclick="setTab(7)">Open Reporting</button>
+        <button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(getProp().name)}, ${activeTab})'>Open ${escapeHtml(getProp().name)}</button>
+        <button type="button" class="btn btn-blue btn-sm" onmousedown="return queueWorkspaceNavigation('', 7, { portfolio: true })">Open Reporting</button>
       </div>
     </div>
     ${cardsHtml}
@@ -5587,7 +5645,7 @@ function renderPortfolioScopedSetupTab() {
       <td class="l"><input type="text" value="${escapeHtml(detail.record?.investorName || "")}" placeholder="Investor / ownership group" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorName", this.value)' style="width:100%"></td>
       <td class="l"><textarea rows="2" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorEmailContacts", this.value)' style="width:100%;min-height:58px">${escapeHtml(contactText)}</textarea></td>
       <td>${plans}</td>
-      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},1)">Edit Floor Plans</button></td>
+      <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(detail.name)}, 1, { windowshadeKey: "setup_foundation", anchorId: "community-floor-plan-budget-setup" })'>Edit Floor Plans</button></td>
     </tr>`;
   }).join("");
   const bodyHtml = `<div class="tbl-wrap">
@@ -5649,7 +5707,7 @@ function renderPortfolioScopedTrafficTab() {
       <td><input type="number" min="0" value="${Math.round(detail.summary.applications ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "applications", this.value)' style="width:88px"></td>
       <td><input type="number" min="0" value="${Math.round(detail.summary.applicationsApproved ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "applications_approved", this.value)' style="width:88px"></td>
       <td>${(detail.summary.tourToLeasePct ?? 0).toFixed(1)}%</td>
-      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},3)">Open Funnel</button></td>
+      <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(detail.name)}, 3)'>Open Funnel</button></td>
     </tr>`;
   }).join("");
   const bodyHtml = `<div class="tbl-wrap">
@@ -5709,7 +5767,7 @@ function renderPortfolioScopedReputationTab() {
         <td><input type="number" min="0" max="100" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.oraScore || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "oraScore", this.value)' style="width:88px"></td>
         <td><input type="number" min="0" max="5" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.googleQuarterlyRating || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "googleQuarterlyRating", this.value)' style="width:88px"></td>
         <td><input type="number" min="0" max="5" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.googleLifetimeRating || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "googleLifetimeRating", this.value)' style="width:88px"></td>
-        <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},5)">Open Full Reputation</button></td>
+        <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(detail.name)}, 5)'>Open Full Reputation</button></td>
       </tr>`).join("")}</tbody>
     </table>
   </div>`;
@@ -5734,7 +5792,7 @@ function renderPortfolioScopedImportTab() {
           <td>${hasDlr ? "Loaded" : "Pending"}</td>
           <td>${hasSurvey ? "Loaded" : "Pending"}</td>
           <td>${hasRenewal ? "Loaded" : "Pending"}</td>
-          <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},6)">Open Import</button></td>
+          <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(detail.name)}, 6)'>Open Import</button></td>
         </tr>`;
       }).join("")}</tbody>
     </table>
@@ -6104,7 +6162,7 @@ function renderSetupTab() {
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">${communityGeo ? `Pinned at ${Number(communityGeo.lat).toFixed(4)}, ${Number(communityGeo.lng).toFixed(4)}` : "Used by the RISE portfolio map and hover details."}</div>
         </div>
       </div>
-      <div style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+      <div id="community-floor-plan-budget-setup" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
           <div>
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Investor Community Email Setup</div>
@@ -10515,10 +10573,10 @@ function renderPortfolioHomeTab() {
           </div>
         </div>
         <div class="portfolio-shortcut-row">
-          <button class="btn btn-gray btn-sm" onclick="setTab(2)">Open Overview</button>
-          <button class="btn btn-gray btn-sm" onclick="setTab(3)">Open Traffic &amp; Funnel</button>
-          <button class="btn btn-gray btn-sm" onclick="setTab(7)">Open Reporting Hub</button>
-          <button class="btn btn-blue btn-sm" onclick="setTab(8)">Open Bonus Calc</button>
+          <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueWorkspaceNavigation('', 2, { portfolio: true })">Open Overview</button>
+          <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueWorkspaceNavigation('', 3, { portfolio: true })">Open Traffic &amp; Funnel</button>
+          <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueWorkspaceNavigation('', 7, { portfolio: true })">Open Reporting Hub</button>
+          <button type="button" class="btn btn-blue btn-sm" onmousedown="return queueWorkspaceNavigation('', 8, { portfolio: true })">Open Bonus Calc</button>
         </div>
       </div>
       <div class="portfolio-kpi-grid" style="margin-top:16px">
@@ -10714,7 +10772,7 @@ function renderReportingTab() {
       <button class="btn btn-gray btn-sm" onclick="exportBonusPayoutCSV()">⬇ CSV</button>
       <button class="btn btn-gray btn-sm" onclick="openBonusPayoutReport(false)">🧾 Printable HTML</button>
       <button class="btn btn-blue btn-sm" onclick="openBonusPayoutReport(true)">🖨 PDF / Print</button>
-      <button class="btn btn-gray btn-sm" onclick="setTab(8)">Open Bonus Calc</button>
+      <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueCurrentWorkspaceTab(8)">Open Bonus Calc</button>
     </div>
   </div>`;
   const executiveCard = `<div class="report-hub-card">
@@ -10787,8 +10845,8 @@ function renderReportingTab() {
         <p style="font-size:0.72rem;color:var(--muted)">This is the cleaner front door for internal operations reporting, investor-facing reporting, and bonus payout output. The underlying exports read from the selected month and the selected workspace scope.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gray btn-sm" onclick="setTab(6)">Open Data Import</button>
-        <button class="btn btn-gray btn-sm" onclick="setTab(0)">Back to Portfolio Home</button>
+        <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueCurrentWorkspaceTab(6)">Open Data Import</button>
+        <button type="button" class="btn btn-gray btn-sm" onmousedown="return queueCurrentWorkspaceTab(0)">Back to Portfolio Home</button>
       </div>
     </div>
     <div class="report-hub-grid">
@@ -10799,7 +10857,7 @@ function renderReportingTab() {
         <h3>Data staging + historical backfill</h3>
         <p>Historical PDF / CSV staging, DLR box score imports, and market survey uploads stay in Data Import so reporting and ingestion are now easier to navigate separately.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-blue btn-sm" onclick="setTab(6)">Open Data Import Workspace</button>
+          <button type="button" class="btn btn-blue btn-sm" onmousedown="return queueCurrentWorkspaceTab(6)">Open Data Import Workspace</button>
         </div>
       </div>
     </div>
@@ -16137,7 +16195,7 @@ function renderCSVTab() {
           <h3>Cleaner reporting workflow</h3>
           <p>We moved the main reporting controls out of Data Import so ingestion and reporting are easier to maneuver separately. Historical imports, DLR support, and survey uploads stay here.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-blue btn-sm" onclick="setTab(7)">Open Reporting Hub</button>
+            <button type="button" class="btn btn-blue btn-sm" onmousedown="return queueCurrentWorkspaceTab(7)">Open Reporting Hub</button>
             <button class="btn btn-gray btn-sm" onclick="openPortfolioPerformanceReport(true)">Quick Portfolio PDF</button>
             <button class="btn btn-gray btn-sm" onclick="openWeeklyExecutiveReport(true)">Quick Weekly PDF</button>
           </div>
