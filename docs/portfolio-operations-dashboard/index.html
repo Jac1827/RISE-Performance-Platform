@@ -15202,20 +15202,20 @@ function renderCSVTab() {
 
   return [
     renderWindowshadeCard({
-      key: "import_historical_reports",
-      title: "Historical Report Import",
-      subtitle: "Targeted historical month/community routing for staged CSV and PDF uploads.",
-      countLabel: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`,
-      bodyHtml: historicalImportHTML,
-      collapsedPreview: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`
-    }),
-    renderWindowshadeCard({
       key: "import_dlr_summary",
       title: "Daily Leasing Report",
       subtitle: "Generate a DLR-style investor overview from saved dashboard data.",
       countLabel: historicalDlrSummary ? `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}` : "No data",
       bodyHtml: dlrExecutiveHTML,
       collapsedPreview: historicalDlrSummary ? `${historicalDlrSummary.reportMonthLabel} · ${historicalDlrSummary.status}` : "Generate DLR overview"
+    }),
+    renderWindowshadeCard({
+      key: "import_historical_reports",
+      title: "Historical Report Import",
+      subtitle: "Targeted historical month/community routing for staged CSV and PDF uploads.",
+      countLabel: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`,
+      bodyHtml: historicalImportHTML,
+      collapsedPreview: `${historicalCommunity} · ${buildHistoricalMonthLabel(historicalMonthIdx, historicalYear)}`
     }),
     renderWindowshadeCard({
       key: "import_workspace",
