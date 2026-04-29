@@ -8996,6 +8996,71 @@ function renderPortfolioHomeTab() {
     ? aggregateCommunitySummaries(buildPortfolioDetailsForMonth(previousMonthIdx).map(detail => detail.summary))
     : null;
   const investorGroups = buildInvestorPortfolioGroups(details);
+  const marketSurveyScopedDetails = details
+    .map(detail => ({ detail, market: normalizeMarketSurveyData(detail.record?.marketSurveyData) }))
+    .filter(({ market }) =>
+      String(market.updatedOn || "").trim() ||
+      Number(market.compAverageRent ?? 0) > 0 ||
+      Number(market.compAverageNer ?? 0) > 0 ||
+      Number(market.subjectOccPct ?? 0) > 0 ||
+      Number(market.leasesLast30 ?? 0) > 0 ||
+      String(market.pricingNotes || "").trim() ||
+      String(market.specialsRecommendation || "").trim()
+    );
+  const marketSurveyAggregate = marketSurveyScopedDetails.reduce((acc, item) => {
+    const market = item.market;
+    acc.communityCount += 1;
+    if (Number(market.compAverageRent ?? 0) > 0) {
+      acc.compAverageRentTotal += Number(market.compAverageRent);
+      acc.compAverageRentCount += 1;
+    }
+    if (Number(market.subjectOccPct ?? 0) > 0) {
+      acc.subjectOccPctTotal += Number(market.subjectOccPct);
+      acc.subjectOccPctCount += 1;
+    }
+    acc.applicationsLast30 += Number(market.applicationsLast30 ?? 0);
+    acc.leasesLast30 += Number(market.leasesLast30 ?? 0);
+    if (market.rentAdjustmentDirection === "up") acc.upCount += 1;
+    else if (market.rentAdjustmentDirection === "down") acc.downCount += 1;
+    else if (market.rentAdjustmentDirection === "hold") acc.holdCount += 1;
+    return acc;
+  }, {
+    communityCount: 0,
+    compAverageRentTotal: 0,
+    compAverageRentCount: 0,
+    subjectOccPctTotal: 0,
+    subjectOccPctCount: 0,
+    applicationsLast30: 0,
+    leasesLast30: 0,
+    upCount: 0,
+    downCount: 0,
+    holdCount: 0
+  });
+  const marketSurveyHighlights = marketSurveyScopedDetails.length > 0
+    ? marketSurveyScopedDetails
+        .slice()
+        .sort((a, b) => Number(b.market.leasesLast30 ?? 0) - Number(a.market.leasesLast30 ?? 0))
+        .slice(0, 4)
+        .map(({ detail, market }) => {
+          const strategyLabel = ({
+            up: "Increase",
+            down: "Decrease",
+            hold: "Hold"
+          })[market.rentAdjustmentDirection] || "Review";
+          const note = String(market.pricingNotes || market.specialsRecommendation || market.compNarrative || "").trim();
+          return `<div class="portfolio-rank-item">
+            <div>
+              <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+              <div class="meta">${strategyLabel} · ${Number(market.subjectOccPct ?? 0) > 0 ? `${Number(market.subjectOccPct).toFixed(1)}% subject occ` : "snapshot uploaded"}${Number(market.compAverageRent ?? 0) > 0 ? ` · comp avg rent ${formatCurrency(market.compAverageRent)}` : ""}</div>
+            </div>
+            <div style="text-align:right;max-width:220px">
+              <div class="metric">${Math.round(market.leasesLast30 ?? 0)}</div>
+              <div class="metric-sub">leases last 30</div>
+            </div>
+            ${note ? `<div class="meta" style="grid-column:1/-1">${escapeHtml(note)}</div>` : ""}
+          </div>`;
+        }).join("")
+    : `<div class="alert alert-info">Upload market surveys or investor snapshots in Community Setup to surface pricing highlights here.</div>`;
   const topApplications = [...details]
     .sort((a, b) => (b.summary.applicationsApproved ?? 0) - (a.summary.applicationsApproved ?? 0))
     .slice(0, 4);
@@ -9081,14 +9146,6 @@ function renderPortfolioHomeTab() {
         </div>
       </div>`).join("")
     : `<div class="alert alert-info">Add investor names in Community Setup to unlock grouped ownership rollups here.</div>`;
-  const mapCards = getAllCommunityNames().map(name => {
-    const mapDetail = buildCommunityMapDetails(name);
-    return `<div class="atlas-map-card">
-      <div class="atlas-map-card-title">${escapeHtml(mapDetail.icon)} ${escapeHtml(name)}</div>
-      <div class="atlas-map-card-meta">${escapeHtml(mapDetail.address || "Add address in Community Setup")}</div>
-      <div class="atlas-map-card-meta">${mapDetail.units || "—"} units · ${escapeHtml(mapDetail.regionalLead)} · ${Number.isFinite(mapDetail.occPct) ? `${mapDetail.occPct.toFixed(1)}% occ` : "occ n/a"}</div>
-    </div>`;
-  }).join("");
   return `<div class="dashboard-home-grid">
     <div>
       <div class="portfolio-hero">
@@ -9097,11 +9154,6 @@ function renderPortfolioHomeTab() {
             <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(240,247,255,0.72);margin-bottom:8px">ATLAS Portfolio Command Center</div>
             <h2>${escapeHtml(selectedLabel)} portfolio snapshot</h2>
             <p>This landing view gives you the whole-book read before you drop into a single community. It uses the same saved community records that power the existing tabs, so nothing is being re-keyed or stored separately.</p>
-          </div>
-          <div style="min-width:210px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:14px 16px">
-            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,247,255,0.7);margin-bottom:6px">Current Selection</div>
-            <div style="font-size:1.2rem;font-weight:700">${escapeHtml(getProp().name)}</div>
-            <div style="font-size:0.7rem;color:rgba(240,247,255,0.78);margin-top:4px">${details.length} saved communit${details.length === 1 ? "y" : "ies"} feeding the portfolio view</div>
           </div>
         </div>
         <div class="portfolio-shortcut-row">
@@ -9137,12 +9189,89 @@ function renderPortfolioHomeTab() {
       <div class="portfolio-rank-list">${investorRollupHtml}</div>
     </div>
   </div>
-  <div class="portfolio-list-card atlas-map-shell" style="margin-top:16px">
-    <h3>ATLAS community map</h3>
-    <p>Hover each community marker to see units, assigned Regional coverage, and current physical occupancy. Marker icons are customized to each community name and use the saved community addresses from Community Setup.</p>
-    <div class="atlas-map-grid">
-      <div id="atlas-portfolio-map"></div>
-      <div class="atlas-map-list">${mapCards}</div>
+  <div class="portfolio-section-grid" style="margin-top:16px">
+    <div class="portfolio-list-card">
+      <h3>Renewal health</h3>
+      <p>Portfolio-level renewal and attrition pressure carried from the Renewals tab into the home-page snapshot.</p>
+      <div class="portfolio-rank-list">
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Retention Rate</div>
+            <div class="meta">${Math.round(aggregate.renewalsSigned ?? 0)} signed from ${Math.round(aggregate.renewalExpirations ?? 0)} expirations</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%</div>
+            <div class="metric-sub">portfolio retention</div>
+          </div>
+        </div>
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Projected Attrition</div>
+            <div class="meta">${Math.round(aggregate.renewalUndecided ?? 0)} undecided / M2M still in play</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${Math.round(aggregate.renewalProjectedAttrition ?? 0)}</div>
+            <div class="metric-sub">risk units</div>
+          </div>
+        </div>
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Early Terminations</div>
+            <div class="meta">Tracked separately from expirations for retention scoring</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${Math.round(aggregate.renewalEarlyTermination ?? 0)}</div>
+            <div class="metric-sub">month to date</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="portfolio-list-card">
+      <h3>Market survey / investor snapshot highlights</h3>
+      <p>Portfolio signals fed from saved market survey and investor snapshot fields across the communities.</p>
+      <div class="portfolio-rank-list">
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Survey Coverage</div>
+            <div class="meta">${marketSurveyAggregate.communityCount} communit${marketSurveyAggregate.communityCount === 1 ? "y has" : "ies have"} saved pricing context</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${marketSurveyAggregate.communityCount}</div>
+            <div class="metric-sub">communities loaded</div>
+          </div>
+        </div>
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Comp Average Rent</div>
+            <div class="meta">${marketSurveyAggregate.compAverageRentCount > 0 ? `${marketSurveyAggregate.compAverageRentCount} communities with comp rent data` : "Waiting on uploaded rent comps"}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${marketSurveyAggregate.compAverageRentCount > 0 ? formatCurrency(marketSurveyAggregate.compAverageRentTotal / marketSurveyAggregate.compAverageRentCount) : "—"}</div>
+            <div class="metric-sub">portfolio avg comp rent</div>
+          </div>
+        </div>
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Investor Snapshot Velocity</div>
+            <div class="meta">${Math.round(marketSurveyAggregate.applicationsLast30 ?? 0)} applications over the last 30 days from uploaded snapshot data</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${Math.round(marketSurveyAggregate.leasesLast30 ?? 0)}</div>
+            <div class="metric-sub">leases last 30</div>
+          </div>
+        </div>
+        <div class="portfolio-rank-item">
+          <div>
+            <div style="font-size:0.78rem;font-weight:700">Pricing Direction Mix</div>
+            <div class="meta">${marketSurveyAggregate.upCount} increase · ${marketSurveyAggregate.holdCount} hold · ${marketSurveyAggregate.downCount} decrease recommendations saved</div>
+          </div>
+          <div style="text-align:right">
+            <div class="metric">${marketSurveyAggregate.subjectOccPctCount > 0 ? `${(marketSurveyAggregate.subjectOccPctTotal / marketSurveyAggregate.subjectOccPctCount).toFixed(1)}%` : "—"}</div>
+            <div class="metric-sub">avg subject occ</div>
+          </div>
+        </div>
+        ${marketSurveyHighlights}
+      </div>
     </div>
   </div>`;
 }
