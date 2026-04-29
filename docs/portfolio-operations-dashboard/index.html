@@ -1520,8 +1520,23 @@ function defaultDlrSummary() {
     notes: {
       tours: [],
       applications: [],
-      marketing: []
+      marketing: [],
+      highlights: [],
+      wins: []
     },
+    editableNotes: {
+      tours: "",
+      applications: "",
+      highlights: "",
+      wins: ""
+    },
+    marketingEntries: Array.from({ length: 3 }, () => ({
+      contactName: "",
+      phone: "",
+      email: "",
+      outreachDate: "",
+      outcome: ""
+    })),
     forwardLook: {
       months: [],
       leaseExpirations: [],
@@ -1547,6 +1562,17 @@ function normalizeDlrSummary(data) {
   const defaults = defaultDlrSummary();
   const input = data ?? {};
   const normalizeArray = (values, mapper = value => value) => Array.isArray(values) ? values.map(mapper) : [];
+  const normalizeMarketingEntries = values => {
+    const source = Array.isArray(values) ? values : defaults.marketingEntries;
+    const seeded = source.length >= 3 ? source : [...source, ...Array.from({ length: 3 - source.length }, () => ({}))];
+    return seeded.map(entry => ({
+      contactName: String(entry?.contactName ?? "").trim(),
+      phone: String(entry?.phone ?? "").trim(),
+      email: String(entry?.email ?? "").trim(),
+      outreachDate: String(entry?.outreachDate ?? "").trim(),
+      outcome: String(entry?.outcome ?? "").trim()
+    }));
+  };
   return {
     ...defaults,
     sourceFileName: String(input.sourceFileName ?? defaults.sourceFileName).trim(),
@@ -1564,8 +1590,17 @@ function normalizeDlrSummary(data) {
     notes: {
       tours: normalizeArray(input.notes?.tours, value => String(value ?? "").trim()).filter(Boolean),
       applications: normalizeArray(input.notes?.applications, value => String(value ?? "").trim()).filter(Boolean),
-      marketing: normalizeArray(input.notes?.marketing, value => String(value ?? "").trim()).filter(Boolean)
+      marketing: normalizeArray(input.notes?.marketing, value => String(value ?? "").trim()).filter(Boolean),
+      highlights: normalizeArray(input.notes?.highlights, value => String(value ?? "").trim()).filter(Boolean),
+      wins: normalizeArray(input.notes?.wins, value => String(value ?? "").trim()).filter(Boolean)
     },
+    editableNotes: {
+      tours: String(input.editableNotes?.tours ?? "").trim(),
+      applications: String(input.editableNotes?.applications ?? "").trim(),
+      highlights: String(input.editableNotes?.highlights ?? "").trim(),
+      wins: String(input.editableNotes?.wins ?? "").trim()
+    },
+    marketingEntries: normalizeMarketingEntries(input.marketingEntries),
     forwardLook: {
       months: normalizeArray(input.forwardLook?.months, value => String(value ?? "").trim()).filter(Boolean),
       leaseExpirations: normalizeArray(input.forwardLook?.leaseExpirations, value => Number(value ?? 0) || 0),
@@ -6795,6 +6830,67 @@ function parseDlrSpecificDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+const DLR_EDITABLE_NOTE_SECTIONS = [
+  { key: "tours", label: "Tours" },
+  { key: "applications", label: "Applications" },
+  { key: "highlights", label: "Highlights & Wins" },
+  { key: "wins", label: "Standout Wins" }
+];
+
+function cleanDlrEditableNoteLine(value) {
+  return String(value ?? "")
+    .replace(/^[\s•\-]+/, "")
+    .trim();
+}
+
+function parseDlrEditableNoteText(value) {
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map(cleanDlrEditableNoteLine)
+    .filter(Boolean);
+}
+
+function formatDlrEditableNoteText(lines = []) {
+  return (Array.isArray(lines) ? lines : [])
+    .map(cleanDlrEditableNoteLine)
+    .filter(Boolean)
+    .join("\n");
+}
+
+function getDlrEditableNoteFieldId(sectionKey) {
+  return `dlr-editable-note-${sectionKey}`;
+}
+
+function readDlrEditableNotesFromDom() {
+  if (typeof document === "undefined") return null;
+  const values = {};
+  let hasField = false;
+  DLR_EDITABLE_NOTE_SECTIONS.forEach(section => {
+    const field = document.getElementById(getDlrEditableNoteFieldId(section.key));
+    if (!field) return;
+    hasField = true;
+    values[section.key] = String(field.value ?? "");
+  });
+  return hasField ? values : null;
+}
+
+function resolveDlrEditableNotes(summary, generatedNotes, options = {}) {
+  const normalizedSummary = normalizeDlrSummary(summary);
+  const domValues = options.includeDom === false ? null : readDlrEditableNotesFromDom();
+  const resolvedNotes = {};
+  const editorValues = {};
+  DLR_EDITABLE_NOTE_SECTIONS.forEach(section => {
+    const generatedLines = Array.isArray(generatedNotes?.[section.key]) ? generatedNotes[section.key] : [];
+    const generatedText = formatDlrEditableNoteText(generatedLines);
+    const persistedText = String(normalizedSummary.editableNotes?.[section.key] ?? "").trim();
+    const domText = domValues && typeof domValues[section.key] === "string" ? domValues[section.key].trim() : "";
+    const finalText = domText || persistedText || generatedText;
+    editorValues[section.key] = finalText;
+    resolvedNotes[section.key] = parseDlrEditableNoteText(finalText);
+  });
+  return { notes: resolvedNotes, editorValues };
+}
+
 function updateCommunityDlrSummary(communityName, updater, options = {}) {
   const matchedName = matchPropertyName(communityName, { fallbackToCurrent: false }) || getProp().name;
   const record = getPropertyRecordForApply(matchedName);
@@ -6836,6 +6932,192 @@ function setDlrReportDateFromInput(value) {
     });
     renderTab();
   }
+}
+
+function persistDlrEditableNoteField(sectionKey, value) {
+  if (!DLR_EDITABLE_NOTE_SECTIONS.some(section => section.key === sectionKey)) return false;
+  const matchedCommunity = getHistoricalImportCommunityName();
+  return updateCommunityDlrSummary(matchedCommunity, summary => {
+    const nextSummary = normalizeDlrSummary(summary);
+    nextSummary.editableNotes = {
+      ...nextSummary.editableNotes,
+      [sectionKey]: String(value ?? "").trim()
+    };
+    return nextSummary;
+  }, { render: false });
+}
+
+function resetDlrEditableNotes() {
+  const matchedCommunity = getHistoricalImportCommunityName();
+  updateCommunityDlrSummary(matchedCommunity, summary => {
+    const nextSummary = normalizeDlrSummary(summary);
+    nextSummary.editableNotes = {
+      tours: "",
+      applications: "",
+      highlights: "",
+      wins: ""
+    };
+    nextSummary.marketingEntries = Array.from({ length: 3 }, () => ({
+      contactName: "",
+      phone: "",
+      email: "",
+      outreachDate: "",
+      outcome: ""
+    }));
+    return nextSummary;
+  });
+}
+
+function formatDlrMarketingPhone(value) {
+  const digits = String(value ?? "").replace(/\D+/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return String(value ?? "").trim();
+}
+
+function formatDlrMarketingDate(value) {
+  const input = buildDlrDateInputValue(value);
+  if (!input) return "";
+  const parsed = new Date(`${input}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? "" : formatPresentationDate(parsed);
+}
+
+function sentenceCaseDlrMarketingText(value) {
+  const cleaned = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).replace(/\s+([.,;:!?])/g, "$1");
+}
+
+function titleCaseDlrMarketingName(value) {
+  const cleaned = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  if (cleaned === cleaned.toLowerCase()) {
+    return cleaned
+      .split(" ")
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  return cleaned;
+}
+
+function normalizeDlrMarketingEntryDraft(entry = {}) {
+  return {
+    contactName: titleCaseDlrMarketingName(entry.contactName),
+    phone: formatDlrMarketingPhone(entry.phone),
+    email: String(entry.email ?? "").trim().toLowerCase(),
+    outreachDate: buildDlrDateInputValue(entry.outreachDate),
+    outcome: sentenceCaseDlrMarketingText(entry.outcome)
+  };
+}
+
+function isCompletedDlrMarketingEntry(entry = {}) {
+  return Boolean(String(entry.contactName ?? "").trim() && String(entry.outreachDate ?? "").trim() && String(entry.outcome ?? "").trim());
+}
+
+function getDlrMarketingEntryFieldId(index, key) {
+  return `dlr-marketing-entry-${index}-${key}`;
+}
+
+function readDlrMarketingEntriesFromDom() {
+  if (typeof document === "undefined") return null;
+  const entries = [];
+  let hasField = false;
+  for (let idx = 0; idx < 12; idx += 1) {
+    const contactField = document.getElementById(getDlrMarketingEntryFieldId(idx, "contactName"));
+    if (!contactField) break;
+    hasField = true;
+    entries.push(normalizeDlrMarketingEntryDraft({
+      contactName: contactField.value,
+      phone: document.getElementById(getDlrMarketingEntryFieldId(idx, "phone"))?.value,
+      email: document.getElementById(getDlrMarketingEntryFieldId(idx, "email"))?.value,
+      outreachDate: document.getElementById(getDlrMarketingEntryFieldId(idx, "outreachDate"))?.value,
+      outcome: document.getElementById(getDlrMarketingEntryFieldId(idx, "outcome"))?.value
+    }));
+  }
+  return hasField ? entries : null;
+}
+
+function buildDlrMarketingNarrative(entries = []) {
+  const completed = (Array.isArray(entries) ? entries : [])
+    .map(normalizeDlrMarketingEntryDraft)
+    .filter(isCompletedDlrMarketingEntry)
+    .sort((a, b) => {
+      const aTime = new Date(`${buildDlrDateInputValue(a.outreachDate)}T12:00:00`).getTime();
+      const bTime = new Date(`${buildDlrDateInputValue(b.outreachDate)}T12:00:00`).getTime();
+      return aTime - bTime;
+    });
+  if (completed.length < 3) {
+    return {
+      ready: false,
+      narrative: "",
+      completedEntries: completed
+    };
+  }
+  const outreachCount = completed.length;
+  const entrySentences = completed.slice(0, 4).map(entry => {
+    const channel = entry.email && entry.phone
+      ? `using ${entry.email} and ${entry.phone}`
+      : entry.email
+        ? `using ${entry.email}`
+        : entry.phone
+          ? `at ${entry.phone}`
+          : "";
+    return `${formatDlrMarketingDate(entry.outreachDate)} outreach to ${entry.contactName}${channel ? ` ${channel}` : ""} resulted in ${entry.outcome.toLowerCase().replace(/\.$/, "")}.`;
+  });
+  const mostRecent = completed[completed.length - 1];
+  const summaryLead = `This week the team completed ${outreachCount} off-site marketing outreach ${outreachCount === 1 ? "touch" : "touches"} that are now ready for investor reporting.`;
+  const close = `The most recent outreach was on ${formatDlrMarketingDate(mostRecent.outreachDate)} and the team is carrying those follow-ups into the next leasing week.`;
+  return {
+    ready: true,
+    narrative: [summaryLead, ...entrySentences, close].join(" "),
+    completedEntries: completed
+  };
+}
+
+function resolveDlrMarketingState(summary, options = {}) {
+  const normalizedSummary = normalizeDlrSummary(summary);
+  const domEntries = options.includeDom === false ? null : readDlrMarketingEntriesFromDom();
+  const entries = (domEntries && domEntries.length > 0 ? domEntries : normalizedSummary.marketingEntries).map(normalizeDlrMarketingEntryDraft);
+  const narrativeState = buildDlrMarketingNarrative(entries);
+  return {
+    entries,
+    narrative: narrativeState.narrative,
+    ready: narrativeState.ready,
+    completedEntries: narrativeState.completedEntries,
+    completedCount: narrativeState.completedEntries.length
+  };
+}
+
+function persistDlrMarketingEntryField(index, key, value) {
+  const matchedCommunity = getHistoricalImportCommunityName();
+  return updateCommunityDlrSummary(matchedCommunity, summary => {
+    const nextSummary = normalizeDlrSummary(summary);
+    const entries = Array.isArray(nextSummary.marketingEntries) ? [...nextSummary.marketingEntries] : [];
+    while (entries.length <= index) entries.push({ contactName: "", phone: "", email: "", outreachDate: "", outcome: "" });
+    entries[index] = normalizeDlrMarketingEntryDraft({
+      ...entries[index],
+      [key]: value
+    });
+    nextSummary.marketingEntries = entries;
+    return nextSummary;
+  });
+}
+
+function addDlrMarketingEntry() {
+  const matchedCommunity = getHistoricalImportCommunityName();
+  updateCommunityDlrSummary(matchedCommunity, summary => {
+    const nextSummary = normalizeDlrSummary(summary);
+    nextSummary.marketingEntries = [
+      ...nextSummary.marketingEntries,
+      { contactName: "", phone: "", email: "", outreachDate: "", outcome: "" }
+    ];
+    return nextSummary;
+  });
 }
 
 function parseOptionalWorkbookMetric(value) {
@@ -12871,9 +13153,9 @@ function buildDlrRenewalHealthChart(report) {
   const projectedAttrition = Math.max(0, Number(report.renewalSnapshot?.projectedAttrition) || 0);
   const segments = expirations > 0
     ? [
-        { label: "Signed", value: signed, color: "#059669" },
-        { label: "Undecided / M2M", value: undecided, color: "#f59e0b" },
-        { label: "Projected Attrition", value: projectedAttrition, color: "#dc2626" }
+        { label: "Signed", value: signed, color: "#1d4ed8" },
+        { label: "Undecided / M2M", value: undecided, color: "#7dd3fc" },
+        { label: "Projected Attrition", value: projectedAttrition, color: "#0f766e" }
       ]
     : [];
   const total = expirations || 1;
@@ -12888,7 +13170,7 @@ function buildDlrRenewalHealthChart(report) {
       </div>
     </div>
   `).join("");
-  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
+  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:linear-gradient(180deg,#f8fbff 0%,#f0f9ff 100%)">
     <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px">
       <div>
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Renewal Health</div>
@@ -13041,6 +13323,7 @@ function buildDlrEmailPlainTextBody(report) {
   const today = report.dailyTraffic || {};
   const mtd = report.trafficMetrics || {};
   const bulletLines = (report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).map(line => `- ${line}`);
+  const marketingLines = report.marketing?.ready ? ["", "Marketing", report.marketing.narrative] : [];
   return [
     `ATLAS DLR Investor Overview - ${report.communityName}`,
     report.reportPeriodLabel,
@@ -13052,6 +13335,7 @@ function buildDlrEmailPlainTextBody(report) {
     "",
     "Highlights & Wins",
     ...(bulletLines.length ? bulletLines : ["- Investor-facing highlights will populate here as activity is saved."]),
+    ...marketingLines,
     "",
     "The branded DLR snapshot image has been prepared from the dashboard data for email sharing."
   ].join("\n");
@@ -13066,6 +13350,7 @@ async function copyDlrEmailAssetsToClipboard(report) {
     <ul style="font-size:14px;line-height:1.6;margin:0;padding-left:18px">
       ${(report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || ["Investor-facing highlights will populate here as activity is saved."]).map(line => `<li>${escapeHtml(line)}</li>`).join("")}
     </ul>
+    ${report.marketing?.ready ? `<p style="font-size:14px;margin:14px 0 8px"><strong>Marketing</strong></p><p style="font-size:14px;line-height:1.6;margin:0">${escapeHtml(report.marketing.narrative)}</p>` : ""}
   </div>`;
   if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
     const items = {
@@ -13272,7 +13557,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     : occupancyPct + 2 >= budgetOccPct
       ? "Watch"
       : "Needs Attention";
-  const notes = buildDlrInvestorNotes({
+  const generatedNotes = buildDlrInvestorNotes({
     reportDateLabel: hasDailyBoxScore ? (dailyBoxScore.reportDateLabel || dlrSummary.reportDateLabel) : dlrSummary.reportDateLabel,
     monthLabel: formatDlrMonthYear(normalizedMonthIdx, year),
     leadSources: dashboardLeadSources,
@@ -13289,6 +13574,9 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     renewalsSigned: renewalSummary.signed,
     expirations: renewalSummary.expirations
   });
+  const resolvedNoteState = resolveDlrEditableNotes(dlrSummary, generatedNotes);
+  const notes = resolvedNoteState.notes;
+  const marketing = resolveDlrMarketingState(dlrSummary);
   const reportDateIso = hasDailyBoxScore
     ? (dailyBoxScore.reportDateIso || dlrSummary.reportDateIso)
     : dlrSummary.reportDateIso;
@@ -13342,6 +13630,8 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     dailyBoxScoreSourceFile: dailyBoxScore.sourceFileName || "",
     dailyBoxScoreImportedAt: dailyBoxScore.importedAt || "",
     notes,
+    editableNotes: resolvedNoteState.editorValues,
+    marketing,
     sourceSummary: `${communityName} · ${reportPeriodLabel} · ${hasDailyBoxScore ? "today's leasing activity imported from box score with month-to-date metrics sourced from ATLAS" : "generated from ATLAS saved month-to-date data"}`
   };
 }
@@ -13467,10 +13757,11 @@ function buildDlrInvestorOverviewDocument(report) {
   const notesHtml = [
     { label: "Tours", items: report.notes.tours },
     { label: "Applications", items: report.notes.applications },
+    { label: "Marketing", items: report.marketing?.ready ? [report.marketing.narrative] : [] },
     { label: "Highlights / Wins", items: report.notes.highlights }
   ].map(section => `<div style="margin-bottom:10px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">${escapeHtml(section.label)}</div>
-      <div style="font-size:12px;color:#334155;line-height:1.7">${section.items.length > 0 ? section.items.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No notes surfaced from the current dashboard data."}</div>
+      <div style="font-size:12px;color:#334155;line-height:1.7">${section.items.length > 0 ? (section.label === "Marketing" ? section.items.map(item => escapeHtml(item)).join("<br>") : section.items.map(item => `• ${escapeHtml(item)}`).join("<br>")) : (section.label === "Marketing" ? "Add at least 3 marketing outreach entries in the dashboard to publish this narrative." : "No notes surfaced from the current dashboard data.")}</div>
     </div>`).join("");
   const winsHtml = [
     { label: "Standout Wins", items: report.notes.wins }
@@ -13767,12 +14058,59 @@ function renderCSVTab() {
           </div>
         </div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div class="card-title" style="margin-bottom:8px">Leasing Notes</div>
-          <div style="font-size:0.68rem;color:var(--muted);line-height:1.7">
-            <div style="margin-bottom:8px"><strong style="color:var(--text)">Tours</strong><br>${historicalDlrSummary.notes?.tours?.length ? historicalDlrSummary.notes.tours.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No tour notes surfaced."}</div>
-            <div style="margin-bottom:8px"><strong style="color:var(--text)">Applications</strong><br>${historicalDlrSummary.notes?.applications?.length ? historicalDlrSummary.notes.applications.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No application notes surfaced."}</div>
-            <div><strong style="color:var(--text)">Highlights & Wins</strong><br>${historicalDlrSummary.notes?.highlights?.length ? historicalDlrSummary.notes.highlights.map(item => `• ${escapeHtml(item)}`).join("<br>") : "No operating highlights surfaced."}</div>
-            <div style="margin-top:8px"><strong style="color:var(--text)">Standout Wins</strong><br>${historicalDlrSummary.notes?.wins?.length ? historicalDlrSummary.notes.wins.map(item => `• ${escapeHtml(item)}`).join("<br>") : "Wins will populate here as positive leasing activity is saved."}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <div class="card-title" style="margin-bottom:0">Leasing Notes</div>
+            <button class="btn btn-gray btn-sm" onclick="resetDlrEditableNotes()">Reset To Generated Notes</button>
+          </div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-bottom:10px">Edit these notes before you export, print, or draft the DLR email. Your edits flow into the investor-facing output for this selected community.</div>
+          <div style="display:grid;gap:10px">
+            ${DLR_EDITABLE_NOTE_SECTIONS.map(section => `<label style="display:block">
+              <div style="font-size:0.68rem;font-weight:700;color:var(--text);margin-bottom:4px">${escapeHtml(section.label)}</div>
+              <textarea id="${getDlrEditableNoteFieldId(section.key)}" rows="${section.key === "wins" ? 4 : 5}" onchange="persistDlrEditableNoteField(${JSON.stringify(section.key)}, this.value)" style="width:100%;min-height:${section.key === "wins" ? "96px" : "112px"};padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg2);color:var(--text);font:inherit;line-height:1.55;resize:vertical">${escapeHtml(historicalDlrSummary.editableNotes?.[section.key] || "")}</textarea>
+            </label>`).join("")}
+            <div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--border2)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Marketing</div>
+                  <div style="font-size:0.64rem;color:var(--muted)">Add at least 3 completed outreach entries to auto-generate the weekly narrative for the published DLR.</div>
+                </div>
+                <button class="btn btn-gray btn-sm" onclick="addDlrMarketingEntry()">Add Marketing Entry</button>
+              </div>
+              <div style="display:grid;gap:10px">
+                ${(historicalDlrSummary.marketing?.entries || []).map((entry, idx) => `<div style="padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--bg2)">
+                  <div style="font-size:0.66rem;font-weight:700;color:#4493f8;margin-bottom:8px">Outreach Entry ${idx + 1}</div>
+                  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+                    <label style="display:block">
+                      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px">Business / Contact Name</div>
+                      <input id="${getDlrMarketingEntryFieldId(idx, "contactName")}" type="text" value="${escapeHtml(entry.contactName || "")}" onchange="persistDlrMarketingEntryField(${idx}, 'contactName', this.value)" style="width:100%">
+                    </label>
+                    <label style="display:block">
+                      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px">Date of Outreach</div>
+                      <input id="${getDlrMarketingEntryFieldId(idx, "outreachDate")}" type="date" value="${escapeHtml(entry.outreachDate || "")}" onchange="persistDlrMarketingEntryField(${idx}, 'outreachDate', this.value)" style="width:100%">
+                    </label>
+                    <label style="display:block">
+                      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px">Phone Number</div>
+                      <input id="${getDlrMarketingEntryFieldId(idx, "phone")}" type="text" value="${escapeHtml(entry.phone || "")}" onchange="persistDlrMarketingEntryField(${idx}, 'phone', this.value)" style="width:100%">
+                    </label>
+                    <label style="display:block">
+                      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px">Email</div>
+                      <input id="${getDlrMarketingEntryFieldId(idx, "email")}" type="email" value="${escapeHtml(entry.email || "")}" onchange="persistDlrMarketingEntryField(${idx}, 'email', this.value)" style="width:100%">
+                    </label>
+                  </div>
+                  <label style="display:block;margin-top:8px">
+                    <div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px">Outcome of Interaction</div>
+                    <textarea id="${getDlrMarketingEntryFieldId(idx, "outcome")}" rows="3" onchange="persistDlrMarketingEntryField(${idx}, 'outcome', this.value)" style="width:100%;min-height:74px;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:#fff;color:var(--text);font:inherit;line-height:1.5;resize:vertical">${escapeHtml(entry.outcome || "")}</textarea>
+                  </label>
+                </div>`).join("")}
+              </div>
+              <div style="margin-top:10px;padding:12px;border:1px solid ${historicalDlrSummary.marketing?.ready ? "#bfdbfe" : "var(--border2)"};border-radius:10px;background:${historicalDlrSummary.marketing?.ready ? "linear-gradient(180deg,#eff6ff 0%,#f8fbff 100%)" : "var(--bg1)"}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+                  <div style="font-size:0.68rem;font-weight:700;color:var(--text)">Weekly Marketing Narrative</div>
+                  <div style="font-size:0.62rem;color:${historicalDlrSummary.marketing?.ready ? "#1d4ed8" : "var(--muted)"}">${formatDlrMetricValue(historicalDlrSummary.marketing?.completedCount || 0)} of 3 required entries completed</div>
+                </div>
+                <div style="font-size:0.68rem;color:var(--muted);line-height:1.7">${historicalDlrSummary.marketing?.ready ? escapeHtml(historicalDlrSummary.marketing.narrative) : "The DLR will auto-publish a cleaned weekly marketing narrative here after at least 3 outreach entries include a contact name, date of outreach, and outcome."}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
