@@ -736,6 +736,7 @@ const PROPERTY_TEAM_ROLE_DEFS = {
 let selectedPropIdx = 7;
 let customUnits = "";
 let investorName = "";
+let investorEmailContacts = [];
 let activeTab = 0;
 let reputationData = defaultReputationData();
 let communityPhotoBank = [];
@@ -2243,6 +2244,7 @@ function defaultSavedCommunityRecord(propName = getProp().name) {
     importRoutingMode: "file_first",
     customUnits: "",
     investorName: "",
+    investorEmailContacts: [],
     communityAddress: "",
     communityGeo: null,
     photoBank: [],
@@ -2290,6 +2292,7 @@ function normalizeSavedCommunityRecord(propName, data) {
     importRoutingMode: input.importRoutingMode === "force_override" ? "force_override" : "file_first",
     customUnits: input.customUnits ?? defaults.customUnits,
     investorName: input.investorName ?? defaults.investorName,
+    investorEmailContacts: normalizeInvestorEmailContacts(input.investorEmailContacts),
     communityAddress: String(input.communityAddress ?? defaults.communityAddress).trim(),
     communityGeo: input.communityGeo && Number.isFinite(Number(input.communityGeo?.lat)) && Number.isFinite(Number(input.communityGeo?.lng))
       ? {
@@ -2332,6 +2335,7 @@ function getCurrentCommunityRecord() {
     importRoutingMode,
     customUnits,
     investorName,
+    investorEmailContacts,
     communityAddress,
     communityGeo,
     photoBank: communityPhotoBank,
@@ -2875,6 +2879,7 @@ function loadPropertyData(propName) {
   importRoutingMode = d.importRoutingMode;
   customUnits = d.customUnits;
   investorName = d.investorName;
+  investorEmailContacts = normalizeInvestorEmailContacts(d.investorEmailContacts);
   communityAddress = d.communityAddress;
   communityGeo = d.communityGeo;
   communityPhotoBank = d.photoBank;
@@ -3843,6 +3848,32 @@ function updateInvestorName(val) {
   investorName = String(val ?? "").trim();
   document.getElementById("header-sub").textContent = getHeaderSubText();
   saveCommunityData(true);
+}
+
+function addInvestorEmailContact() {
+  investorEmailContacts = [...normalizeInvestorEmailContacts(investorEmailContacts), { name: "", email: "" }];
+  renderTab();
+}
+
+function updateInvestorEmailContactField(index, field, value) {
+  const nextContacts = Array.isArray(investorEmailContacts)
+    ? investorEmailContacts.map(entry => ({ ...entry }))
+    : [];
+  while (nextContacts.length <= index) {
+    nextContacts.push({ name: "", email: "" });
+  }
+  if (field === "name" || field === "email") {
+    nextContacts[index][field] = String(value ?? "").trim();
+  }
+  investorEmailContacts = nextContacts;
+  saveCommunityData(true);
+  renderTab();
+}
+
+function removeInvestorEmailContact(index) {
+  investorEmailContacts = normalizeInvestorEmailContacts(investorEmailContacts).filter((_, idx) => idx !== index);
+  saveCommunityData(true);
+  renderTab();
 }
 
 function optimizeCommunityPhotoFile(file) {
@@ -5452,6 +5483,36 @@ function renderSetupTab() {
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Community Address</div>
           <input type="text" value="${escapeHtml(communityAddress)}" placeholder="Street, City, State ZIP" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCommunityAddress(this.value)">
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">${communityGeo ? `Pinned at ${Number(communityGeo.lat).toFixed(4)}, ${Number(communityGeo.lng).toFixed(4)}` : "Used by the ATLAS portfolio map and hover details."}</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <div>
+            <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Investor Community Email Setup</div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the investment group recipients for this community here. The DLR Outlook draft will auto-address these contacts when this community is selected in Reporting.</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${normalizeInvestorEmailContacts(investorEmailContacts).length}</div>
+            <div style="font-size:0.64rem;color:var(--muted)">assigned recipient${normalizeInvestorEmailContacts(investorEmailContacts).length === 1 ? "" : "s"}</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px">
+          ${normalizeInvestorEmailContacts(investorEmailContacts).length ? normalizeInvestorEmailContacts(investorEmailContacts).map((entry, idx) => `
+            <div style="display:grid;grid-template-columns:minmax(180px,220px) minmax(260px,1fr) auto;gap:10px;align-items:end">
+              <div>
+                <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Contact name</div>
+                <input type="text" value="${escapeHtml(entry.name || "")}" placeholder="e.g. Investor Asset Manager" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateInvestorEmailContactField(${idx},'name',this.value)">
+              </div>
+              <div>
+                <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Email address</div>
+                <input type="email" value="${escapeHtml(entry.email || "")}" placeholder="investor@company.com" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateInvestorEmailContactField(${idx},'email',this.value)">
+              </div>
+              <button class="btn btn-gray btn-sm" type="button" onclick="removeInvestorEmailContact(${idx})">Remove</button>
+            </div>
+          `).join("") : `<div style="font-size:0.72rem;color:var(--muted);padding:8px 0">No investor recipients are assigned yet for this community.</div>`}
+        </div>
+        <div style="margin-top:12px;display:flex;justify-content:flex-start">
+          <button class="btn btn-gray btn-sm" type="button" onclick="addInvestorEmailContact()">＋ Add Investor Recipient</button>
         </div>
       </div>
     </div>
@@ -10087,6 +10148,22 @@ function normalizeEmailListInput(value) {
     .join("; ");
 }
 
+function normalizeInvestorEmailContacts(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(entry => {
+    if (typeof entry === "string") {
+      return {
+        name: "",
+        email: String(entry).trim()
+      };
+    }
+    return {
+      name: String(entry?.name ?? entry?.contactName ?? "").trim(),
+      email: String(entry?.email ?? "").trim()
+    };
+  }).filter(entry => entry.name || entry.email);
+}
+
 function updateWeeklyExecutiveEmailField(field, value) {
   if (!Object.prototype.hasOwnProperty.call(weeklyExecutiveEmail, field)) return;
   const normalized = field === "subjectPrefix"
@@ -13341,17 +13418,23 @@ function buildDlrEmailPlainTextBody(report) {
   ].join("\n");
 }
 
+function getDlrInvestorRecipientLine(report) {
+  const record = getCommunityRecordForScope(report?.communityName || getHistoricalImportCommunityName());
+  return normalizeEmailListInput(
+    normalizeInvestorEmailContacts(record?.investorEmailContacts)
+      .map(entry => entry.email)
+      .filter(Boolean)
+      .join("; ")
+  );
+}
+
+function getInvestorRecipientCountForCommunity(propName) {
+  return normalizeInvestorEmailContacts(getCommunityRecordForScope(propName)?.investorEmailContacts).filter(entry => entry.email).length;
+}
+
 async function copyDlrEmailAssetsToClipboard(report) {
   const svgMarkup = buildDlrEmailSnapshotSvg(report);
-  const htmlBody = `<div style="font-family:DM Sans,Arial,sans-serif;color:#0f172a">
-    <p style="font-size:14px;margin:0 0 12px">Attached below is the latest ATLAS Daily Leasing Report investor overview for <strong>${escapeHtml(report.communityName)}</strong> covering <strong>${escapeHtml(report.reportPeriodLabel)}</strong>.</p>
-    <img src="data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgMarkup)))}" alt="${escapeHtml(report.communityName)} DLR snapshot" style="max-width:100%;height:auto;border:1px solid #dbe4f0;border-radius:12px;display:block;margin:0 0 16px">
-    <p style="font-size:14px;margin:0 0 8px"><strong>Highlights & Wins</strong></p>
-    <ul style="font-size:14px;line-height:1.6;margin:0;padding-left:18px">
-      ${(report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || ["Investor-facing highlights will populate here as activity is saved."]).map(line => `<li>${escapeHtml(line)}</li>`).join("")}
-    </ul>
-    ${report.marketing?.ready ? `<p style="font-size:14px;margin:14px 0 8px"><strong>Marketing</strong></p><p style="font-size:14px;line-height:1.6;margin:0">${escapeHtml(report.marketing.narrative)}</p>` : ""}
-  </div>`;
+  const htmlBody = `<div style="margin:0;padding:0"><img src="data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgMarkup)))}" alt="${escapeHtml(report.communityName)} DLR snapshot" style="display:block;max-width:100%;height:auto;border:0;margin:0"></div>`;
   if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
     const items = {
       "text/html": new Blob([htmlBody], { type: "text/html" }),
@@ -13371,27 +13454,19 @@ async function copyDlrEmailAssetsToClipboard(report) {
 async function draftDlrOutlookEmail() {
   const report = buildDashboardDlrInvestorOverview();
   if (!report) return;
+  const toLine = getDlrInvestorRecipientLine(report);
   const copiedRichContent = await copyDlrEmailAssetsToClipboard(report).catch(() => false);
   const subject = `RISE DLR Investor Overview | ${report.communityName} | ${report.reportDateLabel || report.reportMonthLabel}`;
-  const body = copiedRichContent
-    ? [
-        `RISE DLR Investor Overview`,
-        `${report.communityName} · ${report.reportPeriodLabel}`,
-        ``,
-        `The branded DLR snapshot image and highlights have been copied to your clipboard.`,
-        `Open the Outlook draft and paste once in the body to place the investor-ready image inline.`,
-        ``,
-        ...((report.notes?.wins?.length ? report.notes.wins : report.notes?.highlights || []).map(line => `- ${line}`))
-      ].join("\n")
-    : buildDlrEmailPlainTextBody(report);
+  const body = copiedRichContent ? "" : buildDlrEmailPlainTextBody(report);
   const params = new URLSearchParams();
+  if (toLine) params.set("to", toLine);
   params.set("subject", subject);
   params.set("body", body);
   window.location.href = `ms-outlook://compose?${params.toString()}`;
   setTimeout(() => {
     alert(copiedRichContent
-      ? "Outlook draft requested. The DLR image and investor-facing highlights were copied to your clipboard, so you can paste once into the email body to place the report inline."
-      : "Outlook draft requested. Your browser only copied the plain-text summary automatically, so use Export DLR / Print if you also want the branded image view.");
+      ? `Outlook draft requested${toLine ? " with the assigned investor recipients pre-addressed" : ""}. The email body was left clean, and the DLR image with investor-facing highlights was copied to your clipboard so you can paste once to place the report inline.`
+      : `Outlook draft requested${toLine ? " with the assigned investor recipients pre-addressed" : ""}. Your browser only copied the plain-text summary automatically, so use Export DLR / Print if you also want the branded image view.`);
   }, 250);
 }
 
@@ -13985,6 +14060,7 @@ function renderCSVTab() {
             ${reportCommunityOptions.map(name => `<option value="${escapeHtml(name)}" ${name===historicalCommunity?"selected":""}>${escapeHtml(name)}</option>`).join("")}
           </select>
           <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">The export, email draft, and editable HTML all follow this community selection.</div>
+          <div style="font-size:0.64rem;color:#4493f8;margin-top:4px">${getInvestorRecipientCountForCommunity(historicalCommunity)} investor recipient${getInvestorRecipientCountForCommunity(historicalCommunity) === 1 ? "" : "s"} assigned for the DLR email trigger.</div>
         </div>
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
           <div class="card-title" style="margin-bottom:6px">Reporting Month</div>
