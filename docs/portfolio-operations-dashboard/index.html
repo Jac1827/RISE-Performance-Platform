@@ -7608,28 +7608,49 @@ function extractLeadConversionTotals(rawText = "") {
 function extractLeadConversionTotalsFromRows(rows = []) {
   for (let idx = 0; idx < rows.length; idx += 1) {
     const row = Array.isArray(rows[idx]) ? rows[idx].map(cell => String(cell ?? "").trim()) : [];
+    const isLeadConversionsAnchor = row.some(cell => /^lead conversions\b/i.test(cell));
     const hasApplicationAnchor = row.some(cell => /^application$/i.test(cell));
-    if (!hasApplicationAnchor) continue;
-    for (let headerIdx = idx + 1; headerIdx < Math.min(rows.length, idx + 4); headerIdx += 1) {
+    if (!isLeadConversionsAnchor && !hasApplicationAnchor) continue;
+    const sectionRow = Array.isArray(rows[idx + 1]) ? rows[idx + 1].map(cell => String(cell ?? "").trim()) : [];
+    for (let headerIdx = idx + 1; headerIdx < Math.min(rows.length, idx + 5); headerIdx += 1) {
       const headerRow = Array.isArray(rows[headerIdx]) ? rows[headerIdx].map(cell => String(cell ?? "").trim()) : [];
-      const completedIdx = headerRow.findIndex(cell => /^completed$/i.test(cell));
-      const partialIdx = headerRow.findIndex(cell => /partially completed/i.test(cell));
-      const completedCancelledIdx = headerRow.findIndex(cell => /completed\s*\(cancelled\)/i.test(cell));
-      const deniedIdx = headerRow.findIndex(cell => /^denied$/i.test(cell));
-      const approvedIdx = headerRow.findIndex(cell => /^approved$/i.test(cell));
-      const approvedCancelledIdx = headerRow.findIndex(cell => /approved\s*\(cancelled\)/i.test(cell));
-      if (completedIdx === -1 || approvedIdx === -1) continue;
+      if (!headerRow.some(cell => /^completed$/i.test(cell)) || !headerRow.some(cell => /^approved$/i.test(cell))) continue;
+      const sectionLabels = [];
+      let currentSection = "";
+      for (let colIdx = 0; colIdx < headerRow.length; colIdx += 1) {
+        const explicitSection = String(sectionRow[colIdx] ?? "").trim().toLowerCase();
+        if (explicitSection) currentSection = explicitSection;
+        sectionLabels[colIdx] = currentSection;
+      }
+      const findColumn = (sectionMatcher, headerMatcher) => headerRow.findIndex((cell, colIdx) => {
+        const section = String(sectionLabels[colIdx] ?? "").trim();
+        const header = String(cell ?? "").trim();
+        return sectionMatcher.test(section) && headerMatcher.test(header);
+      });
+      const appCompletedIdx = findColumn(/^application$/i, /^completed$/i);
+      const partialIdx = findColumn(/^application$/i, /partially completed/i);
+      const completedCancelledIdx = findColumn(/^application$/i, /completed\s*\(cancelled\)/i);
+      const deniedIdx = findColumn(/^application$/i, /^denied$/i);
+      const approvedIdx = findColumn(/^application$/i, /^approved$/i);
+      const approvedCancelledIdx = findColumn(/^application$/i, /approved\s*\(cancelled\)/i);
+      const leaseCompletedIdx = findColumn(/^lease$/i, /^completed$/i);
+      const leaseCompletedCancelledIdx = findColumn(/^lease$/i, /completed\s*\(cancelled\)/i);
+      const leaseApprovedIdx = findColumn(/^lease$/i, /^approved$/i);
+      if (approvedIdx === -1 && leaseCompletedIdx === -1 && !hasApplicationAnchor) continue;
       for (let totalIdx = headerIdx + 1; totalIdx < Math.min(rows.length, headerIdx + 8); totalIdx += 1) {
         const totalRow = Array.isArray(rows[totalIdx]) ? rows[totalIdx] : [];
         const totalLabel = String(totalRow[0] ?? "").trim();
         if (!/^total:?$/i.test(totalLabel)) continue;
         return {
-          completed: Number(parseOptionalWorkbookMetric(totalRow[completedIdx]) ?? 0),
+          completed: Number(parseOptionalWorkbookMetric(totalRow[appCompletedIdx]) ?? 0),
           partiallyCompleted: Number(parseOptionalWorkbookMetric(totalRow[partialIdx]) ?? 0),
           completedCancelled: Number(parseOptionalWorkbookMetric(totalRow[completedCancelledIdx]) ?? 0),
           denied: Number(parseOptionalWorkbookMetric(totalRow[deniedIdx]) ?? 0),
           approved: Number(parseOptionalWorkbookMetric(totalRow[approvedIdx]) ?? 0),
-          approvedCancelled: Number(parseOptionalWorkbookMetric(totalRow[approvedCancelledIdx]) ?? 0)
+          approvedCancelled: Number(parseOptionalWorkbookMetric(totalRow[approvedCancelledIdx]) ?? 0),
+          leaseCompleted: Number(parseOptionalWorkbookMetric(totalRow[leaseCompletedIdx]) ?? 0),
+          leaseCompletedCancelled: Number(parseOptionalWorkbookMetric(totalRow[leaseCompletedCancelledIdx]) ?? 0),
+          leaseApproved: Number(parseOptionalWorkbookMetric(totalRow[leaseApprovedIdx]) ?? 0)
         };
       }
     }
@@ -7663,11 +7684,19 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
     dailySnapshot.tours = leadActivityTotals.firstVisitsTours;
   }
   if (leadConversionTotals) {
-    dailySnapshot.applications = leadConversionTotals.completed;
+    dailySnapshot.applications = (
+      (leadConversionTotals.completed || 0)
+      + (leadConversionTotals.partiallyCompleted || 0)
+      + (leadConversionTotals.completedCancelled || 0)
+      + (leadConversionTotals.denied || 0)
+      + (leadConversionTotals.approved || 0)
+      + (leadConversionTotals.approvedCancelled || 0)
+    );
     dailySnapshot.pendingDecision = leadConversionTotals.partiallyCompleted;
     dailySnapshot.applicationsApproved = leadConversionTotals.approved;
     dailySnapshot.denied = leadConversionTotals.denied;
     dailySnapshot.cancelled = (leadConversionTotals.completedCancelled || 0) + (leadConversionTotals.approvedCancelled || 0);
+    dailySnapshot.leasesSigned = Math.max(leadConversionTotals.leaseCompleted || 0, leadConversionTotals.leaseApproved || 0);
   }
   dailySnapshot.walkIn = extractMetricFromRowsOrText(rows, rawText, ["walk in", "walk-in"], ["Walk In"]) ?? dailySnapshot.walkIn;
   dailySnapshot.offSiteEvent = extractMetricFromRowsOrText(rows, rawText, ["off site event", "off-site event"], ["Off Site Event"]) ?? dailySnapshot.offSiteEvent;
@@ -13987,8 +14016,8 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const scopeMonthlyData = Array.isArray(record.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   const scopeSeasonal = Array.isArray(record.seasonal) && record.seasonal.length === 12 ? record.seasonal : [...DEFAULT_SEASONAL];
   const normalizedMonthIdx = clampNumber(monthIdx, 0, 11);
-  const useDlrSummarySnapshot = isDlrSummaryForRequestedPeriod(dlrSummary, normalizedMonthIdx, year);
   const scopeCurrentMonth = Number.isInteger(record.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  const reportMetricMonthIdx = clampNumber(scopeCurrentMonth, 0, 11);
   const schedule = computeScheduleFromContext({
     totalUnits,
     currentOccupied: Number(record.currentOccupied) || 0,
@@ -14000,15 +14029,15 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     monthlyData: scopeMonthlyData,
     seasonal: scopeSeasonal
   });
-  const monthEntry = scopeMonthlyData[normalizedMonthIdx] ?? {};
-  const prevMonthEntry = scopeMonthlyData[Math.max(normalizedMonthIdx - 1, 0)] ?? {};
+  const monthEntry = scopeMonthlyData[reportMetricMonthIdx] ?? {};
+  const prevMonthEntry = scopeMonthlyData[Math.max(reportMetricMonthIdx - 1, 0)] ?? {};
   const renewalSummary = getRenewalSummaryForMonth(monthEntry);
   const prevRenewalSummary = getRenewalSummaryForMonth(prevMonthEntry);
   const appMetrics = getApplicationDecisionMetrics(monthEntry);
   const prevAppMetrics = getApplicationDecisionMetrics(prevMonthEntry);
-  const scheduleRow = schedule[normalizedMonthIdx] ?? {};
+  const scheduleRow = schedule[reportMetricMonthIdx] ?? {};
   const nextRows = MONTHS.map((_, idx) => idx)
-    .filter(idx => idx >= normalizedMonthIdx)
+    .filter(idx => idx >= reportMetricMonthIdx)
     .slice(0, 4)
     .map(idx => {
       const entry = scopeMonthlyData[idx] ?? {};
@@ -14026,29 +14055,19 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
         moveInsNeeded: Number(row.netOccLeases) || 0
       };
     });
-  const importedOccupiedUnits = useDlrSummarySnapshot ? resolveDlrSummaryUnits(dlrSummary, totalUnits, "occupied") : null;
-  const importedLeasedUnits = useDlrSummarySnapshot ? resolveDlrSummaryUnits(dlrSummary, totalUnits, "leased") : null;
-  const occupiedUnits = importedOccupiedUnits ?? (normalizedMonthIdx === scopeCurrentMonth
-    ? Number(record.currentOccupied) || 0
-    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, normalizedMonthIdx, "occupiedSnapshot"));
-  const leasedUnits = importedLeasedUnits ?? (normalizedMonthIdx === scopeCurrentMonth
-    ? Number(record.currentLeased) || 0
-    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, normalizedMonthIdx, "leasedSnapshot"));
-  const occupancyPct = useDlrSummarySnapshot && Number.isFinite(Number(dlrSummary.occupancyPct))
-    ? Number(dlrSummary.occupancyPct)
-    : (totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0);
-  const leasedPct = useDlrSummarySnapshot && Number.isFinite(Number(dlrSummary.leasedPct))
-    ? Number(dlrSummary.leasedPct)
-    : (totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0);
-  const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, normalizedMonthIdx, 3);
-  const trendingOccupancyPct = useDlrSummarySnapshot && Number.isFinite(Number(dlrSummary.trendingOccupancyPct))
-    ? Number(dlrSummary.trendingOccupancyPct)
-    : (Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct);
+  const occupiedUnits = reportMetricMonthIdx === scopeCurrentMonth
+    ? Math.max(0, Number(record.currentOccupied) || 0)
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "occupiedSnapshot");
+  const leasedUnits = reportMetricMonthIdx === scopeCurrentMonth
+    ? Math.max(0, Number(record.currentLeased) || 0)
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "leasedSnapshot");
+  const occupancyPct = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+  const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
+  const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, reportMetricMonthIdx, 3);
+  const trendingOccupancyPct = Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct;
   const budgetOccPct = Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
-  const moveInGoalPerWeek = useDlrSummarySnapshot && Number.isFinite(Number(dlrSummary.moveInGoalPerWeek))
-    ? Number(dlrSummary.moveInGoalPerWeek)
-    : (moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0);
+  const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
   const dashboardLeadSources = getLeadSourceBreakdown(monthEntry);
   const dashboardLeadSourceTotal = getLeadSourceTotal(monthEntry);
   const mtdTraffic = {
@@ -14153,7 +14172,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
       : "Needs Attention";
   const generatedNotes = buildDlrInvestorNotes({
     reportDateLabel: hasDailyBoxScore ? (dailyBoxScore.reportDateLabel || dlrSummary.reportDateLabel) : dlrSummary.reportDateLabel,
-    monthLabel: formatDlrMonthYear(normalizedMonthIdx, year),
+    monthLabel: formatDlrMonthYear(reportMetricMonthIdx, year),
     leadSources: dashboardLeadSources,
     dailyTraffic,
     mtdTraffic,
@@ -14178,12 +14197,12 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const reportDateLabel = hasDailyBoxScore
     ? (dailyBoxScore.reportDateLabel || dlrSummary.reportDateLabel)
     : dlrSummary.reportDateLabel;
-  const reportPeriodLabel = reportDateLabel || dlrSummary.reportPeriodLabel || `${formatDlrMonthYear(normalizedMonthIdx, year)} operating snapshot`;
+  const reportPeriodLabel = reportDateLabel || dlrSummary.reportPeriodLabel || `${formatDlrMonthYear(reportMetricMonthIdx, year)} operating snapshot`;
   return {
     communityName,
-    reportMonthIdx: normalizedMonthIdx,
+    reportMonthIdx: reportMetricMonthIdx,
     reportYear: year,
-    reportMonthLabel: formatDlrMonthYear(normalizedMonthIdx, year),
+    reportMonthLabel: formatDlrMonthYear(reportMetricMonthIdx, year),
     reportPeriodLabel,
     reportDateIso,
     reportDateLabel,
