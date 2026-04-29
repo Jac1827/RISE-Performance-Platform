@@ -746,6 +746,7 @@ const PROPERTY_TEAM_ROLE_DEFS = {
 // ─── State ────────────────────────────────────────────────────────────────────
 let selectedPropIdx = 7;
 let customUnits = "";
+let corporateLeaseUnits = 0;
 let investorName = "";
 let investorEmailContacts = [];
 let activeTab = 0;
@@ -2323,6 +2324,7 @@ function defaultSavedCommunityRecord(propName = getProp().name) {
     importMonthOverride: DEFAULT_CURRENT_MONTH,
     importRoutingMode: "file_first",
     customUnits: "",
+    corporateLeaseUnits: 0,
     investorName: "",
     investorEmailContacts: [],
     communityFloorPlans: defaultCommunityFloorPlans(),
@@ -2372,6 +2374,7 @@ function normalizeSavedCommunityRecord(propName, data) {
     importMonthOverride: Number.isInteger(input.importMonthOverride) ? input.importMonthOverride : Number(input.importMonthOverride ?? defaults.importMonthOverride),
     importRoutingMode: input.importRoutingMode === "force_override" ? "force_override" : "file_first",
     customUnits: input.customUnits ?? defaults.customUnits,
+    corporateLeaseUnits: normalizeCorporateLeaseUnits(input.corporateLeaseUnits ?? defaults.corporateLeaseUnits, getTotalUnitsFor(getPropertyByName(propName), input.customUnits ?? defaults.customUnits)),
     investorName: input.investorName ?? defaults.investorName,
     investorEmailContacts: normalizeInvestorEmailContacts(input.investorEmailContacts),
     communityFloorPlans: normalizeCommunityFloorPlans(input.communityFloorPlans),
@@ -2416,6 +2419,7 @@ function getCurrentCommunityRecord() {
     importMonthOverride,
     importRoutingMode,
     customUnits,
+    corporateLeaseUnits,
     investorName,
     investorEmailContacts,
     communityFloorPlans,
@@ -2546,8 +2550,25 @@ function getTotalUnits() {
   if (custom > 0) return custom;
   return p.units ?? 0;
 }
-function currentOccPct() { const u = getTotalUnits(); return u > 0 ? (currentOccupied / u * 100) : 0; }
-function currentLeasedPct() { const u = getTotalUnits(); return u > 0 ? (currentLeased / u * 100) : 0; }
+function normalizeCorporateLeaseUnits(value, totalUnits = null) {
+  const numeric = Math.max(0, Math.floor(Number(value) || 0));
+  const maxUnits = totalUnits == null ? null : Math.max(0, Math.floor(Number(totalUnits) || 0));
+  return maxUnits == null ? numeric : Math.min(numeric, maxUnits);
+}
+
+function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
+  const total = Math.max(0, Number(totalUnits) || 0);
+  const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
+  return Math.max(total - corporate, 0);
+}
+
+function getOccupancyPctFromUnits(occupiedUnits, totalUnits, corporateUnits = 0) {
+  const baseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
+  return baseUnits > 0 ? (Math.max(0, Number(occupiedUnits) || 0) / baseUnits) * 100 : 0;
+}
+
+function currentOccPct() { return getOccupancyPctFromUnits(currentOccupied, getTotalUnits(), corporateLeaseUnits); }
+function currentLeasedPct() { return getOccupancyPctFromUnits(currentLeased, getTotalUnits(), corporateLeaseUnits); }
 
 function getApplicationsApprovedCount(monthEntry = {}) {
   if (Object.prototype.hasOwnProperty.call(monthEntry ?? {}, "applicationsApproved")) {
@@ -2719,10 +2740,11 @@ function storeCurrentMonthSnapshots(monthIdx = currentMonth, occupiedUnits = cur
 
 function getLeasedTrendPctSeries() {
   const totalUnits = getTotalUnits();
-  if (totalUnits === 0) return Array(12).fill(null);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
+  if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
   let reverseRunning = currentLeased;
-  series[currentMonth] = (currentLeased / totalUnits) * 100;
+  series[currentMonth] = (currentLeased / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.leasedSnapshot ?? 0);
     if (snapshotUnits > 0) {
@@ -2731,23 +2753,24 @@ function getLeasedTrendPctSeries() {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
       reverseRunning = Math.min(reverseRunning, totalUnits);
     }
-    series[i] = (reverseRunning / totalUnits) * 100;
+    series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
   let runningLeased = currentLeased;
   for (let i = currentMonth + 1; i < 12; i++) {
     runningLeased = Math.max(runningLeased - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
     runningLeased = Math.min(runningLeased, totalUnits);
-    series[i] = (runningLeased / totalUnits) * 100;
+    series[i] = (runningLeased / occupancyBaseUnits) * 100;
   }
   return series;
 }
 
 function getEndingOccPctSeries() {
   const totalUnits = getTotalUnits();
-  if (totalUnits === 0) return Array(12).fill(null);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
+  if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
   let reverseRunning = currentOccupied;
-  series[currentMonth] = (currentOccupied / totalUnits) * 100;
+  series[currentMonth] = (currentOccupied / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.occupiedSnapshot ?? 0);
     if (snapshotUnits > 0) {
@@ -2756,13 +2779,13 @@ function getEndingOccPctSeries() {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
       reverseRunning = Math.min(reverseRunning, totalUnits);
     }
-    series[i] = (reverseRunning / totalUnits) * 100;
+    series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
   let runningOcc = currentOccupied;
   for (let i = currentMonth + 1; i < 12; i++) {
     runningOcc = Math.max(runningOcc - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
     runningOcc = Math.min(runningOcc, totalUnits);
-    series[i] = (runningOcc / totalUnits) * 100;
+    series[i] = (runningOcc / occupancyBaseUnits) * 100;
   }
   return series;
 }
@@ -2846,6 +2869,7 @@ function getAllCurves() {
 
 function computeScheduleFromContext(ctx) {
   const totalUnits = Number(ctx.totalUnits) || 0;
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, ctx.corporateLeaseUnits);
   const scopeCurrentOccupied = Number(ctx.currentOccupied) || 0;
   const scopeCurrentLeased = Number(ctx.currentLeased) || 0;
   const scopeOccupancyGoal = Number(ctx.occupancyGoal) || 0;
@@ -2879,8 +2903,8 @@ function computeScheduleFromContext(ctx) {
     // After move-outs + scheduled move-ins (current month: use live counts)
     const baseOcc    = isCurrent ? simOcc    : Math.max(simOcc    - moveOuts + moveIns, 0);
     const baseLeased = isCurrent ? simLeased : Math.max(simLeased - moveOuts + moveIns, 0);
-    const baseOccPct    = baseOcc    / totalUnits * 100;
-    const baseLeasedPct = baseLeased / totalUnits * 100;
+    const baseOccPct    = occupancyBaseUnits > 0 ? (baseOcc / occupancyBaseUnits) * 100 : 0;
+    const baseLeasedPct = occupancyBaseUnits > 0 ? (baseLeased / occupancyBaseUnits) * 100 : 0;
 
     // ── Budget occ % drives both occ AND leased targets ──────────────────────
     const budgetPct = Number(scopeMonthlyData[i].budgetOcc) || 0;
@@ -2954,8 +2978,8 @@ function computeScheduleFromContext(ctx) {
       month, moveOuts, moveIns,
       occupied:  t.newOccupied,
       leased:    t.newLeased,
-      occPct:    (t.newOccupied / totalUnits) * 100,
-      leasedPct: (t.newLeased   / totalUnits) * 100,
+      occPct:    occupancyBaseUnits > 0 ? (t.newOccupied / occupancyBaseUnits) * 100 : 0,
+      leasedPct: occupancyBaseUnits > 0 ? (t.newLeased   / occupancyBaseUnits) * 100 : 0,
       netOccLeases:    t.netOccNeeded,
       netLeasedLeases: t.netLeasedNeeded,
       grossLeases:  effectiveGrossLeases,
@@ -2979,6 +3003,7 @@ function computeScheduleFromContext(ctx) {
 function computeSchedule() {
   return computeScheduleFromContext({
     totalUnits: getTotalUnits(),
+    corporateLeaseUnits,
     currentOccupied,
     currentLeased,
     occupancyGoal,
@@ -3005,6 +3030,7 @@ function loadPropertyData(propName) {
   importMonthOverride = d.importMonthOverride;
   importRoutingMode = d.importRoutingMode;
   customUnits = d.customUnits;
+  corporateLeaseUnits = d.corporateLeaseUnits;
   investorName = d.investorName;
   investorEmailContacts = normalizeInvestorEmailContacts(d.investorEmailContacts);
   communityFloorPlans = normalizeCommunityFloorPlans(d.communityFloorPlans);
@@ -3179,6 +3205,10 @@ function getTotalUnitsFor(p, customOverride) {
   return p.units ?? 0;
 }
 
+function getCorporateLeaseUnitsForRecord(record, totalUnits = null) {
+  return normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
+}
+
 function getPropertyByName(propName) {
   return PROPERTIES.find(p => p.name === propName) ?? { name: propName, units: null };
 }
@@ -3229,10 +3259,13 @@ function getCommunitySummary(propName, sourceData) {
   const quarterMsoe = scopeMsoeByQuarter[bonusQuarter];
   const scopeCurrentMonth = Number.isInteger(sourceData.currentMonth) ? sourceData.currentMonth : 2;
   const totalUnits = getTotalUnitsFor(prop, sourceData.customUnits);
+  const corporateUnits = getCorporateLeaseUnitsForRecord(sourceData, totalUnits);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
   const occupied = Number(sourceData.currentOccupied) || 0;
   const leased = Number(sourceData.currentLeased) || 0;
   const schedule = computeScheduleFromContext({
     totalUnits,
+    corporateLeaseUnits: corporateUnits,
     currentOccupied: occupied,
     currentLeased: leased,
     occupancyGoal: Number(sourceData.occupancyGoal ?? 95),
@@ -3250,8 +3283,8 @@ function getCommunitySummary(propName, sourceData) {
     ? Number(sourceData.savedBudgetTargets[scopeCurrentMonth]) || 0
     : Number(curMonthData.budgetOcc ?? 0);
   const budgetLeasedPct = Number(nextRow.budgetLeased ?? currentRow.budgetLeased ?? 0) || 0;
-  const occPct = totalUnits > 0 ? occupied / totalUnits * 100 : 0;
-  const leasedPct = totalUnits > 0 ? leased / totalUnits * 100 : 0;
+  const occPct = getOccupancyPctFromUnits(occupied, totalUnits, corporateUnits);
+  const leasedPct = getOccupancyPctFromUnits(leased, totalUnits, corporateUnits);
   const guestCardGoal = Number(currentRow.guestCardsNeeded ?? 0) || 0;
   const guestCards = getLeadSourceTotal(curMonthData);
   const tours = Number(curMonthData.tours) || 0;
@@ -3281,6 +3314,8 @@ function getCommunitySummary(propName, sourceData) {
   return {
     propName,
     totalUnits,
+    corporateLeaseUnits: corporateUnits,
+    occupancyBaseUnits,
     occupied,
     leased,
     currentMonth: scopeCurrentMonth,
@@ -3353,6 +3388,8 @@ function getCommunitySummary(propName, sourceData) {
 function aggregateCommunitySummaries(summaries) {
   const totals = summaries.reduce((acc, summary) => {
     acc.totalUnits += summary.totalUnits;
+    acc.corporateLeaseUnits += summary.corporateLeaseUnits || 0;
+    acc.occupancyBaseUnits += summary.occupancyBaseUnits || 0;
     acc.occupied += summary.occupied;
     acc.leased += summary.leased;
     if (summary.budgetOccUnits > 0) {
@@ -3441,6 +3478,8 @@ function aggregateCommunitySummaries(summaries) {
     return acc;
   }, {
     totalUnits: 0,
+    corporateLeaseUnits: 0,
+    occupancyBaseUnits: 0,
     occupied: 0,
     leased: 0,
     avgBudgetOccAttainmentPctTotal: 0,
@@ -3503,8 +3542,8 @@ function aggregateCommunitySummaries(summaries) {
     nerBudgetWeight: 0,
     nerWeightUnits: 0
   });
-  const occPct = totals.totalUnits > 0 ? (totals.occupied / totals.totalUnits) * 100 : 0;
-  const leasedPct = totals.totalUnits > 0 ? (totals.leased / totals.totalUnits) * 100 : 0;
+  const occPct = totals.occupancyBaseUnits > 0 ? (totals.occupied / totals.occupancyBaseUnits) * 100 : 0;
+  const leasedPct = totals.occupancyBaseUnits > 0 ? (totals.leased / totals.occupancyBaseUnits) * 100 : 0;
   const budgetOccPct = totals.totalUnits > 0 ? (totals.budgetOccUnits / totals.totalUnits) * 100 : 0;
   const budgetLeasedPct = totals.totalUnits > 0 ? (totals.budgetLeasedUnits / totals.totalUnits) * 100 : 0;
   const avgActualNer = totals.nerWeightUnits > 0 ? totals.nerActualWeight / totals.nerWeightUnits : 0;
@@ -3512,6 +3551,8 @@ function aggregateCommunitySummaries(summaries) {
   return {
     communityCount: summaries.length,
     totalUnits: totals.totalUnits,
+    corporateLeaseUnits: totals.corporateLeaseUnits,
+    occupancyBaseUnits: totals.occupancyBaseUnits,
     occupied: totals.occupied,
     leased: totals.leased,
     guestCards: totals.guestCards,
@@ -3599,8 +3640,10 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const scopeSeasonal = Array.isArray(record.seasonal) && record.seasonal.length === 12 ? record.seasonal : [...DEFAULT_SEASONAL];
   const scopeCurrentMonth = Number.isInteger(record.currentMonth) ? record.currentMonth : 0;
   const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record.corporateLeaseUnits);
   const schedule = computeScheduleFromContext({
     totalUnits,
+    corporateLeaseUnits: record.corporateLeaseUnits,
     currentOccupied: Number(record.currentOccupied) || 0,
     currentLeased: Number(record.currentLeased) || 0,
     occupancyGoal: Number(record.occupancyGoal ?? 95),
@@ -3641,8 +3684,8 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const currentTours = Number(currentMonthData.tours) || 0;
   const currentApplications = currentAppMetrics.applications;
   const quarterRetentionActual = closedQuarterRetention.avgRetentionRate;
-  const retentionPressure = totalUnits > 0
-    ? Math.ceil((Math.max(quarterTotals.netOccNeed, occupancyGapUnits) / totalUnits) * 100)
+  const retentionPressure = occupancyBaseUnits > 0
+    ? Math.ceil((Math.max(quarterTotals.netOccNeed, occupancyGapUnits) / occupancyBaseUnits) * 100)
     : 0;
   return {
     totalUnits,
@@ -4084,6 +4127,7 @@ function openCommunityWorkspace(name, tabIdx = null) {
 
 function onCustomUnitsChange(val) {
   customUnits = val !== undefined ? val : (document.getElementById("custom-units")?.value ?? "");
+  corporateLeaseUnits = normalizeCorporateLeaseUnits(corporateLeaseUnits, getTotalUnits());
   // Sync both inputs
   const headerInput = document.getElementById("custom-units");
   const overviewInput = document.getElementById("overview-custom-units");
@@ -4091,6 +4135,11 @@ function onCustomUnitsChange(val) {
   if (overviewInput && val === undefined) overviewInput.value = customUnits;
   document.getElementById("header-sub").textContent = getHeaderSubText();
   renderTab();
+}
+
+function updateCorporateLeaseUnits(val) {
+  corporateLeaseUnits = normalizeCorporateLeaseUnits(val, getTotalUnits());
+  saveCommunityData(true);
 }
 
 function updateInvestorName(val) {
@@ -5169,7 +5218,7 @@ function autoPopulateLeasingPace() {
     .filter(entry => entry.month >= currentMonth && entry.pct > 0);
   if (futureBudgets.length === 0) return;
 
-  const currentPct = totalUnits > 0 ? (currentOccupied / totalUnits * 100) : 0;
+  const currentPct = getOccupancyPctFromUnits(currentOccupied, totalUnits, corporateLeaseUnits);
   const anchors = [{ month: currentMonth - 1, pct: currentPct }, ...futureBudgets];
   let nextAnchorIdx = 1;
 
@@ -5533,6 +5582,7 @@ function renderPortfolioScopedSetupTab() {
     return `<tr>
       <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
       <td><input type="number" min="1" value="${escapeHtml(detail.record?.customUnits || "")}" placeholder="${escapeHtml(String(detail.summary.totalUnits || ""))}" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "customUnits", this.value)' style="width:96px"></td>
+      <td><input type="number" min="0" value="${escapeHtml(String(detail.record?.corporateLeaseUnits || ""))}" placeholder="0" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "corporateLeaseUnits", this.value)' style="width:92px"></td>
       <td class="l"><input type="text" value="${escapeHtml(detail.record?.communityAddress || "")}" placeholder="Community address" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "communityAddress", this.value)' style="width:100%"></td>
       <td class="l"><input type="text" value="${escapeHtml(detail.record?.investorName || "")}" placeholder="Investor / ownership group" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorName", this.value)' style="width:100%"></td>
       <td class="l"><textarea rows="2" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorEmailContacts", this.value)' style="width:100%;min-height:58px">${escapeHtml(contactText)}</textarea></td>
@@ -5543,7 +5593,7 @@ function renderPortfolioScopedSetupTab() {
   const bodyHtml = `<div class="tbl-wrap">
     <div class="tbl-header"><h2>Portfolio setup roster</h2><p>Core setup fields are editable directly here. Use the action button when you need the full community setup editor for floor plans, photos, or staffing.</p></div>
     <table>
-      <thead><tr><th class="l">Community</th><th>Units</th><th class="l">Address</th><th class="l">Investor</th><th class="l">Report Contacts</th><th>Floor Plans</th><th>Action</th></tr></thead>
+      <thead><tr><th class="l">Community</th><th>Units</th><th>Corp Leases</th><th class="l">Address</th><th class="l">Investor</th><th class="l">Report Contacts</th><th>Floor Plans</th><th>Action</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -6044,6 +6094,11 @@ function renderSetupTab() {
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">This flows through to the VP weekly report investor breakdown.</div>
         </div>
         <div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Corporate Lease Units</div>
+          <input type="number" min="0" max="${Math.max(totalUnits, 0)}" value="${corporateLeaseUnits || ""}" placeholder="0" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCorporateLeaseUnits(this.value)">
+          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">These units are excluded from physical and leased occupancy percentage denominators only.</div>
+        </div>
+        <div>
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Community Address</div>
           <input type="text" value="${escapeHtml(communityAddress)}" placeholder="Street, City, State ZIP" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCommunityAddress(this.value)">
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">${communityGeo ? `Pinned at ${Number(communityGeo.lat).toFixed(4)}, ${Number(communityGeo.lng).toFixed(4)}` : "Used by the RISE portfolio map and hover details."}</div>
@@ -6417,8 +6472,10 @@ function buildRecommendationsForRecord(propName, sourceData) {
   const record = normalizeSavedCommunityRecord(propName, sourceData);
   const prop = getPropertyByName(propName);
   const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+  const corporateUnits = getCorporateLeaseUnitsForRecord(record, totalUnits);
   const schedule = computeScheduleFromContext({
     totalUnits,
+    corporateLeaseUnits: corporateUnits,
     currentOccupied: record.currentOccupied,
     currentLeased: record.currentLeased,
     occupancyGoal: record.occupancyGoal,
@@ -6440,7 +6497,7 @@ function buildRecommendationsForRecord(propName, sourceData) {
   const appRate = tours > 0 ? (applicationMetrics.applications / tours) * 100 : 0;
   const closeRate = applicationMetrics.appToLeasePct;
   const approvalPct = applicationMetrics.approvalPct;
-  const occPct = totalUnits > 0 ? (Number(record.currentOccupied) || 0) / totalUnits * 100 : 0;
+  const occPct = getOccupancyPctFromUnits(Number(record.currentOccupied) || 0, totalUnits, corporateUnits);
   const budgetOccPct = (record.savedBudgetTargets?.[monthIdx] ?? 0) > 0
     ? Number(record.savedBudgetTargets[monthIdx]) || 0
     : Number(monthEntry.budgetOcc ?? 0);
@@ -10907,6 +10964,9 @@ function updatePortfolioCommunityField(propName, field, value) {
   if (field === "customUnits") {
     const numeric = Number(value);
     record.customUnits = Number.isFinite(numeric) && numeric > 0 ? numeric : "";
+  } else if (field === "corporateLeaseUnits") {
+    const totalUnits = getTotalUnitsFor(getPropertyByName(propName), record.customUnits);
+    record.corporateLeaseUnits = normalizeCorporateLeaseUnits(value, totalUnits);
   } else if (field === "communityAddress") {
     record.communityAddress = String(value ?? "").trim();
     record.communityGeo = null;
@@ -11291,11 +11351,13 @@ function getStoredWeeklySnapshotPayload() {
 }
 
 function getSummaryOccPct(summary) {
-  return summary?.totalUnits > 0 ? (Number(summary.occupied) || 0) / summary.totalUnits * 100 : 0;
+  const baseUnits = Number(summary?.occupancyBaseUnits ?? summary?.totalUnits) || 0;
+  return baseUnits > 0 ? (Number(summary?.occupied) || 0) / baseUnits * 100 : 0;
 }
 
 function getSummaryLeasedPct(summary) {
-  return summary?.totalUnits > 0 ? (Number(summary.leased) || 0) / summary.totalUnits * 100 : 0;
+  const baseUnits = Number(summary?.occupancyBaseUnits ?? summary?.totalUnits) || 0;
+  return baseUnits > 0 ? (Number(summary?.leased) || 0) / baseUnits * 100 : 0;
 }
 
 function buildPortfolioDetailsFromRecordMap(recordMap) {
@@ -14374,13 +14436,14 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
 function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record?.corporateLeaseUnits);
   let occupiedUnits = startMonth === anchorMonth
     ? Math.max(0, Number(record?.currentOccupied) || 0)
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
-  if (!Number.isInteger(startMonth) || totalUnits <= 0) {
+  if (!Number.isInteger(startMonth) || occupancyBaseUnits <= 0) {
     return {
       occupiedUnits,
-      pct: totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0,
+      pct: occupancyBaseUnits > 0 ? (occupiedUnits / occupancyBaseUnits) * 100 : 0,
       endMonthIdx: startMonth
     };
   }
@@ -14401,7 +14464,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
   }
   return {
     occupiedUnits,
-    pct: totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0,
+    pct: occupancyBaseUnits > 0 ? (occupiedUnits / occupancyBaseUnits) * 100 : 0,
     endMonthIdx
   };
 }
@@ -14906,6 +14969,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const hasDailyBoxScore = hasDlrBoxScoreSnapshot(dailyBoxScore);
   const prop = getPropertyByName(communityName);
   const totalUnits = getTotalUnitsFor(prop, record.customUnits);
+  const corporateUnits = getCorporateLeaseUnitsForRecord(record, totalUnits);
   const scopeMonthlyData = Array.isArray(record.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   const scopeSeasonal = Array.isArray(record.seasonal) && record.seasonal.length === 12 ? record.seasonal : [...DEFAULT_SEASONAL];
   const normalizedMonthIdx = clampNumber(monthIdx, 0, 11);
@@ -14919,6 +14983,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "leasedSnapshot");
   const schedule = computeScheduleFromContext({
     totalUnits,
+    corporateLeaseUnits: corporateUnits,
     currentOccupied: reportAnchorOccupiedUnits,
     currentLeased: reportAnchorLeasedUnits,
     occupancyGoal: Number(record.occupancyGoal ?? 95),
@@ -14958,8 +15023,8 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     });
   const occupiedUnits = reportAnchorOccupiedUnits;
   const leasedUnits = reportAnchorLeasedUnits;
-  const occupancyPct = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
-  const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
+  const occupancyPct = getOccupancyPctFromUnits(occupiedUnits, totalUnits, corporateUnits);
+  const leasedPct = getOccupancyPctFromUnits(leasedUnits, totalUnits, corporateUnits);
   const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, reportMetricMonthIdx, 3);
   const trendingOccupancyPct = Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct;
   const budgetOccPct = (record.savedBudgetTargets?.[reportMetricMonthIdx] ?? 0) > 0
