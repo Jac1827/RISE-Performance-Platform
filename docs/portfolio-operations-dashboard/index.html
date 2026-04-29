@@ -10219,166 +10219,207 @@ function renderBonusTab() {
 }
 
 function renderPortfolioHomeTab() {
-  const selectedMonth = getSelectedDashboardMonthIndex();
-  const selectedLabel = FULL_MONTHS[selectedMonth];
-  const details = getWorkspaceScopedDetails(selectedMonth);
-  const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
-  const previousMonthIdx = Math.max(selectedMonth - 1, 0);
-  const previousAggregate = selectedMonth > 0
-    ? aggregateCommunitySummaries(getWorkspaceScopedDetails(previousMonthIdx).map(detail => detail.summary))
-    : null;
-  const investorGroups = buildInvestorPortfolioGroups(details);
-  const marketSurveyScopedDetails = details
-    .map(detail => ({ detail, market: normalizeMarketSurveyData(detail.record?.marketSurveyData) }))
-    .filter(({ market }) =>
-      String(market.updatedOn || "").trim() ||
-      Number(market.compAverageRent ?? 0) > 0 ||
-      Number(market.compAverageNer ?? 0) > 0 ||
-      Number(market.subjectOccPct ?? 0) > 0 ||
-      Number(market.leasesLast30 ?? 0) > 0 ||
-      String(market.pricingNotes || "").trim() ||
-      String(market.specialsRecommendation || "").trim()
+  const renderSafeSection = (builder, fallbackHtml) => {
+    try {
+      return builder();
+    } catch (error) {
+      console.error("Portfolio Home section failed to render", error);
+      return fallbackHtml;
+    }
+  };
+  try {
+    const selectedMonth = getSelectedDashboardMonthIndex();
+    const selectedLabel = FULL_MONTHS[selectedMonth];
+    const details = getWorkspaceScopedDetails(selectedMonth);
+    const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
+    const previousMonthIdx = Math.max(selectedMonth - 1, 0);
+    const previousAggregate = selectedMonth > 0
+      ? aggregateCommunitySummaries(getWorkspaceScopedDetails(previousMonthIdx).map(detail => detail.summary))
+      : null;
+    const investorGroups = renderSafeSection(
+      () => buildInvestorPortfolioGroups(details),
+      []
     );
-  const marketSurveyAggregate = marketSurveyScopedDetails.reduce((acc, item) => {
-    const market = item.market;
-    acc.communityCount += 1;
-    if (Number(market.compAverageRent ?? 0) > 0) {
-      acc.compAverageRentTotal += Number(market.compAverageRent);
-      acc.compAverageRentCount += 1;
-    }
-    if (Number(market.subjectOccPct ?? 0) > 0) {
-      acc.subjectOccPctTotal += Number(market.subjectOccPct);
-      acc.subjectOccPctCount += 1;
-    }
-    acc.applicationsLast30 += Number(market.applicationsLast30 ?? 0);
-    acc.leasesLast30 += Number(market.leasesLast30 ?? 0);
-    if (market.rentAdjustmentDirection === "up") acc.upCount += 1;
-    else if (market.rentAdjustmentDirection === "down") acc.downCount += 1;
-    else if (market.rentAdjustmentDirection === "hold") acc.holdCount += 1;
-    return acc;
-  }, {
-    communityCount: 0,
-    compAverageRentTotal: 0,
-    compAverageRentCount: 0,
-    subjectOccPctTotal: 0,
-    subjectOccPctCount: 0,
-    applicationsLast30: 0,
-    leasesLast30: 0,
-    upCount: 0,
-    downCount: 0,
-    holdCount: 0
-  });
-  const marketSurveyHighlights = marketSurveyScopedDetails.length > 0
-    ? marketSurveyScopedDetails
-        .slice()
-        .sort((a, b) => Number(b.market.leasesLast30 ?? 0) - Number(a.market.leasesLast30 ?? 0))
-        .slice(0, 4)
-        .map(({ detail, market }) => {
-          const strategyLabel = ({
-            up: "Increase",
-            down: "Decrease",
-            hold: "Hold"
-          })[market.rentAdjustmentDirection] || "Review";
-          const note = String(market.pricingNotes || market.specialsRecommendation || market.compNarrative || "").trim();
-          return `<div class="portfolio-rank-item">
+    const marketSurveyScopedDetails = renderSafeSection(
+      () => details
+        .map(detail => ({ detail, market: normalizeMarketSurveyData(detail.record?.marketSurveyData) }))
+        .filter(({ market }) =>
+          String(market.updatedOn || "").trim() ||
+          Number(market.compAverageRent ?? 0) > 0 ||
+          Number(market.compAverageNer ?? 0) > 0 ||
+          Number(market.subjectOccPct ?? 0) > 0 ||
+          Number(market.leasesLast30 ?? 0) > 0 ||
+          String(market.pricingNotes || "").trim() ||
+          String(market.specialsRecommendation || "").trim()
+        ),
+      []
+    );
+    const marketSurveyAggregate = renderSafeSection(
+      () => marketSurveyScopedDetails.reduce((acc, item) => {
+        const market = item.market;
+        acc.communityCount += 1;
+        if (Number(market.compAverageRent ?? 0) > 0) {
+          acc.compAverageRentTotal += Number(market.compAverageRent);
+          acc.compAverageRentCount += 1;
+        }
+        if (Number(market.subjectOccPct ?? 0) > 0) {
+          acc.subjectOccPctTotal += Number(market.subjectOccPct);
+          acc.subjectOccPctCount += 1;
+        }
+        acc.applicationsLast30 += Number(market.applicationsLast30 ?? 0);
+        acc.leasesLast30 += Number(market.leasesLast30 ?? 0);
+        if (market.rentAdjustmentDirection === "up") acc.upCount += 1;
+        else if (market.rentAdjustmentDirection === "down") acc.downCount += 1;
+        else if (market.rentAdjustmentDirection === "hold") acc.holdCount += 1;
+        return acc;
+      }, {
+        communityCount: 0,
+        compAverageRentTotal: 0,
+        compAverageRentCount: 0,
+        subjectOccPctTotal: 0,
+        subjectOccPctCount: 0,
+        applicationsLast30: 0,
+        leasesLast30: 0,
+        upCount: 0,
+        downCount: 0,
+        holdCount: 0
+      }),
+      {
+        communityCount: 0,
+        compAverageRentTotal: 0,
+        compAverageRentCount: 0,
+        subjectOccPctTotal: 0,
+        subjectOccPctCount: 0,
+        applicationsLast30: 0,
+        leasesLast30: 0,
+        upCount: 0,
+        downCount: 0,
+        holdCount: 0
+      }
+    );
+    const marketSurveyHighlights = renderSafeSection(
+      () => marketSurveyScopedDetails.length > 0
+        ? marketSurveyScopedDetails
+            .slice()
+            .sort((a, b) => Number(b.market.leasesLast30 ?? 0) - Number(a.market.leasesLast30 ?? 0))
+            .slice(0, 4)
+            .map(({ detail, market }) => {
+              const strategyLabel = ({
+                up: "Increase",
+                down: "Decrease",
+                hold: "Hold"
+              })[market.rentAdjustmentDirection] || "Review";
+              const note = String(market.pricingNotes || market.specialsRecommendation || market.compNarrative || "").trim();
+              return `<div class="portfolio-rank-item">
+                <div>
+                  <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+                  <div class="meta">${strategyLabel} · ${Number(market.subjectOccPct ?? 0) > 0 ? `${Number(market.subjectOccPct).toFixed(1)}% subject occ` : "snapshot uploaded"}${Number(market.compAverageRent ?? 0) > 0 ? ` · comp avg rent ${formatDlrCurrency(market.compAverageRent)}` : ""}</div>
+                </div>
+                <div style="text-align:right;max-width:220px">
+                  <div class="metric">${Math.round(market.leasesLast30 ?? 0)}</div>
+                  <div class="metric-sub">leases last 30</div>
+                </div>
+                ${note ? `<div class="meta" style="grid-column:1/-1">${escapeHtml(note)}</div>` : ""}
+              </div>`;
+            }).join("")
+        : `<div class="alert alert-info">Upload market surveys or investor snapshots in Community Setup to surface pricing highlights here.</div>`,
+      `<div class="alert alert-info">Market survey highlights are temporarily unavailable for this snapshot.</div>`
+    );
+    const topApplications = [...details]
+      .sort((a, b) => (b.summary.applicationsApproved ?? 0) - (a.summary.applicationsApproved ?? 0))
+      .slice(0, 4);
+    const watchlist = [...details]
+      .filter(detail => (detail.summary.occGapUnits ?? 0) > 0 || (detail.summary.renewalUndecided ?? 0) > 0 || (detail.summary.applicationApprovalPct ?? 0) < 70)
+      .sort((a, b) => ((b.summary.occGapUnits ?? 0) + (b.summary.renewalUndecided ?? 0)) - ((a.summary.occGapUnits ?? 0) + (a.summary.renewalUndecided ?? 0)))
+      .slice(0, 4);
+    const tiles = [
+      {
+        label: "Saved Communities",
+        value: `${details.length}`,
+        sub: `${aggregate.totalUnits.toLocaleString()} units represented across the portfolio`
+      },
+      {
+        label: "Approved Applications",
+        value: `${Math.round(aggregate.applicationsApproved ?? 0)}`,
+        sub: previousAggregate ? formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, previousAggregate.applicationsApproved ?? 0, "count_pct").replace("MoM", "vs prior month") : "Month-to-date approved applications"
+      },
+      {
+        label: "Net Absorption",
+        value: formatSignedDisplay(aggregate.monthAbsorption ?? 0),
+        sub: previousAggregate ? formatPortfolioTrendValue(aggregate.monthAbsorption ?? 0, previousAggregate.monthAbsorption ?? 0, "number_diff").replace("MoM", "vs prior month") : "Move-ins minus move-outs"
+      },
+      {
+        label: "Renewal Retention",
+        value: `${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%`,
+        sub: `${Math.round(aggregate.renewalsSigned ?? 0)} signed from ${Math.round(aggregate.renewalExpirations ?? 0)} expirations`
+      },
+      {
+        label: "Physical Occupancy",
+        value: `${getSummaryOccPct(aggregate).toFixed(1)}%`,
+        sub: `${Math.max(aggregate.occGapUnits ?? 0, 0)} unit${Math.abs(aggregate.occGapUnits ?? 0) === 1 ? "" : "s"} below saved budget`
+      },
+      {
+        label: "Leased Occupancy",
+        value: `${getSummaryLeasedPct(aggregate).toFixed(1)}%`,
+        sub: `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} unit${Math.abs(aggregate.leasedGapUnits ?? 0) === 1 ? "" : "s"} behind leased target`
+      },
+      {
+        label: "Tour To Lease",
+        value: `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`,
+        sub: `${Math.round(aggregate.tours ?? 0)} tours and ${Math.round(aggregate.leasesSigned ?? 0)} signed leases`
+      },
+      {
+        label: "ORA Average",
+        value: (aggregate.oraScore ?? 0) > 0 ? (aggregate.oraScore ?? 0).toFixed(1) : "—",
+        sub: `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities pacing on saved occupancy budget`
+      }
+    ];
+    const topAppHtml = renderSafeSection(
+      () => topApplications.length > 0
+        ? topApplications.map(detail => `<div class="portfolio-rank-item">
             <div>
               <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-              <div class="meta">${strategyLabel} · ${Number(market.subjectOccPct ?? 0) > 0 ? `${Number(market.subjectOccPct).toFixed(1)}% subject occ` : "snapshot uploaded"}${Number(market.compAverageRent ?? 0) > 0 ? ` · comp avg rent ${formatDlrCurrency(market.compAverageRent)}` : ""}</div>
+              <div class="meta">${escapeHtml(getInvestorPortfolioName(detail.record))} · ${detail.summary.totalUnits} units · ${detail.summary.applications} apps MTD</div>
             </div>
-            <div style="text-align:right;max-width:220px">
-              <div class="metric">${Math.round(market.leasesLast30 ?? 0)}</div>
-              <div class="metric-sub">leases last 30</div>
+            <div style="text-align:right">
+              <div class="metric">${Math.round(detail.summary.applicationsApproved ?? 0)}</div>
+              <div class="metric-sub">approved apps</div>
             </div>
-            ${note ? `<div class="meta" style="grid-column:1/-1">${escapeHtml(note)}</div>` : ""}
-          </div>`;
-        }).join("")
-    : `<div class="alert alert-info">Upload market surveys or investor snapshots in Community Setup to surface pricing highlights here.</div>`;
-  const topApplications = [...details]
-    .sort((a, b) => (b.summary.applicationsApproved ?? 0) - (a.summary.applicationsApproved ?? 0))
-    .slice(0, 4);
-  const watchlist = [...details]
-    .filter(detail => (detail.summary.occGapUnits ?? 0) > 0 || (detail.summary.renewalUndecided ?? 0) > 0 || (detail.summary.applicationApprovalPct ?? 0) < 70)
-    .sort((a, b) => ((b.summary.occGapUnits ?? 0) + (b.summary.renewalUndecided ?? 0)) - ((a.summary.occGapUnits ?? 0) + (a.summary.renewalUndecided ?? 0)))
-    .slice(0, 4);
-  const tiles = [
-    {
-      label: "Saved Communities",
-      value: `${details.length}`,
-      sub: `${aggregate.totalUnits.toLocaleString()} units represented across the portfolio`
-    },
-    {
-      label: "Approved Applications",
-      value: `${Math.round(aggregate.applicationsApproved ?? 0)}`,
-      sub: previousAggregate ? formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, previousAggregate.applicationsApproved ?? 0, "count_pct").replace("MoM", "vs prior month") : "Month-to-date approved applications"
-    },
-    {
-      label: "Net Absorption",
-      value: formatSignedDisplay(aggregate.monthAbsorption ?? 0),
-      sub: previousAggregate ? formatPortfolioTrendValue(aggregate.monthAbsorption ?? 0, previousAggregate.monthAbsorption ?? 0, "number_diff").replace("MoM", "vs prior month") : "Move-ins minus move-outs"
-    },
-    {
-      label: "Renewal Retention",
-      value: `${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%`,
-      sub: `${Math.round(aggregate.renewalsSigned ?? 0)} signed from ${Math.round(aggregate.renewalExpirations ?? 0)} expirations`
-    },
-    {
-      label: "Physical Occupancy",
-      value: `${getSummaryOccPct(aggregate).toFixed(1)}%`,
-      sub: `${Math.max(aggregate.occGapUnits ?? 0, 0)} unit${Math.abs(aggregate.occGapUnits ?? 0) === 1 ? "" : "s"} below saved budget`
-    },
-    {
-      label: "Leased Occupancy",
-      value: `${getSummaryLeasedPct(aggregate).toFixed(1)}%`,
-      sub: `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} unit${Math.abs(aggregate.leasedGapUnits ?? 0) === 1 ? "" : "s"} behind leased target`
-    },
-    {
-      label: "Tour To Lease",
-      value: `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`,
-      sub: `${Math.round(aggregate.tours ?? 0)} tours and ${Math.round(aggregate.leasesSigned ?? 0)} signed leases`
-    },
-    {
-      label: "ORA Average",
-      value: (aggregate.oraScore ?? 0) > 0 ? (aggregate.oraScore ?? 0).toFixed(1) : "—",
-      sub: `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities pacing on saved occupancy budget`
-    }
-  ];
-  const topAppHtml = topApplications.length > 0
-    ? topApplications.map(detail => `<div class="portfolio-rank-item">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-          <div class="meta">${escapeHtml(getInvestorPortfolioName(detail.record))} · ${detail.summary.totalUnits} units · ${detail.summary.applications} apps MTD</div>
-        </div>
-        <div style="text-align:right">
-          <div class="metric">${Math.round(detail.summary.applicationsApproved ?? 0)}</div>
-          <div class="metric-sub">approved apps</div>
-        </div>
-      </div>`).join("")
-    : `<div class="alert alert-info">No saved communities are available yet for portfolio rollup.</div>`;
-  const watchlistHtml = watchlist.length > 0
-    ? watchlist.map(detail => `<div class="portfolio-rank-item">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-          <div class="meta">${detail.recommendations?.[0]?.body ? escapeHtml(detail.recommendations[0].body) : "Review occupancy, renewals, and funnel pacing."}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="metric" style="color:${(detail.summary.occGapUnits ?? 0) > 0 ? "#f85149" : "#d29922"}">${Math.max(detail.summary.occGapUnits ?? 0, 0)}</div>
-          <div class="metric-sub">occ gap units</div>
-        </div>
-      </div>`).join("")
-    : `<div class="alert-green">Portfolio watchlist is clear for the selected month snapshot.</div>`;
-  const investorRollupHtml = investorGroups.length > 0
-    ? investorGroups.slice(0, 6).map(group => `<div class="portfolio-rank-item">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(group.name)}</div>
-          <div class="meta">${group.communityCount} communit${group.communityCount === 1 ? "y" : "ies"} · ${getSummaryOccPct(group.aggregate).toFixed(1)}% physical · ${(group.aggregate.renewalRetentionRate ?? 0).toFixed(1)}% retention</div>
-        </div>
-        <div style="text-align:right">
-          <div class="metric">${Math.round(group.aggregate.applicationsApproved ?? 0)}</div>
-          <div class="metric-sub">approved apps</div>
-        </div>
-      </div>`).join("")
-    : `<div class="alert alert-info">Add investor names in Community Setup to unlock grouped ownership rollups here.</div>`;
-  return `<div class="dashboard-home-grid">
+          </div>`).join("")
+        : `<div class="alert alert-info">No saved communities are available yet for portfolio rollup.</div>`,
+      `<div class="alert alert-info">Top application drivers are temporarily unavailable for this snapshot.</div>`
+    );
+    const watchlistHtml = renderSafeSection(
+      () => watchlist.length > 0
+        ? watchlist.map(detail => `<div class="portfolio-rank-item">
+            <div>
+              <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+              <div class="meta">${detail.recommendations?.[0]?.body ? escapeHtml(detail.recommendations[0].body) : "Review occupancy, renewals, and funnel pacing."}</div>
+            </div>
+            <div style="text-align:right">
+              <div class="metric" style="color:${(detail.summary.occGapUnits ?? 0) > 0 ? "#f85149" : "#d29922"}">${Math.max(detail.summary.occGapUnits ?? 0, 0)}</div>
+              <div class="metric-sub">occ gap units</div>
+            </div>
+          </div>`).join("")
+        : `<div class="alert-green">Portfolio watchlist is clear for the selected month snapshot.</div>`,
+      `<div class="alert alert-info">Portfolio priorities are temporarily unavailable for this snapshot.</div>`
+    );
+    const investorRollupHtml = renderSafeSection(
+      () => investorGroups.length > 0
+        ? investorGroups.slice(0, 6).map(group => `<div class="portfolio-rank-item">
+            <div>
+              <div style="font-size:0.78rem;font-weight:700">${escapeHtml(group.name)}</div>
+              <div class="meta">${group.communityCount} communit${group.communityCount === 1 ? "y" : "ies"} · ${getSummaryOccPct(group.aggregate).toFixed(1)}% physical · ${(group.aggregate.renewalRetentionRate ?? 0).toFixed(1)}% retention</div>
+            </div>
+            <div style="text-align:right">
+              <div class="metric">${Math.round(group.aggregate.applicationsApproved ?? 0)}</div>
+              <div class="metric-sub">approved apps</div>
+            </div>
+          </div>`).join("")
+        : `<div class="alert alert-info">Add investor names in Community Setup to unlock grouped ownership rollups here.</div>`,
+      `<div class="alert alert-info">Investor portfolio rollups are temporarily unavailable for this snapshot.</div>`
+    );
+    return `<div class="dashboard-home-grid">
     <div>
       <div class="portfolio-hero">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
@@ -10506,6 +10547,13 @@ function renderPortfolioHomeTab() {
       </div>
     </div>
   </div>`;
+  } catch (error) {
+    console.error("Portfolio Home failed to render", error);
+    return `<div class="card mb4">
+      <div class="card-title" style="margin-bottom:8px">Portfolio Home</div>
+      <div class="alert-red">Portfolio Home hit a render issue for the current saved snapshot. The page stayed online, but one or more dynamic sections were skipped. Refresh once, and if the issue persists the saved data in one section likely needs cleanup.</div>
+    </div>`;
+  }
 }
 
 function renderReportingTab() {
