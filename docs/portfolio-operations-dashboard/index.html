@@ -4066,7 +4066,10 @@ function openCommunityWorkspace(name, tabIdx = null) {
   loadPropertyData(getProp().name);
   persistOperationsWorkspaceContext();
   renderPropGrid();
-  if (tabIdx !== null && tabIdx !== undefined) activeTab = Math.max(0, Math.min(8, Number(tabIdx) || 0));
+  if (tabIdx !== null && tabIdx !== undefined) {
+    setTab(Math.max(0, Math.min(8, Number(tabIdx) || 0)));
+    return;
+  }
   renderTab();
 }
 
