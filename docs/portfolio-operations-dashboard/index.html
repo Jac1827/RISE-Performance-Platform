@@ -11208,7 +11208,8 @@ function getSummaryLeasedPct(summary) {
 function buildPortfolioDetailsFromRecordMap(recordMap) {
   const map = (recordMap && typeof recordMap === "object") ? recordMap : {};
   return Object.keys(map).map(name => {
-    const record = normalizeSavedCommunityRecord(name, map[name]);
+    const sourceRecord = name === getProp().name ? getCurrentCommunityRecord() : map[name];
+    const record = normalizeSavedCommunityRecord(name, sourceRecord);
     const summary = getCommunitySummary(name, record);
     return summary ? {
       name,
@@ -11220,10 +11221,10 @@ function buildPortfolioDetailsFromRecordMap(recordMap) {
 }
 
 function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
-  saveCommunityData(true);
   const map = (recordMap && typeof recordMap === "object") ? recordMap : {};
-  let details = Object.keys(map).map(name => {
-    const record = normalizeSavedCommunityRecord(name, map[name]);
+  const scopedMap = { ...map, [getProp().name]: getCurrentCommunityRecord() };
+  let details = Object.keys(scopedMap).map(name => {
+    const record = normalizeSavedCommunityRecord(name, scopedMap[name]);
     const prop = getPropertyByName(name);
     const totalUnits = getTotalUnitsFor(prop, record.customUnits);
     const scopedRecord = {
@@ -11263,19 +11264,8 @@ function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
 }
 
 function getCurrentPortfolioDetails() {
-  saveCommunityData(true);
-  let details = buildPortfolioDetailsFromRecordMap(savedData);
-  if (details.length === 0) {
-    const currentName = getProp().name;
-    const currentRecord = getCurrentCommunityRecord();
-    details = [{
-      name: currentName,
-      record: normalizeSavedCommunityRecord(currentName, currentRecord),
-      summary: getCommunitySummary(currentName, currentRecord),
-      recommendations: buildRecommendationsForRecord(currentName, currentRecord)
-    }].filter(detail => detail.summary);
-  }
-  return details;
+  const details = buildPortfolioDetailsFromRecordMap({ ...savedData, [getProp().name]: getCurrentCommunityRecord() });
+  return details.length > 0 ? details : [];
 }
 
 function getSnapshotPortfolioDetails(payload) {
