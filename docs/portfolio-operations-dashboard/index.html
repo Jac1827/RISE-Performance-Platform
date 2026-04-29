@@ -3167,7 +3167,10 @@ function onWorkspaceCommunitySelect(value) {
   }
   const matchedName = matchPropertyName(value, { fallbackToCurrent: false });
   const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
-  if (matchedIdx >= 0) selectProp(matchedIdx);
+  if (matchedIdx >= 0) {
+    workspaceScopeValue = matchedName;
+    selectProp(matchedIdx);
+  }
 }
 
 function getTotalUnitsFor(p, customOverride) {
@@ -4050,7 +4053,7 @@ function renderQuarterlyTurnoverRollupSection(portfolioScope, regionalRoles, rol
 
 function selectProp(idx) {
   selectedPropIdx = idx;
-  if (!isPortfolioWorkspaceSelected()) workspaceScopeValue = PROPERTIES[selectedPropIdx]?.name ?? getProp().name;
+  workspaceScopeValue = PROPERTIES[selectedPropIdx]?.name ?? getProp().name;
   loadPropertyData(getProp().name);
   persistOperationsWorkspaceContext();
   renderPropGrid();
@@ -5520,19 +5523,21 @@ function renderPortfolioScopedSetupTab() {
   const rows = details.map(detail => {
     const contacts = normalizeInvestorEmailContacts(detail.record?.investorEmailContacts);
     const plans = normalizeCommunityFloorPlans(detail.record?.communityFloorPlans).filter(plan => String(plan.name || "").trim()).length;
+    const contactText = contacts.map(entry => entry.email).filter(Boolean).join("; ");
     return `<tr>
       <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
-      <td>${detail.summary.totalUnits || "—"}</td>
-      <td class="l">${escapeHtml(detail.record?.communityAddress || "Address not saved")}</td>
-      <td>${contacts.length}</td>
+      <td><input type="number" min="1" value="${escapeHtml(detail.record?.customUnits || "")}" placeholder="${escapeHtml(String(detail.summary.totalUnits || ""))}" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "customUnits", this.value)' style="width:96px"></td>
+      <td class="l"><input type="text" value="${escapeHtml(detail.record?.communityAddress || "")}" placeholder="Community address" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "communityAddress", this.value)' style="width:100%"></td>
+      <td class="l"><input type="text" value="${escapeHtml(detail.record?.investorName || "")}" placeholder="Investor / ownership group" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorName", this.value)' style="width:100%"></td>
+      <td class="l"><textarea rows="2" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorEmailContacts", this.value)' style="width:100%;min-height:58px">${escapeHtml(contactText)}</textarea></td>
       <td>${plans}</td>
-      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},1)">Open Setup</button></td>
+      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},1)">Edit Floor Plans</button></td>
     </tr>`;
   }).join("");
   const bodyHtml = `<div class="tbl-wrap">
-    <div class="tbl-header"><h2>Portfolio setup roster</h2><p>Select an individual community when you want to edit setup details. Portfolio mode keeps the roster and saved metadata in one place.</p></div>
+    <div class="tbl-header"><h2>Portfolio setup roster</h2><p>Core setup fields are editable directly here. Use the action button when you need the full community setup editor for floor plans, photos, or staffing.</p></div>
     <table>
-      <thead><tr><th class="l">Community</th><th>Units</th><th class="l">Address</th><th>Contacts</th><th>Floor Plans</th><th>Action</th></tr></thead>
+      <thead><tr><th class="l">Community</th><th>Units</th><th class="l">Address</th><th class="l">Investor</th><th class="l">Report Contacts</th><th>Floor Plans</th><th>Action</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -5541,52 +5546,58 @@ function renderPortfolioScopedSetupTab() {
 
 function renderPortfolioScopedOverviewTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const selectedMonth = getSelectedDashboardMonthIndex();
   const cardsHtml = `<div class="grid-4">
     ${statBox("Physical Occupancy", `${getSummaryOccPct(aggregate).toFixed(1)}%`, `${aggregate.occupied.toLocaleString()} occupied units`, "#4493f8")}
     ${statBox("Leased Occupancy", `${getSummaryLeasedPct(aggregate).toFixed(1)}%`, `${aggregate.leased.toLocaleString()} leased units`, "#a371f7")}
     ${statBox("Net Absorption", formatSignedDisplay(aggregate.monthAbsorption ?? 0), `${Math.round(aggregate.moveIns ?? 0)} move-ins · ${Math.round(aggregate.moveOuts ?? 0)} move-outs`, "#3fb950")}
     ${statBox("Budget Gap Units", Math.max(aggregate.occGapUnits ?? 0, 0), `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities on budget pace`, "#d29922")}
   </div>`;
-  const bodyHtml = `<div class="portfolio-list-card">
-    <h3>Communities needing attention</h3>
-    <p>Highest occupancy and pacing pressure inside the selected portfolio month.</p>
-    <div class="portfolio-rank-list">${details
-      .slice()
-      .sort((a, b) => (Number(b.summary?.occGapUnits ?? 0) + Number(b.summary?.leasedGapUnits ?? 0)) - (Number(a.summary?.occGapUnits ?? 0) + Number(a.summary?.leasedGapUnits ?? 0)))
-      .slice(0, 6)
-      .map(detail => `<div class="portfolio-rank-item">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-          <div class="meta">${getSummaryOccPct(detail.summary).toFixed(1)}% occupied · ${getSummaryLeasedPct(detail.summary).toFixed(1)}% leased</div>
-        </div>
-        <div style="text-align:right">
-          <div class="metric" style="color:#f85149">${Math.max(detail.summary.occGapUnits ?? 0, 0)}</div>
-          <div class="metric-sub">occ gap units</div>
-        </div>
-      </div>`).join("")}</div>
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Portfolio occupancy editor</h2><p>Edit the selected month’s occupancy inputs directly here while keeping the whole portfolio in view.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>Physical %</th><th>Leased %</th><th>Occupied</th><th>Leased</th><th>Budget Occ %</th><th>Move-Ins</th><th>Move-Outs</th></tr></thead>
+      <tbody>${details.map(detail => {
+        const entry = detail.record?.monthlyData?.[selectedMonth] ?? {};
+        return `<tr>
+          <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+          <td>${getSummaryOccPct(detail.summary).toFixed(1)}%</td>
+          <td>${getSummaryLeasedPct(detail.summary).toFixed(1)}%</td>
+          <td><input type="number" min="0" value="${Math.round(detail.summary?.occupied ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "occupied", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${Math.round(detail.summary?.leased ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "leased", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" max="100" step="0.1" value="${escapeHtml(String(entry.budgetOcc ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "budget_occ", this.value)' style="width:92px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.moveIns ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "move_ins", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.moveOuts ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "move_outs", this.value)' style="width:88px"></td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>
   </div>`;
   return renderPortfolioScopePanel("Portfolio Overview", "Aggregate operating position for the selected month across all saved communities.", cardsHtml, bodyHtml);
 }
 
 function renderPortfolioScopedTrafficTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const selectedMonth = getSelectedDashboardMonthIndex();
   const cardsHtml = `<div class="grid-4">
     ${statBox("Guest Cards", Math.round(aggregate.guestCards ?? 0), "Month-to-date portfolio lead volume", "#4493f8")}
     ${statBox("Tours", Math.round(aggregate.tours ?? 0), `${(aggregate.tourToAppPct ?? 0).toFixed(1)}% tour to app`, "#a371f7")}
     ${statBox("Applications", Math.round(aggregate.applications ?? 0), `${Math.round(aggregate.applicationsApproved ?? 0)} approved applications`, "#d29922")}
     ${statBox("Tour to Lease", `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`, "Weighted conversion across the portfolio scope", "#3fb950")}
   </div>`;
-  const rows = details.map(detail => `<tr>
-    <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
-    <td>${Math.round(detail.summary.guestCards ?? 0)}</td>
-    <td>${Math.round(detail.summary.tours ?? 0)}</td>
-    <td>${Math.round(detail.summary.applications ?? 0)}</td>
-    <td>${Math.round(detail.summary.applicationsApproved ?? 0)}</td>
-    <td>${(detail.summary.tourToLeasePct ?? 0).toFixed(1)}%</td>
-    <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},3)">Open Funnel</button></td>
-  </tr>`).join("");
+  const rows = details.map(detail => {
+    const entry = detail.record?.monthlyData?.[selectedMonth] ?? {};
+    return `<tr>
+      <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+      <td><input type="number" min="0" value="${Math.round(detail.summary.guestCards ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "guest_cards", this.value)' style="width:88px"></td>
+      <td><input type="number" min="0" value="${Math.round(detail.summary.tours ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "tours", this.value)' style="width:88px"></td>
+      <td><input type="number" min="0" value="${Math.round(detail.summary.applications ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "applications", this.value)' style="width:88px"></td>
+      <td><input type="number" min="0" value="${Math.round(detail.summary.applicationsApproved ?? 0)}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "applications_approved", this.value)' style="width:88px"></td>
+      <td>${(detail.summary.tourToLeasePct ?? 0).toFixed(1)}%</td>
+      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},3)">Open Funnel</button></td>
+    </tr>`;
+  }).join("");
   const bodyHtml = `<div class="tbl-wrap">
-    <div class="tbl-header"><h2>Portfolio funnel by community</h2><p>Month-selected funnel totals with historical fallback on tour-to-lease where current-month tours are not yet loaded.</p></div>
+    <div class="tbl-header"><h2>Portfolio funnel by community</h2><p>Traffic and funnel fields are editable directly here for the selected month. Tour-to-lease continues to use the current month or historical fallback logic.</p></div>
     <table>
       <thead><tr><th class="l">Community</th><th>Leads</th><th>Tours</th><th>Applications</th><th>Approved</th><th>Tour to Lease</th><th>Action</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -5597,29 +5608,30 @@ function renderPortfolioScopedTrafficTab() {
 
 function renderPortfolioScopedRenewalsTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const selectedMonth = getSelectedDashboardMonthIndex();
   const cardsHtml = `<div class="grid-4">
     ${statBox("Expirations", Math.round(aggregate.renewalExpirations ?? 0), "Current month renewal expirations in scope", "#4493f8")}
     ${statBox("Renewals Signed", Math.round(aggregate.renewalsSigned ?? 0), `${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}% retention`, "#3fb950")}
     ${statBox("Undecided / M2M", Math.round(aggregate.renewalUndecided ?? 0), "At-risk renewals still in play", "#d29922")}
     ${statBox("Projected Attrition", Math.round(aggregate.renewalProjectedAttrition ?? 0), "Renewal-driven attrition risk", "#f97316")}
   </div>`;
-  const bodyHtml = `<div class="portfolio-list-card">
-    <h3>Renewal risk watchlist</h3>
-    <p>Communities with the most unresolved renewal exposure in the selected month.</p>
-    <div class="portfolio-rank-list">${details
-      .slice()
-      .sort((a, b) => Number(b.summary?.renewalUndecided ?? 0) - Number(a.summary?.renewalUndecided ?? 0))
-      .slice(0, 6)
-      .map(detail => `<div class="portfolio-rank-item">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-          <div class="meta">${Math.round(detail.summary.renewalExpirations ?? 0)} expirations · ${(detail.summary.renewalRetentionRate ?? 0).toFixed(1)}% retention</div>
-        </div>
-        <div style="text-align:right">
-          <div class="metric" style="color:#d29922">${Math.round(detail.summary.renewalUndecided ?? 0)}</div>
-          <div class="metric-sub">undecided</div>
-        </div>
-      </div>`).join("")}</div>
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Portfolio renewal editor</h2><p>Update renewal counts for the selected month without leaving the portfolio rollup.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>Expirations</th><th>Signed</th><th>NTVs</th><th>Undecided / M2M</th><th>Early Term.</th><th>Retention %</th></tr></thead>
+      <tbody>${details.map(detail => {
+        const entry = detail.record?.monthlyData?.[selectedMonth] ?? {};
+        return `<tr>
+          <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.renewalExpirations ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "renewal_expirations", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.renewalSigned ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "renewals_signed", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.renewalNTV ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "renewal_ntvs", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.renewalUndecided ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "renewal_undecided", this.value)' style="width:88px"></td>
+          <td><input type="number" min="0" value="${escapeHtml(String(entry.renewalEarlyTermination ?? ""))}" onchange='updatePortfolioCommunityMonthField(${JSON.stringify(detail.name)}, ${selectedMonth}, "renewal_early_termination", this.value)' style="width:88px"></td>
+          <td>${(detail.summary.renewalRetentionRate ?? 0).toFixed(1)}%</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>
   </div>`;
   return renderPortfolioScopePanel("Portfolio Renewals", "Renewal health across the selected month and community set.", cardsHtml, bodyHtml);
 }
@@ -5633,15 +5645,15 @@ function renderPortfolioScopedReputationTab() {
     ${statBox("Communities with ORA", details.filter(detail => Number(detail.summary?.oraScore ?? 0) > 0).length, "Saved reputation data currently in scope", "#d29922")}
   </div>`;
   const bodyHtml = `<div class="tbl-wrap">
-    <div class="tbl-header"><h2>Community reputation rollup</h2><p>Saved reputation metrics by community for the selected month scope.</p></div>
+    <div class="tbl-header"><h2>Community reputation rollup</h2><p>Reputation fields are editable directly in portfolio mode.</p></div>
     <table>
       <thead><tr><th class="l">Community</th><th>ORA</th><th>Quarterly Google</th><th>Lifetime Google</th><th>Action</th></tr></thead>
       <tbody>${details.map(detail => `<tr>
         <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
-        <td>${Number(detail.summary?.oraScore ?? 0) > 0 ? Number(detail.summary.oraScore).toFixed(1) : "—"}</td>
-        <td>${Number(detail.summary?.googleQuarterlyRating ?? 0) > 0 ? Number(detail.summary.googleQuarterlyRating).toFixed(2) : "—"}</td>
-        <td>${Number(detail.summary?.googleLifetimeRating ?? 0) > 0 ? Number(detail.summary.googleLifetimeRating).toFixed(2) : "—"}</td>
-        <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},5)">Open Reputation</button></td>
+        <td><input type="number" min="0" max="100" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.oraScore || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "oraScore", this.value)' style="width:88px"></td>
+        <td><input type="number" min="0" max="5" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.googleQuarterlyRating || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "googleQuarterlyRating", this.value)' style="width:88px"></td>
+        <td><input type="number" min="0" max="5" step="0.1" value="${escapeHtml(String(detail.record?.reputationData?.googleLifetimeRating || ""))}" onchange='updatePortfolioCommunityReputationField(${JSON.stringify(detail.name)}, "googleLifetimeRating", this.value)' style="width:88px"></td>
+        <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},5)">Open Full Reputation</button></td>
       </tr>`).join("")}</tbody>
     </table>
   </div>`;
@@ -10850,6 +10862,71 @@ function getRowTargetMonth(row) {
 function getPropertyRecordForApply(propName) {
   if (propName === getProp().name) return getCurrentCommunityRecord();
   return normalizeSavedCommunityRecord(propName, savedData[propName]);
+}
+
+function persistPortfolioCommunityRecord(propName, record) {
+  const normalized = normalizeSavedCommunityRecord(propName, record);
+  savedData[propName] = normalized;
+  if (propName === getProp().name) {
+    loadPropertyData(propName);
+  }
+  const savedResult = persistSaved();
+  if (savedResult?.ok === false) {
+    alert(`⚠️ ${savedResult.message}`);
+    return false;
+  }
+  renderPropGrid();
+  renderTab();
+  return true;
+}
+
+function parseInvestorEmailContactsText(value) {
+  return String(value ?? "")
+    .split(/[\n,;]+/)
+    .map(part => String(part ?? "").trim())
+    .filter(Boolean)
+    .map(email => ({ name: "", email }));
+}
+
+function updatePortfolioCommunityField(propName, field, value) {
+  const record = getPropertyRecordForApply(propName);
+  if (!record) return;
+  if (field === "customUnits") {
+    const numeric = Number(value);
+    record.customUnits = Number.isFinite(numeric) && numeric > 0 ? numeric : "";
+  } else if (field === "communityAddress") {
+    record.communityAddress = String(value ?? "").trim();
+    record.communityGeo = null;
+  } else if (field === "investorName") {
+    record.investorName = String(value ?? "").trim();
+  } else if (field === "investorEmailContacts") {
+    record.investorEmailContacts = parseInvestorEmailContactsText(value);
+  } else {
+    return;
+  }
+  persistPortfolioCommunityRecord(propName, record);
+}
+
+function updatePortfolioCommunityMonthField(propName, monthIdx, targetKey, value) {
+  const record = getPropertyRecordForApply(propName);
+  if (!record) return;
+  const normalizedMonth = Math.max(0, Math.min(11, Number(monthIdx) || 0));
+  const raw = String(value ?? "").trim();
+  const numericValue = raw === "" ? 0 : Number(raw);
+  if (!Number.isFinite(numericValue)) return;
+  applyValueToRecord(record, normalizedMonth, targetKey, numericValue);
+  persistPortfolioCommunityRecord(propName, record);
+}
+
+function updatePortfolioCommunityReputationField(propName, field, value) {
+  const record = getPropertyRecordForApply(propName);
+  if (!record) return;
+  const numericValue = Number(value) || 0;
+  record.reputationData = normalizeReputationData({
+    ...record.reputationData,
+    [field]: numericValue
+  });
+  persistPortfolioCommunityRecord(propName, record);
 }
 
 function getForcedImportTarget(options = {}) {
