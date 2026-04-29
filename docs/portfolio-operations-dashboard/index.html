@@ -10378,6 +10378,13 @@ function renderPortfolioHomeTab() {
         sub: `${Math.max(aggregate.occGapUnits ?? 0, 0)} unit${Math.abs(aggregate.occGapUnits ?? 0) === 1 ? "" : "s"} below saved budget`
       },
       {
+        label: "Avg Occ Variance to Budget",
+        value: formatSignedDisplay(aggregate.avgOccGapPts ?? 0, 1, " pts"),
+        sub: (aggregate.trackedBudgetOccCount ?? 0) > 0
+          ? `Average physical occupancy variance across ${aggregate.trackedBudgetOccCount} budgeted communit${aggregate.trackedBudgetOccCount === 1 ? "y" : "ies"}`
+          : "No saved occupancy budgets in scope yet"
+      },
+      {
         label: "Leased Occupancy",
         value: `${getSummaryLeasedPct(aggregate).toFixed(1)}%`,
         sub: `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} unit${Math.abs(aggregate.leasedGapUnits ?? 0) === 1 ? "" : "s"} behind leased target`
