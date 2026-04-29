@@ -13123,12 +13123,15 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
             : Object.values(dailyLeadSources).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0))
       )
     : 0;
-  const dailyApplications = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.applications) || 0) : 0;
   const dailyApprovals = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.applicationsApproved) || 0) : 0;
   const dailyDenied = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.denied) || 0) : 0;
   const dailyCancelled = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.cancelled) || 0) : 0;
+  const dailyPendingDecisionRaw = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.pendingDecision) || 0) : 0;
+  const dailyApplicationsRaw = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.applications) || 0) : 0;
+  const inferredDailyApplications = dailyApprovals + dailyDenied + dailyCancelled + dailyPendingDecisionRaw;
+  const dailyApplications = hasDailyBoxScore ? Math.max(dailyApplicationsRaw, inferredDailyApplications) : 0;
   const dailyPendingDecision = hasDailyBoxScore
-    ? Math.max(0, Number(dailyBoxScore.pendingDecision) || Math.max(dailyApplications - dailyApprovals - dailyDenied - dailyCancelled, 0))
+    ? Math.max(dailyPendingDecisionRaw, Math.max(dailyApplications - dailyApprovals - dailyDenied - dailyCancelled, 0))
     : 0;
   const dailyTraffic = {
     walkIn: dailyLeadSources.walkIn,
