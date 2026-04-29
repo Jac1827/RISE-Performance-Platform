@@ -7047,11 +7047,13 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
   dailySnapshot.firstVisitsTours = extractMetricFromRowsOrText(rows, rawText, ["first visits/tours", "first visits", "first visit tours"], ["First Visits/Tours"]) ?? dailySnapshot.firstVisitsTours;
   dailySnapshot.guestCards = extractMetricFromRowsOrText(rows, rawText, ["guest cards", "guest card", "total leads", "leads"], ["Guest Cards"]) ?? dailySnapshot.guestCards;
   dailySnapshot.tours = extractMetricFromRowsOrText(rows, rawText, ["tours", "tour"], ["Tours"]) ?? dailySnapshot.tours;
-  dailySnapshot.applications = mergePreferredBoxScoreCount(dailySnapshot.applications, extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]));
-  dailySnapshot.applicationsApproved = mergePreferredBoxScoreCount(dailySnapshot.applicationsApproved, extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]));
-  dailySnapshot.denied = mergePreferredBoxScoreCount(dailySnapshot.denied, extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]));
-  dailySnapshot.cancelled = mergePreferredBoxScoreCount(dailySnapshot.cancelled, extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]));
-  dailySnapshot.pendingDecision = mergePreferredBoxScoreCount(dailySnapshot.pendingDecision, extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]));
+  if (!leadConversionTotals) {
+    dailySnapshot.applications = mergePreferredBoxScoreCount(dailySnapshot.applications, extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]));
+    dailySnapshot.applicationsApproved = mergePreferredBoxScoreCount(dailySnapshot.applicationsApproved, extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]));
+    dailySnapshot.denied = mergePreferredBoxScoreCount(dailySnapshot.denied, extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]));
+    dailySnapshot.cancelled = mergePreferredBoxScoreCount(dailySnapshot.cancelled, extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]));
+    dailySnapshot.pendingDecision = mergePreferredBoxScoreCount(dailySnapshot.pendingDecision, extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]));
+  }
   dailySnapshot.leasesSigned = mergePreferredBoxScoreCount(dailySnapshot.leasesSigned, extractMetricFromRowsOrText(rows, rawText, ["leases signed", "signed leases", "leases"], ["Leases Signed"]));
   dailySnapshot.moveIns = mergePreferredBoxScoreCount(dailySnapshot.moveIns, extractMetricFromRowsOrText(rows, rawText, ["move-ins", "move ins"], ["Move-Ins"]));
   dailySnapshot.moveOuts = mergePreferredBoxScoreCount(dailySnapshot.moveOuts, extractMetricFromRowsOrText(rows, rawText, ["move-outs", "move outs"], ["Move-Outs"]));
@@ -13233,7 +13235,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const dailyCancelled = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.cancelled) || 0) : 0;
   const dailyPendingDecisionRaw = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.pendingDecision) || 0) : 0;
   const dailyApplicationsRaw = hasDailyBoxScore ? Math.max(0, Number(dailyBoxScore.applications) || 0) : 0;
-  const inferredDailyApplications = dailyApprovals + dailyDenied + dailyCancelled + dailyPendingDecisionRaw;
+  const inferredDailyApplications = dailyApprovals + dailyDenied + dailyCancelled;
   const dailyApplications = hasDailyBoxScore ? Math.max(dailyApplicationsRaw, inferredDailyApplications) : 0;
   const dailyPendingDecision = hasDailyBoxScore
     ? Math.max(dailyPendingDecisionRaw, Math.max(dailyApplications - dailyApprovals - dailyDenied - dailyCancelled, 0))
