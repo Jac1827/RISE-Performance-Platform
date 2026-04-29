@@ -3106,7 +3106,7 @@ function renderPropGrid() {
       <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
         <div class="workspace-snapshot-label">Tour To Lease</div>
         <div class="workspace-snapshot-value">${tourToLeasePct.toFixed(1)}%</div>
-        <div class="workspace-snapshot-sub">${isPortfolioWorkspaceSelected() ? "Weighted from the selected portfolio scope" : "Selected month or historical funnel average"}</div>
+        <div class="workspace-snapshot-sub">${isPortfolioWorkspaceSelected() ? "Average across the selected portfolio scope" : "Selected month or historical funnel average"}</div>
         <div class="workspace-snapshot-link">Inspect funnel conversion</div>
       </button>`;
   }
@@ -3380,10 +3380,14 @@ function aggregateCommunitySummaries(summaries) {
     acc.previousApplicationsDenied += summary.previousApplicationsDenied || 0;
     acc.leasesSigned += summary.leasesSigned;
     acc.previousLeasesSigned += summary.previousLeasesSigned;
-    acc.tourToLeasePctWeightTours += summary.tours;
-    acc.tourToLeasePctWeightLeases += summary.leasesSigned;
-    acc.previousTourToLeasePctWeightTours += summary.previousTours;
-    acc.previousTourToLeasePctWeightLeases += summary.previousLeasesSigned;
+    if (Number.isFinite(Number(summary.tourToLeasePct))) {
+      acc.tourToLeasePctTotal += Number(summary.tourToLeasePct);
+      acc.tourToLeasePctCount += 1;
+    }
+    if (Number.isFinite(Number(summary.previousTourToLeasePct))) {
+      acc.previousTourToLeasePctTotal += Number(summary.previousTourToLeasePct);
+      acc.previousTourToLeasePctCount += 1;
+    }
     acc.moveOuts += summary.moveOuts;
     acc.moveIns += summary.moveIns;
     acc.previousMoveOuts += summary.previousMoveOuts;
@@ -3460,10 +3464,10 @@ function aggregateCommunitySummaries(summaries) {
     previousApplicationsDenied: 0,
     leasesSigned: 0,
     previousLeasesSigned: 0,
-    tourToLeasePctWeightTours: 0,
-    tourToLeasePctWeightLeases: 0,
-    previousTourToLeasePctWeightTours: 0,
-    previousTourToLeasePctWeightLeases: 0,
+    tourToLeasePctTotal: 0,
+    tourToLeasePctCount: 0,
+    previousTourToLeasePctTotal: 0,
+    previousTourToLeasePctCount: 0,
     moveOuts: 0,
     moveIns: 0,
     previousMoveOuts: 0,
@@ -3552,8 +3556,8 @@ function aggregateCommunitySummaries(summaries) {
     previousLeadToLeasePct: totals.previousGuestCards > 0 ? (totals.previousLeasesSigned / totals.previousGuestCards) * 100 : 0,
     tourToAppPct: totals.tours > 0 ? (totals.applications / totals.tours) * 100 : 0,
     previousTourToAppPct: totals.previousTours > 0 ? (totals.previousApplications / totals.previousTours) * 100 : 0,
-    tourToLeasePct: totals.tourToLeasePctWeightTours > 0 ? (totals.tourToLeasePctWeightLeases / totals.tourToLeasePctWeightTours) * 100 : 0,
-    previousTourToLeasePct: totals.previousTourToLeasePctWeightTours > 0 ? (totals.previousTourToLeasePctWeightLeases / totals.previousTourToLeasePctWeightTours) * 100 : 0,
+    tourToLeasePct: totals.tourToLeasePctCount > 0 ? totals.tourToLeasePctTotal / totals.tourToLeasePctCount : 0,
+    previousTourToLeasePct: totals.previousTourToLeasePctCount > 0 ? totals.previousTourToLeasePctTotal / totals.previousTourToLeasePctCount : 0,
     applicationApprovalPct: totals.applications > 0 ? (totals.applicationsApproved / totals.applications) * 100 : 0,
     previousApplicationApprovalPct: totals.previousApplications > 0 ? (totals.previousApplicationsApproved / totals.previousApplications) * 100 : 0,
     applicationDenialPct: totals.applications > 0 ? (totals.applicationsDenied / totals.applications) * 100 : 0,
@@ -5582,7 +5586,7 @@ function renderPortfolioScopedTrafficTab() {
     ${statBox("Guest Cards", Math.round(aggregate.guestCards ?? 0), "Month-to-date portfolio lead volume", "#4493f8")}
     ${statBox("Tours", Math.round(aggregate.tours ?? 0), `${(aggregate.tourToAppPct ?? 0).toFixed(1)}% tour to app`, "#a371f7")}
     ${statBox("Applications", Math.round(aggregate.applications ?? 0), `${Math.round(aggregate.applicationsApproved ?? 0)} approved applications`, "#d29922")}
-    ${statBox("Tour to Lease", `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`, "Weighted conversion across the portfolio scope", "#3fb950")}
+    ${statBox("Tour to Lease", `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`, "Average conversion across included communities", "#3fb950")}
   </div>`;
   const rows = details.map(detail => {
     const entry = detail.record?.monthlyData?.[selectedMonth] ?? {};
