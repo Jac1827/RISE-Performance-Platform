@@ -11391,16 +11391,18 @@ function buildWeeklyExecutiveNarrative(report) {
   const leasedPct = getSummaryLeasedPct(aggregate);
   const communityCount = report.details.length;
   const investorCount = report.investorGroups.length;
-  const firstParagraph = `${report.scopeLabel} is sitting at ${occPct.toFixed(1)}% physical occupancy and ${leasedPct.toFixed(1)}% leased occupancy for ${report.currentMonthLabel}. Approved applications are at ${(aggregate.applicationsApproved ?? 0).toFixed(0)} month to date, net absorption is ${formatSignedDisplay(aggregate.monthAbsorption)} units, renewal retention is ${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%, and ORA is ${(aggregate.oraScore ?? 0).toFixed(1)} across ${communityCount} communit${communityCount === 1 ? "y" : "ies"}.`;
+  const firstParagraph = `${report.scopeLabel} is sitting at ${occPct.toFixed(1)}% physical occupancy and ${leasedPct.toFixed(1)}% leased occupancy for ${report.currentMonthLabel}. Applications received are at ${(aggregate.applications ?? 0).toFixed(0)} month to date, ${(aggregate.applicationsApproved ?? 0).toFixed(0)} have been approved for an ${(aggregate.applicationApprovalPct ?? 0).toFixed(1)}% approval rate, net absorption is ${formatSignedDisplay(aggregate.monthAbsorption)} units, renewal retention is ${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%, and ORA is ${(aggregate.oraScore ?? 0).toFixed(1)} across ${communityCount} communit${communityCount === 1 ? "y" : "ies"}.`;
   let secondParagraph = `Saved-budget tracking shows ${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities currently on track to occupancy budget, with ${Math.max(aggregate.occGapUnits ?? 0, 0)} units still below current physical occupancy targets.`;
   if (previousAggregate) {
     const occDelta = occPct - getSummaryOccPct(previousAggregate);
+    const totalAppsDelta = (aggregate.applications ?? 0) - (previousAggregate.applications ?? 0);
     const appDelta = (aggregate.applicationsApproved ?? 0) - (previousAggregate.applicationsApproved ?? 0);
+    const approvalRateDelta = (aggregate.applicationApprovalPct ?? 0) - (previousAggregate.applicationApprovalPct ?? 0);
     const absorptionDelta = (aggregate.monthAbsorption ?? 0) - (previousAggregate.monthAbsorption ?? 0);
     const baselineDate = report.previousGeneratedAt
       ? new Date(report.previousGeneratedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
       : "the prior weekly baseline";
-    secondParagraph = `Compared with the weekly baseline from ${baselineDate}, physical occupancy is ${occDelta >= 0 ? "up" : "down"} ${Math.abs(occDelta).toFixed(1)} points, approved applications are ${appDelta >= 0 ? "up" : "down"} ${Math.abs(appDelta).toFixed(0)}, and net absorption has moved ${absorptionDelta >= 0 ? "up" : "down"} ${Math.abs(absorptionDelta).toFixed(0)} units. ${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities are currently on track to occupancy budget.`;
+    secondParagraph = `Compared with the weekly baseline from ${baselineDate}, physical occupancy is ${occDelta >= 0 ? "up" : "down"} ${Math.abs(occDelta).toFixed(1)} points, total applications are ${totalAppsDelta >= 0 ? "up" : "down"} ${Math.abs(totalAppsDelta).toFixed(0)}, approved applications are ${appDelta >= 0 ? "up" : "down"} ${Math.abs(appDelta).toFixed(0)}, the approval rate is ${approvalRateDelta >= 0 ? "up" : "down"} ${Math.abs(approvalRateDelta).toFixed(1)} points, and net absorption has moved ${absorptionDelta >= 0 ? "up" : "down"} ${Math.abs(absorptionDelta).toFixed(0)} units. ${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities are currently on track to occupancy budget.`;
   }
   return [firstParagraph, secondParagraph];
 }
@@ -11424,9 +11426,19 @@ function buildWeeklyExecutiveMetricCards(report) {
       sub: previousAggregate ? `${formatPortfolioTrendValue(leasedPct, previousLeasedPct, "point").replace("MoM", "vs prior weekly")}` : `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} units behind leased budget`
     },
     {
+      label: "Applications Received",
+      value: `${Math.round(aggregate.applications ?? 0)}`,
+      sub: previousAggregate ? `${formatPortfolioTrendValue(aggregate.applications ?? 0, previousAggregate.applications ?? 0, "count_pct").replace("MoM", "vs prior weekly")}` : formatPortfolioTrendValue(aggregate.applications ?? 0, aggregate.previousApplications ?? 0, "count_pct")
+    },
+    {
       label: "Approved Applications",
       value: `${Math.round(aggregate.applicationsApproved ?? 0)}`,
       sub: previousAggregate ? `${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, previousAggregate.applicationsApproved ?? 0, "count_pct").replace("MoM", "vs prior weekly")}` : formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct")
+    },
+    {
+      label: "Approval Rate",
+      value: `${(aggregate.applicationApprovalPct ?? 0).toFixed(1)}%`,
+      sub: previousAggregate ? `${formatPortfolioTrendValue(aggregate.applicationApprovalPct ?? 0, previousAggregate.applicationApprovalPct ?? 0, "point").replace("MoM", "vs prior weekly")}` : formatPortfolioTrendValue(aggregate.applicationApprovalPct ?? 0, aggregate.previousApplicationApprovalPct ?? 0, "point")
     },
     {
       label: "Net Absorption",
@@ -13977,7 +13989,7 @@ function openWeeklyExecutiveReport(printImmediately = false) {
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px">Application Leaders</div>
       ${applicationLeaders.map(detail => `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:1.55;margin-bottom:8px">
         <span>${escapeHtml(detail.name)}</span>
-        <strong style="color:#1d4ed8">${Math.round(detail.summary?.applicationsApproved ?? 0)} approved</strong>
+        <strong style="color:#1d4ed8">${Math.round(detail.summary?.applications ?? 0)} apps · ${Math.round(detail.summary?.applicationsApproved ?? 0)} approved · ${(detail.summary?.applicationApprovalPct ?? 0).toFixed(1)}%</strong>
       </div>`).join("") || `<div style="font-size:12px;color:#6b7280">No approved applications are saved yet.</div>`}
     </div>
   </div>`;
