@@ -7918,8 +7918,87 @@ function findMarketSurveyFloorPlanHeader(rows) {
   return null;
 }
 
-function extractMarketSurveyFloorPlanRates(workbook) {
+function findFloorPlanDataHeader(rows = []) {
+  for (let rowIdx = 0; rowIdx < Math.min(rows.length, 20); rowIdx += 1) {
+    const row = Array.isArray(rows[rowIdx]) ? rows[rowIdx].map(cell => String(cell ?? "").replace(/\s+/g, " ").trim().toLowerCase()) : [];
+    const propertyIdx = row.findIndex(cell => cell === "property");
+    const planIdx = row.findIndex(cell => cell === "floor plan");
+    const bedsIdx = row.findIndex(cell => cell === "bed count");
+    const bathsIdx = row.findIndex(cell => cell === "bath count");
+    const sqftIdx = row.findIndex(cell => cell === "sq ft" || cell === "sqft");
+    const availableRentIdx = row.findIndex(cell => cell.includes("available asking rent"));
+    const leasedRentIdx = row.findIndex(cell => cell.includes("leased asking rent"));
+    if (propertyIdx !== -1 && planIdx !== -1 && (availableRentIdx !== -1 || leasedRentIdx !== -1)) {
+      return {
+        rowIdx,
+        headerMap: {
+          property: propertyIdx,
+          name: planIdx,
+          beds: bedsIdx !== -1 ? bedsIdx : null,
+          baths: bathsIdx !== -1 ? bathsIdx : null,
+          sqft: sqftIdx !== -1 ? sqftIdx : null,
+          availableMarketRent: availableRentIdx !== -1 ? availableRentIdx : null,
+          leasedMarketRent: leasedRentIdx !== -1 ? leasedRentIdx : null
+        }
+      };
+    }
+  }
+  return null;
+}
+
+function extractFloorPlanRatesFromFloorPlanDataSheet(rows = [], targetCommunity = "") {
+  const headerInfo = findFloorPlanDataHeader(rows);
+  if (!headerInfo) return [];
+  const normalizedTargetCommunity = normalizeCommunityLookupName(targetCommunity);
+  const extracted = [];
+  let blankRun = 0;
+  for (let idx = headerInfo.rowIdx + 1; idx < rows.length; idx += 1) {
+    const row = rows[idx] ?? [];
+    const propertyName = String(row[headerInfo.headerMap.property] ?? "").trim();
+    const planName = String(row[headerInfo.headerMap.name] ?? "").trim();
+    const availableMarketRent = headerInfo.headerMap.availableMarketRent != null
+      ? normalizeWorkbookNumber(row[headerInfo.headerMap.availableMarketRent])
+      : null;
+    const leasedMarketRent = headerInfo.headerMap.leasedMarketRent != null
+      ? normalizeWorkbookNumber(row[headerInfo.headerMap.leasedMarketRent])
+      : null;
+    const sqft = headerInfo.headerMap.sqft != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.sqft]) : null;
+    const beds = headerInfo.headerMap.beds != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.beds]) : null;
+    const baths = headerInfo.headerMap.baths != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.baths]) : null;
+    const marketRent = availableMarketRent || leasedMarketRent || null;
+    const isBlank = !propertyName && !planName && !marketRent && !sqft && !beds && !baths;
+    if (isBlank) {
+      blankRun += 1;
+      if (blankRun >= 4 && extracted.length > 0) break;
+      continue;
+    }
+    blankRun = 0;
+    if (!propertyName || !planName) continue;
+    if (normalizedTargetCommunity) {
+      const normalizedProperty = normalizeCommunityLookupName(matchPropertyName(propertyName, { fallbackToCurrent: false }) || propertyName);
+      if (!normalizedProperty || normalizedProperty !== normalizedTargetCommunity) continue;
+    }
+    extracted.push({
+      id: makeFloorPlanId(),
+      name: planName,
+      marketRent,
+      sqft: sqft || null,
+      beds: beds || null,
+      baths: baths || null,
+      sourceSheet: "Floor Plan Data"
+    });
+  }
+  return extracted;
+}
+
+function extractMarketSurveyFloorPlanRates(workbook, targetCommunity = "") {
   if (!workbook || typeof XLSX === "undefined") return [];
+  const floorPlanSheetName = workbook.SheetNames.find(sheetName => /^Floor Plan Data$/i.test(String(sheetName ?? "").trim()));
+  if (floorPlanSheetName) {
+    const floorPlanRows = XLSX.utils.sheet_to_json(workbook.Sheets?.[floorPlanSheetName], { header: 1, defval: "", raw: false });
+    const targetedRows = extractFloorPlanRatesFromFloorPlanDataSheet(floorPlanRows, targetCommunity);
+    if (targetedRows.length > 0) return targetedRows;
+  }
   const rows = [];
   workbook.SheetNames.forEach(sheetName => {
     const sheet = workbook.Sheets?.[sheetName];
@@ -8002,7 +8081,7 @@ function extractMarketSurveyWorkbookData(workbook, fileName = "") {
   const compAverageExposurePct = getMarketValue(/Exposure %/i, compAverageIdx, "percent");
   const concessionRow = findWorksheetRow(marketRows, /^Concession Details$/i);
   const surveyComps = extractMarketSurveyCompRows(marketRows, marketHeaderRow, subjectIdx, compAverageIdx);
-  const floorPlanRates = extractMarketSurveyFloorPlanRates(workbook);
+  const floorPlanRates = extractMarketSurveyFloorPlanRates(workbook, matchedCommunity);
   const primaryCompSet = buildMarketSurveyCompSet(marketHeaderRow, subjectIdx, compAverageIdx);
   const marketConcessions = buildMarketSurveyConcessionSummary(concessionRow, subjectIdx, compAverageIdx);
   const compNarrative = [
