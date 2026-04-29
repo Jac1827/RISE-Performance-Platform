@@ -87,24 +87,29 @@
   .workspace-pill.is-saved { color:#27500a; background:#edf5e4; border-color:#c6ddb1; }
   .workspace-subline { font-size:0.74rem; color:var(--muted); margin-top:6px; line-height:1.5; }
   .workspace-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .workspace-community-field { grid-column:1 / -1; }
   .workspace-field { display:grid; gap:6px; background:var(--bg3); border:0.5px solid var(--border); border-radius:12px; padding:12px; }
   .workspace-field span { font-size:0.66rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); }
   .workspace-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
   .workspace-community-count { font-size:0.72rem; color:var(--muted); }
-  .prop-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
-  .prop-btn { width:100%; background: var(--bg3); border: 0.5px solid var(--border); color: var(--text); font-size: 0.75rem; font-weight: 500; padding: 12px 14px; border-radius: 12px; cursor: pointer; transition: all 0.15s; position: relative; font-family: inherit; text-align:left; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-  .prop-btn:hover { background: #ebe8df; border-color:#cfcabf; }
-  .prop-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow:0 8px 18px rgba(27,58,75,0.16); }
-  .prop-btn-main { display:grid; gap:4px; min-width:0; }
-  .prop-btn-name { font-size:0.82rem; font-weight:700; line-height:1.25; }
-  .prop-btn-meta { font-size:0.66rem; color:var(--muted); line-height:1.35; }
-  .prop-btn.active .prop-btn-meta { color:rgba(255,255,255,0.8); }
-  .prop-btn-status { font-size:0.62rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#27500a; background:#edf5e4; border:1px solid #c6ddb1; border-radius:999px; padding:5px 8px; white-space:nowrap; }
-  .prop-btn-status.draft { color:var(--muted); background:#f7f6f2; border-color:var(--border); }
-  .prop-btn.active .prop-btn-status { color:var(--accent); background:#fff; border-color:rgba(255,255,255,0.35); }
+  .workspace-snapshot { display:grid; grid-template-columns:minmax(240px,1.15fr) repeat(3,minmax(0,1fr)); gap:10px; }
+  .workspace-snapshot-primary,
+  .workspace-snapshot-tile { border:0.5px solid var(--border); border-radius:14px; background:linear-gradient(180deg,#faf9f5 0%,#f2efe8 100%); padding:14px 16px; min-width:0; }
+  .workspace-snapshot-primary { display:grid; gap:8px; }
+  .workspace-snapshot-kicker { font-size:0.64rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  .workspace-snapshot-address { font-size:0.78rem; line-height:1.45; color:var(--text); }
+  .workspace-snapshot-meta { display:flex; flex-wrap:wrap; gap:8px; }
+  .workspace-snapshot-chip { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 9px; font-size:0.66rem; font-weight:700; background:#ffffff; border:1px solid var(--border2); color:var(--accent); }
+  .workspace-snapshot-tile { width:100%; font-family:inherit; text-align:left; cursor:pointer; transition:transform 0.15s ease,border-color 0.15s ease,box-shadow 0.15s ease,background 0.15s ease; display:grid; gap:6px; }
+  .workspace-snapshot-tile:hover { transform:translateY(-1px); border-color:#c9d9e7; box-shadow:0 8px 18px rgba(15,23,42,0.06); background:linear-gradient(180deg,#ffffff 0%,#f5f9ff 100%); }
+  .workspace-snapshot-label { font-size:0.66rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  .workspace-snapshot-value { font-size:1.35rem; font-weight:700; color:var(--accent); letter-spacing:-0.03em; }
+  .workspace-snapshot-sub { font-size:0.72rem; line-height:1.4; color:var(--muted); }
+  .workspace-snapshot-link { font-size:0.68rem; font-weight:700; color:#1d4ed8; }
   .tbd-input-row { display:flex; align-items:center; gap:10px; margin-top: 10px; }
   .tbd-input-row label { font-size: 0.72rem; color: #d29922; }
-  @media(max-width:820px){ .workspace-shell { grid-template-columns:1fr; } .workspace-controls { grid-template-columns:1fr; } }
+  @media(max-width:980px){ .workspace-snapshot { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media(max-width:820px){ .workspace-shell { grid-template-columns:1fr; } .workspace-controls { grid-template-columns:1fr; } .workspace-community-field { grid-column:auto; } .workspace-snapshot { grid-template-columns:1fr; } }
 
   /* Tabs */
   .tabs { display:flex; gap:0; background:var(--bg2); border-bottom:0.5px solid var(--border); border-top:0.5px solid var(--border); margin:0 -20px 16px; padding:0 20px; overflow-x:auto; }
@@ -442,6 +447,10 @@
         <div class="workspace-subline" id="workspace-subline">Community, reporting month, and unit-count context stays pinned here so you can swap properties without hunting through the Overview tab.</div>
       </div>
       <div class="workspace-controls">
+        <label class="workspace-field workspace-community-field">
+          <span>Community</span>
+          <select id="workspace-community-select" onchange="onWorkspaceCommunitySelect(this.value)"></select>
+        </label>
         <label class="workspace-field">
           <span>Current Month</span>
           <select data-field="currentMonth" id="workspace-current-month">
@@ -472,7 +481,7 @@
       </div>
       <div class="workspace-community-count" id="workspace-unit-note">Leave unit count blank to use the property default.</div>
     </div>
-    <div class="prop-grid" id="prop-grid"></div>
+    <div class="workspace-snapshot" id="workspace-community-snapshot"></div>
   </div>
 
   <!-- TAB CONTENT -->
@@ -2450,11 +2459,14 @@ function getWorkspacePeriodString(monthIdx = currentMonth, year = new Date().get
   const numericMonth = Number.isInteger(monthIdx) ? monthIdx : DEFAULT_CURRENT_MONTH;
   return `${year}-${String(numericMonth + 1).padStart(2, "0")}`;
 }
+function getSelectedDashboardMonthIndex() {
+  return clampNumber(Number.isInteger(currentMonth) ? currentMonth : DEFAULT_CURRENT_MONTH, 0, 11);
+}
 function buildOperationsWorkspaceContext() {
   return {
     community: getProp().name,
-    monthIndex: Number.isInteger(currentMonth) ? currentMonth : DEFAULT_CURRENT_MONTH,
-    period: getWorkspacePeriodString(currentMonth),
+    monthIndex: getSelectedDashboardMonthIndex(),
+    period: getWorkspacePeriodString(getSelectedDashboardMonthIndex()),
     source: "portfolio-operations-dashboard",
     updatedAt: new Date().toISOString()
   };
@@ -2977,24 +2989,61 @@ function loadPropertyData(propName) {
 }
 
 function renderPropGrid() {
-  const grid = document.getElementById("prop-grid");
-  if (!grid) return;
+  const communitySelect = document.getElementById("workspace-community-select");
+  const snapshot = document.getElementById("workspace-community-snapshot");
   const savedCount = PROPERTIES.filter(prop => !!savedData[prop.name]).length;
   const totalCount = PROPERTIES.length;
-  grid.innerHTML = PROPERTIES.map((p, i) => {
-    const isSaved = !!savedData[p.name];
-    const isSelected = i === selectedPropIdx;
-    const effectiveUnits = getTotalUnitsFor(p, savedData[p.name]?.customUnits);
-    const unitText = effectiveUnits > 0 ? `${effectiveUnits} units` : "Unit count needed";
-    return `<button class="prop-btn${isSelected?" active":""}" onclick="selectProp(${i})">
-      <span class="prop-btn-main">
-        <span class="prop-btn-name">${p.name}</span>
-        <span class="prop-btn-meta">${unitText}</span>
-      </span>
-      <span class="prop-btn-status${isSaved ? "" : " draft"}">${isSaved ? "Saved" : "Draft"}</span>
-    </button>`;
-  }).join('');
   const p = getProp();
+  const currentRecord = getCurrentCommunityRecord();
+  const summary = getCommunitySummary(p.name, currentRecord);
+  const monthEntry = currentRecord.monthlyData?.[getSelectedDashboardMonthIndex()] ?? {};
+  const appMetrics = getApplicationDecisionMetrics(monthEntry);
+  const totalUnitsForCurrent = getTotalUnitsFor(p, currentRecord.customUnits);
+  if (communitySelect) {
+    communitySelect.innerHTML = PROPERTIES.map((prop, i) => {
+      const isSaved = !!savedData[prop.name];
+      const effectiveUnits = getTotalUnitsFor(prop, savedData[prop.name]?.customUnits);
+      const statusLabel = isSaved ? "Saved" : "Draft";
+      const unitLabel = effectiveUnits > 0 ? `${effectiveUnits} units` : "Units needed";
+      return `<option value="${escapeHtml(prop.name)}" ${i===selectedPropIdx?"selected":""}>${escapeHtml(prop.name)} · ${unitLabel} · ${statusLabel}</option>`;
+    }).join("");
+  }
+  if (snapshot) {
+    const addressText = currentRecord.communityAddress
+      ? escapeHtml(currentRecord.communityAddress)
+      : "Add the community address in Community Setup to pin the asset details here.";
+    const occupiedPct = summary ? getSummaryOccPct(summary) : 0;
+    const leasedPct = summary ? getSummaryLeasedPct(summary) : 0;
+    const occupiedUnits = summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0);
+    const leasedUnits = summary?.leased ?? (Number(currentRecord.currentLeased) || 0);
+    snapshot.innerHTML = `
+      <div class="workspace-snapshot-primary">
+        <div class="workspace-snapshot-kicker">Selected Community Snapshot</div>
+        <div class="workspace-snapshot-address">${addressText}</div>
+        <div class="workspace-snapshot-meta">
+          <span class="workspace-snapshot-chip">${totalUnitsForCurrent > 0 ? `${totalUnitsForCurrent} units` : "Unit count needed"}</span>
+          <span class="workspace-snapshot-chip">${FULL_MONTHS[getSelectedDashboardMonthIndex()]} focus</span>
+        </div>
+      </div>
+      <button type="button" class="workspace-snapshot-tile" onclick="setTab(2)">
+        <div class="workspace-snapshot-label">Physical Occupancy</div>
+        <div class="workspace-snapshot-value">${occupiedPct.toFixed(1)}%</div>
+        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${totalUnitsForCurrent || 0} units</div>
+        <div class="workspace-snapshot-link">Open Overview</div>
+      </button>
+      <button type="button" class="workspace-snapshot-tile" onclick="setTab(2)">
+        <div class="workspace-snapshot-label">Leased Occupancy</div>
+        <div class="workspace-snapshot-value">${leasedPct.toFixed(1)}%</div>
+        <div class="workspace-snapshot-sub">${leasedUnits} leased units in the current snapshot</div>
+        <div class="workspace-snapshot-link">Review pacing</div>
+      </button>
+      <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
+        <div class="workspace-snapshot-label">Applications MTD</div>
+        <div class="workspace-snapshot-value">${Math.round(appMetrics.applications || 0)}</div>
+        <div class="workspace-snapshot-sub">${Math.round(appMetrics.approvals || 0)} approved · ${Math.round(appMetrics.pendingDecision || 0)} pending</div>
+        <div class="workspace-snapshot-link">Open Traffic &amp; Funnel</div>
+      </button>`;
+  }
   const currentMonthSelect = document.getElementById("workspace-current-month");
   const customUnitsInput = document.getElementById("custom-units");
   const tbdLabel = document.getElementById("tbd-label");
@@ -3030,6 +3079,12 @@ function renderPropGrid() {
       : `This community still needs a saved unit count before occupancy and leasing goals can calculate accurately.`;
   }
   document.getElementById("header-sub").textContent = getHeaderSubText();
+}
+
+function onWorkspaceCommunitySelect(value) {
+  const matchedName = matchPropertyName(value, { fallbackToCurrent: false });
+  const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
+  if (matchedIdx >= 0) selectProp(matchedIdx);
 }
 
 function getTotalUnitsFor(p, customOverride) {
@@ -10932,7 +10987,8 @@ function buildWeeklyExecutiveMetricCards(report) {
 }
 
 function buildWeeklyExecutiveReportData() {
-  const details = getCurrentPortfolioDetails();
+  const selectedMonth = getSelectedDashboardMonthIndex();
+  const details = buildPortfolioDetailsForMonth(selectedMonth);
   if (details.length === 0) {
     alert("Save at least one community before building the weekly C-suite report.");
     return null;
@@ -11001,7 +11057,8 @@ function buildPortfolioSectionMetrics(sectionKey, summary) {
 }
 
 function buildPortfolioReportData() {
-  const allDetails = getCurrentPortfolioDetails();
+  const selectedMonth = getSelectedDashboardMonthIndex();
+  const allDetails = buildPortfolioDetailsForMonth(selectedMonth);
   const details = getScopedPortfolioReportDetails(allDetails);
   const reportTitle = portfolioReportMode === "owner" ? "RISE Investor Report" : "RISE Regional Performance Report";
   const reportSubtitle = portfolioReportMode === "owner" ? "Investor-facing high-level summary" : "Detailed regional report with recommendations";
@@ -11010,6 +11067,8 @@ function buildPortfolioReportData() {
     mode: portfolioReportMode,
     title: reportTitle,
     subtitle: reportSubtitle,
+    currentMonthIdx: selectedMonth,
+    currentMonthLabel: getDashboardMonthLabel(selectedMonth),
     selectedSections: getSelectedPortfolioReportSections(),
     details,
     aggregate: aggregateCommunitySummaries(details.map(detail => detail.summary)),
@@ -11559,7 +11618,8 @@ function getMonthlyPresentationCurrentEntry(detail) {
 }
 
 function buildMonthlyInvestorPresentationData() {
-  const allDetails = getCurrentPortfolioDetails();
+  const selectedMonth = getSelectedDashboardMonthIndex();
+  const allDetails = buildPortfolioDetailsForMonth(selectedMonth);
   const details = getMonthlyPresentationScopedDetails(allDetails);
   if (details.length === 0) {
     alert("No communities match the current monthly investor presentation scope.");
@@ -11578,8 +11638,8 @@ function buildMonthlyInvestorPresentationData() {
     title: details.length === 1 ? "Community Market Analysis" : "Portfolio Market Analysis",
     subtitle,
     generatedAt,
-    currentMonthLabel: getDashboardMonthLabel(currentMonth),
-    previousMonthLabel: getDashboardMonthLabel(currentMonth - 1),
+    currentMonthLabel: getDashboardMonthLabel(selectedMonth),
+    previousMonthLabel: getDashboardMonthLabel(selectedMonth - 1),
     details,
     aggregate,
     investorGroups: buildInvestorPortfolioGroups(details),
@@ -14096,14 +14156,20 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const scopeSeasonal = Array.isArray(record.seasonal) && record.seasonal.length === 12 ? record.seasonal : [...DEFAULT_SEASONAL];
   const normalizedMonthIdx = clampNumber(monthIdx, 0, 11);
   const scopeCurrentMonth = Number.isInteger(record.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
-  const reportMetricMonthIdx = clampNumber(scopeCurrentMonth, 0, 11);
+  const reportMetricMonthIdx = normalizedMonthIdx;
+  const reportAnchorOccupiedUnits = reportMetricMonthIdx === scopeCurrentMonth
+    ? Math.max(0, Number(record.currentOccupied) || 0)
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "occupiedSnapshot");
+  const reportAnchorLeasedUnits = reportMetricMonthIdx === scopeCurrentMonth
+    ? Math.max(0, Number(record.currentLeased) || 0)
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "leasedSnapshot");
   const schedule = computeScheduleFromContext({
     totalUnits,
-    currentOccupied: Number(record.currentOccupied) || 0,
-    currentLeased: Number(record.currentLeased) || 0,
+    currentOccupied: reportAnchorOccupiedUnits,
+    currentLeased: reportAnchorLeasedUnits,
     occupancyGoal: Number(record.occupancyGoal ?? 95),
     leasedGoal: Number(record.leasedGoal ?? 97),
-    currentMonth: scopeCurrentMonth,
+    currentMonth: reportMetricMonthIdx,
     conversionRate: Number(record.conversionRate ?? 65),
     monthlyData: scopeMonthlyData,
     seasonal: scopeSeasonal
@@ -14134,12 +14200,8 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
         moveInsNeeded: Number(row.netOccLeases) || 0
       };
     });
-  const occupiedUnits = reportMetricMonthIdx === scopeCurrentMonth
-    ? Math.max(0, Number(record.currentOccupied) || 0)
-    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "occupiedSnapshot");
-  const leasedUnits = reportMetricMonthIdx === scopeCurrentMonth
-    ? Math.max(0, Number(record.currentLeased) || 0)
-    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, reportMetricMonthIdx, "leasedSnapshot");
+  const occupiedUnits = reportAnchorOccupiedUnits;
+  const leasedUnits = reportAnchorLeasedUnits;
   const occupancyPct = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
   const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
   const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, reportMetricMonthIdx, 3);
@@ -14165,7 +14227,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     pendingDecision: appMetrics.pendingDecision,
     leases: appMetrics.leases,
     moveIns: Number(monthEntry.moveIns) || 0,
-    moveOuts: getEffectiveMoveOutsForMonth(normalizedMonthIdx, scopeMonthlyData).effective,
+    moveOuts: getEffectiveMoveOutsForMonth(reportMetricMonthIdx, scopeMonthlyData).effective,
     renewals: renewalSummary.signed,
     notices: renewalSummary.ntv
   };
