@@ -502,6 +502,8 @@
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const FULL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DEFAULT_CURRENT_MONTH = Math.max(0, Math.min(11, new Date().getMonth()));
+const PORTFOLIO_SCOPE_VALUE = "__rise_portfolio__";
+const PORTFOLIO_SCOPE_LABEL = "RISE Portfolio";
 const WEEKLY_SNAPSHOT_STORAGE_KEY = "rise_weekly_portfolio_snapshot_v1";
 const OPS_GLOBAL_STORAGE_KEY = "rise_ops_global_v1";
 const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
@@ -787,6 +789,10 @@ let portfolioReportSections = defaultPortfolioReportSections();
 let portfolioReportFilters = defaultPortfolioReportFilters();
 let monthlyPresentationCommunities = [];
 let weeklyExecutiveEmail = defaultWeeklyExecutiveEmailSettings();
+let workspaceScopeValue = "";
+let reportHubType = "weekly_csuite";
+let reportHubAction = "preview";
+let reportHubRecipientKeys = [];
 const DASHBOARD_EXTRACT_HEADERS = ["property","month","occupied","leased","move_outs","move_ins","guest_cards","walk_in","off_site_event","phone_calls","emails_online","text_chat_other","tours","applications","applications_approved","denied","cancelled","pending_decision","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
 const EXTRACT_MAPPABLE_FIELDS = ["occupied","leased","move_outs","move_ins","guest_cards","walk_in","off_site_event","phone_calls","emails_online","text_chat_other","tours","applications","applications_approved","denied","cancelled","pending_decision","leases_signed","budget_occ","market_rent","budget_rent","budget_ner","rent_roll_total","concessions","ner","renewal_expirations","renewals_signed","renewal_ntvs","renewal_transfers","renewal_undecided","renewal_early_termination"];
 const DEFAULT_EXTRACT_FIELD_MAP = {
@@ -2462,9 +2468,28 @@ function getWorkspacePeriodString(monthIdx = currentMonth, year = new Date().get
 function getSelectedDashboardMonthIndex() {
   return clampNumber(Number.isInteger(currentMonth) ? currentMonth : DEFAULT_CURRENT_MONTH, 0, 11);
 }
+function isPortfolioWorkspaceSelected() {
+  return workspaceScopeValue === PORTFOLIO_SCOPE_VALUE;
+}
+function getWorkspaceScopeDisplayName() {
+  return isPortfolioWorkspaceSelected() ? PORTFOLIO_SCOPE_LABEL : getProp().name;
+}
+function getWorkspaceScopedDetails(monthIdx = getSelectedDashboardMonthIndex()) {
+  const details = buildPortfolioDetailsForMonth(monthIdx);
+  return isPortfolioWorkspaceSelected()
+    ? details
+    : details.filter(detail => detail.name === getProp().name);
+}
+function getWorkspaceScopedAggregate(monthIdx = getSelectedDashboardMonthIndex()) {
+  const details = getWorkspaceScopedDetails(monthIdx);
+  return {
+    details,
+    aggregate: aggregateCommunitySummaries(details.map(detail => detail.summary))
+  };
+}
 function buildOperationsWorkspaceContext() {
   return {
-    community: getProp().name,
+    community: getWorkspaceScopeDisplayName(),
     monthIndex: getSelectedDashboardMonthIndex(),
     period: getWorkspacePeriodString(getSelectedDashboardMonthIndex()),
     source: "portfolio-operations-dashboard",
@@ -2506,6 +2531,10 @@ function applyIncomingWorkspaceNavigation() {
   } catch {}
 }
 function getHeaderSubText() {
+  if (isPortfolioWorkspaceSelected()) {
+    const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+    return `${PORTFOLIO_SCOPE_LABEL} · ${details.length} Communities · ${aggregate.totalUnits.toLocaleString()} Units`;
+  }
   return getProp().name
     + (getTotalUnits() > 0 ? ` · ${getTotalUnits()} Units` : " · Units TBD")
     + (investorName ? ` · ${investorName}` : "");
@@ -2568,6 +2597,24 @@ function getGrossLeaseProgressCount(monthEntry = {}) {
   const approvals = getApplicationsApprovedCount(monthEntry);
   if (approvals > 0) return approvals;
   return Math.max(0, Number(monthEntry.leasesSignedActual) || 0);
+}
+
+function getTourToLeasePctForMonth(monthEntries = monthlyData, monthIdx = currentMonth, fallbackThroughMonth = monthIdx) {
+  const entries = Array.isArray(monthEntries) && monthEntries.length === 12 ? monthEntries : defaultMonthly();
+  const currentEntry = entries[monthIdx] ?? {};
+  const currentTours = Math.max(0, Number(currentEntry.tours) || 0);
+  const currentLeases = getGrossLeaseProgressCount(currentEntry);
+  if (currentTours > 0) return (currentLeases / currentTours) * 100;
+  let tourTotal = 0;
+  let leaseTotal = 0;
+  for (let idx = 0; idx <= Math.max(0, Math.min(11, Number(fallbackThroughMonth) || 0)); idx += 1) {
+    const entry = entries[idx] ?? {};
+    const tours = Math.max(0, Number(entry.tours) || 0);
+    if (tours <= 0) continue;
+    tourTotal += tours;
+    leaseTotal += getGrossLeaseProgressCount(entry);
+  }
+  return tourTotal > 0 ? (leaseTotal / tourTotal) * 100 : 0;
 }
 
 function getMoveInTargetFromScheduleRow(scheduleRow = {}) {
@@ -2991,38 +3038,51 @@ function loadPropertyData(propName) {
 function renderPropGrid() {
   const communitySelect = document.getElementById("workspace-community-select");
   const snapshot = document.getElementById("workspace-community-snapshot");
+  if (!workspaceScopeValue) workspaceScopeValue = getProp().name;
   const savedCount = PROPERTIES.filter(prop => !!savedData[prop.name]).length;
   const totalCount = PROPERTIES.length;
   const p = getProp();
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
   const currentRecord = getCurrentCommunityRecord();
-  const summary = getCommunitySummary(p.name, currentRecord);
+  const summary = !isPortfolioWorkspaceSelected() ? getCommunitySummary(p.name, currentRecord) : null;
   const monthEntry = currentRecord.monthlyData?.[getSelectedDashboardMonthIndex()] ?? {};
   const appMetrics = getApplicationDecisionMetrics(monthEntry);
-  const totalUnitsForCurrent = getTotalUnitsFor(p, currentRecord.customUnits);
+  const totalUnitsForCurrent = !isPortfolioWorkspaceSelected()
+    ? getTotalUnitsFor(p, currentRecord.customUnits)
+    : aggregate.totalUnits;
+  const primaryAddress = isPortfolioWorkspaceSelected()
+    ? `${details.length} communities combined for the selected reporting month.`
+    : (currentRecord.communityAddress
+        ? escapeHtml(currentRecord.communityAddress)
+        : "Add the community address in Community Setup to pin the asset details here.");
   if (communitySelect) {
-    communitySelect.innerHTML = PROPERTIES.map((prop, i) => {
+    communitySelect.innerHTML = [`<option value="${PORTFOLIO_SCOPE_VALUE}" ${isPortfolioWorkspaceSelected() ? "selected" : ""}>${PORTFOLIO_SCOPE_LABEL} · ${aggregate.totalUnits || 0} units · ${details.length} communities</option>`, ...PROPERTIES.map((prop, i) => {
       const isSaved = !!savedData[prop.name];
       const effectiveUnits = getTotalUnitsFor(prop, savedData[prop.name]?.customUnits);
       const statusLabel = isSaved ? "Saved" : "Draft";
       const unitLabel = effectiveUnits > 0 ? `${effectiveUnits} units` : "Units needed";
-      return `<option value="${escapeHtml(prop.name)}" ${i===selectedPropIdx?"selected":""}>${escapeHtml(prop.name)} · ${unitLabel} · ${statusLabel}</option>`;
-    }).join("");
+      return `<option value="${escapeHtml(prop.name)}" ${(!isPortfolioWorkspaceSelected() && i===selectedPropIdx)?"selected":""}>${escapeHtml(prop.name)} · ${unitLabel} · ${statusLabel}</option>`;
+    })].join("");
   }
   if (snapshot) {
-    const addressText = currentRecord.communityAddress
-      ? escapeHtml(currentRecord.communityAddress)
-      : "Add the community address in Community Setup to pin the asset details here.";
-    const occupiedPct = summary ? getSummaryOccPct(summary) : 0;
-    const leasedPct = summary ? getSummaryLeasedPct(summary) : 0;
-    const occupiedUnits = summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0);
-    const leasedUnits = summary?.leased ?? (Number(currentRecord.currentLeased) || 0);
+    const occupiedPct = isPortfolioWorkspaceSelected() ? getSummaryOccPct(aggregate) : (summary ? getSummaryOccPct(summary) : 0);
+    const leasedPct = isPortfolioWorkspaceSelected() ? getSummaryLeasedPct(aggregate) : (summary ? getSummaryLeasedPct(summary) : 0);
+    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0));
+    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? (Number(currentRecord.currentLeased) || 0));
+    const applicationsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applications ?? 0) : Math.round(appMetrics.applications || 0);
+    const approvalsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applicationsApproved ?? 0) : Math.round(appMetrics.approvals || 0);
+    const pendingMtd = isPortfolioWorkspaceSelected()
+      ? Math.round(aggregate.applicationsPendingDecision ?? 0)
+      : Math.round(appMetrics.pendingDecision || 0);
+    const tourToLeasePct = isPortfolioWorkspaceSelected() ? Number(aggregate.tourToLeasePct ?? 0) : Number(summary?.tourToLeasePct ?? 0);
     snapshot.innerHTML = `
       <div class="workspace-snapshot-primary">
         <div class="workspace-snapshot-kicker">Selected Community Snapshot</div>
-        <div class="workspace-snapshot-address">${addressText}</div>
+        <div class="workspace-snapshot-address">${primaryAddress}</div>
         <div class="workspace-snapshot-meta">
           <span class="workspace-snapshot-chip">${totalUnitsForCurrent > 0 ? `${totalUnitsForCurrent} units` : "Unit count needed"}</span>
           <span class="workspace-snapshot-chip">${FULL_MONTHS[getSelectedDashboardMonthIndex()]} focus</span>
+          ${isPortfolioWorkspaceSelected() ? `<span class="workspace-snapshot-chip">${details.length} communities</span>` : ""}
         </div>
       </div>
       <button type="button" class="workspace-snapshot-tile" onclick="setTab(2)">
@@ -3039,9 +3099,15 @@ function renderPropGrid() {
       </button>
       <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
         <div class="workspace-snapshot-label">Applications MTD</div>
-        <div class="workspace-snapshot-value">${Math.round(appMetrics.applications || 0)}</div>
-        <div class="workspace-snapshot-sub">${Math.round(appMetrics.approvals || 0)} approved · ${Math.round(appMetrics.pendingDecision || 0)} pending</div>
+        <div class="workspace-snapshot-value">${applicationsMtd}</div>
+        <div class="workspace-snapshot-sub">${approvalsMtd} approved · ${pendingMtd} pending</div>
         <div class="workspace-snapshot-link">Open Traffic &amp; Funnel</div>
+      </button>
+      <button type="button" class="workspace-snapshot-tile" onclick="setTab(3)">
+        <div class="workspace-snapshot-label">Tour To Lease</div>
+        <div class="workspace-snapshot-value">${tourToLeasePct.toFixed(1)}%</div>
+        <div class="workspace-snapshot-sub">${isPortfolioWorkspaceSelected() ? "Weighted from the selected portfolio scope" : "Selected month or historical funnel average"}</div>
+        <div class="workspace-snapshot-link">Inspect funnel conversion</div>
       </button>`;
   }
   const currentMonthSelect = document.getElementById("workspace-current-month");
@@ -3054,34 +3120,51 @@ function renderPropGrid() {
   const workspaceUnitNote = document.getElementById("workspace-unit-note");
   if (currentMonthSelect) currentMonthSelect.value = String(currentMonth);
   if (customUnitsInput) {
-    customUnitsInput.value = customUnits || "";
-    customUnitsInput.placeholder = p.units ? `Default: ${p.units}` : "e.g. 250";
+    customUnitsInput.value = isPortfolioWorkspaceSelected() ? "" : (customUnits || "");
+    customUnitsInput.placeholder = isPortfolioWorkspaceSelected()
+      ? "Select a community to edit units"
+      : (p.units ? `Default: ${p.units}` : "e.g. 250");
+    customUnitsInput.disabled = isPortfolioWorkspaceSelected();
   }
   if (tbdLabel) {
-    tbdLabel.textContent = p.units
+    tbdLabel.textContent = isPortfolioWorkspaceSelected()
+      ? `Unit Count`
+      : (p.units
       ? `Unit Count Override`
-      : `Unit Count Required`;
+      : `Unit Count Required`);
   }
-  if (workspaceTitle) workspaceTitle.textContent = p.name;
+  if (workspaceTitle) workspaceTitle.textContent = getWorkspaceScopeDisplayName();
   if (workspaceStatus) {
-    workspaceStatus.textContent = savedData[p.name] ? "Saved Community" : "Draft Community";
-    workspaceStatus.className = `workspace-pill${savedData[p.name] ? " is-saved" : ""}`;
+    const isSavedScope = isPortfolioWorkspaceSelected() ? true : !!savedData[p.name];
+    workspaceStatus.textContent = isPortfolioWorkspaceSelected() ? "Portfolio Scope" : (isSavedScope ? "Saved Community" : "Draft Community");
+    workspaceStatus.className = `workspace-pill${isSavedScope ? " is-saved" : ""}`;
   }
   if (workspaceSubline) {
-    workspaceSubline.textContent = `${getHeaderSubText()} · Reporting month ${FULL_MONTHS[currentMonth]} · ${savedCount} of ${totalCount} communities saved in this browser.`;
+    workspaceSubline.textContent = `${isPortfolioWorkspaceSelected() ? `${details.length} communities · ${aggregate.totalUnits.toLocaleString()} units` : getHeaderSubText()} · Reporting month ${FULL_MONTHS[currentMonth]} · ${savedCount} of ${totalCount} communities saved in this browser.`;
   }
   if (workspaceCount) {
-    workspaceCount.textContent = `Switch between communities here to manage setup, imports, renewals, and bonus logic without leaving the workspace.`;
+    workspaceCount.textContent = isPortfolioWorkspaceSelected()
+      ? `Portfolio scope combines all saved community data for the selected month across reporting, overview, traffic, renewals, and reputation.`
+      : `Switch between communities here to manage setup, imports, renewals, and bonus logic without leaving the workspace.`;
   }
   if (workspaceUnitNote) {
-    workspaceUnitNote.textContent = p.units
+    workspaceUnitNote.textContent = isPortfolioWorkspaceSelected()
+      ? `Select an individual community whenever you need to edit setup details or run a community-specific DLR import.`
+      : (p.units
       ? `Default for ${p.name}: ${p.units} units. Leave the override blank to keep the default.`
-      : `This community still needs a saved unit count before occupancy and leasing goals can calculate accurately.`;
+      : `This community still needs a saved unit count before occupancy and leasing goals can calculate accurately.`);
   }
   document.getElementById("header-sub").textContent = getHeaderSubText();
 }
 
 function onWorkspaceCommunitySelect(value) {
+  if (value === PORTFOLIO_SCOPE_VALUE) {
+    workspaceScopeValue = PORTFOLIO_SCOPE_VALUE;
+    persistOperationsWorkspaceContext();
+    renderPropGrid();
+    renderTab();
+    return;
+  }
   const matchedName = matchPropertyName(value, { fallbackToCurrent: false });
   const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
   if (matchedIdx >= 0) selectProp(matchedIdx);
@@ -3215,11 +3298,14 @@ function getCommunitySummary(propName, sourceData) {
     previousTours,
     applications,
     applicationsApproved: applicationMetrics.approvals,
+    applicationsDenied: applicationMetrics.denials,
+    applicationsCancelled: applicationMetrics.cancelled,
+    applicationsPendingDecision: applicationMetrics.pendingDecision,
     previousApplicationsApproved,
     applicationApprovalPct: applicationMetrics.approvalPct,
     applicationDenialPct: applicationMetrics.denialPct,
-    tourToLeasePct: tours > 0 ? (leasesSigned / tours) * 100 : 0,
-    previousTourToLeasePct: previousTours > 0 ? (previousLeasesSigned / previousTours) * 100 : 0,
+    tourToLeasePct: getTourToLeasePctForMonth(scopeMonthlyData, scopeCurrentMonth, scopeCurrentMonth),
+    previousTourToLeasePct: getTourToLeasePctForMonth(scopeMonthlyData, Math.max(scopeCurrentMonth - 1, 0), Math.max(scopeCurrentMonth - 1, 0)),
     previousApplications,
     leasesSigned,
     previousLeasesSigned,
@@ -3282,6 +3368,9 @@ function aggregateCommunitySummaries(summaries) {
     acc.previousTours += summary.previousTours;
     acc.applications += summary.applications;
     acc.applicationsApproved += summary.applicationsApproved;
+    acc.applicationsDenied += summary.applicationsDenied || 0;
+    acc.applicationsCancelled += summary.applicationsCancelled || 0;
+    acc.applicationsPendingDecision += summary.applicationsPendingDecision || 0;
     acc.previousApplications += summary.previousApplications;
     acc.previousApplicationsApproved += summary.previousApplicationsApproved;
     acc.leasesSigned += summary.leasesSigned;
@@ -3358,6 +3447,9 @@ function aggregateCommunitySummaries(summaries) {
     previousTours: 0,
     applications: 0,
     applicationsApproved: 0,
+    applicationsDenied: 0,
+    applicationsCancelled: 0,
+    applicationsPendingDecision: 0,
     previousApplications: 0,
     previousApplicationsApproved: 0,
     leasesSigned: 0,
@@ -3416,6 +3508,9 @@ function aggregateCommunitySummaries(summaries) {
     previousTours: totals.previousTours,
     applications: totals.applications,
     applicationsApproved: totals.applicationsApproved,
+    applicationsDenied: totals.applicationsDenied,
+    applicationsCancelled: totals.applicationsCancelled,
+    applicationsPendingDecision: totals.applicationsPendingDecision,
     previousApplications: totals.previousApplications,
     previousApplicationsApproved: totals.previousApplicationsApproved,
     leasesSigned: totals.leasesSigned,
@@ -3951,9 +4046,23 @@ function renderQuarterlyTurnoverRollupSection(portfolioScope, regionalRoles, rol
 
 function selectProp(idx) {
   selectedPropIdx = idx;
+  if (!isPortfolioWorkspaceSelected()) workspaceScopeValue = PROPERTIES[selectedPropIdx]?.name ?? getProp().name;
   loadPropertyData(getProp().name);
   persistOperationsWorkspaceContext();
   renderPropGrid();
+  renderTab();
+}
+
+function openCommunityWorkspace(name, tabIdx = null) {
+  const matchedName = matchPropertyName(name, { fallbackToCurrent: false });
+  const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
+  if (matchedIdx < 0) return;
+  workspaceScopeValue = matchedName;
+  selectedPropIdx = matchedIdx;
+  loadPropertyData(getProp().name);
+  persistOperationsWorkspaceContext();
+  renderPropGrid();
+  if (tabIdx !== null && tabIdx !== undefined) activeTab = Math.max(0, Math.min(8, Number(tabIdx) || 0));
   renderTab();
 }
 
@@ -5374,7 +5483,198 @@ function monthGoalInpField(i, field, manualValue, recommendedValue, actualValue,
   </div>`;
 }
 
+function renderPortfolioScopePanel(title, subtitle, cardsHtml, bodyHtml) {
+  return `<div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:4px">${title}</h2>
+        <p style="font-size:0.72rem;color:var(--muted)">${subtitle}</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(getProp().name)}, ${activeTab})">Open ${escapeHtml(getProp().name)}</button>
+        <button class="btn btn-blue btn-sm" onclick="setTab(7)">Open Reporting</button>
+      </div>
+    </div>
+    ${cardsHtml}
+    ${bodyHtml}
+  </div>`;
+}
+
+function renderPortfolioScopedSetupTab() {
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const contactCount = details.reduce((sum, detail) => sum + normalizeInvestorEmailContacts(detail.record?.investorEmailContacts).length, 0);
+  const floorPlanCount = details.reduce((sum, detail) => sum + normalizeCommunityFloorPlans(detail.record?.communityFloorPlans).filter(plan => String(plan.name || "").trim()).length, 0);
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("Communities", details.length, `${aggregate.totalUnits.toLocaleString()} units in current scope`, "#4493f8")}
+    ${statBox("Saved Contacts", contactCount, "Community recipient records available for reporting", "#3fb950")}
+    ${statBox("Floor Plans", floorPlanCount, "Configured floor plans saved in Community Setup", "#d29922")}
+    ${statBox("Addresses on File", details.filter(detail => String(detail.record?.communityAddress || "").trim()).length, "Communities with saved address metadata", "#a371f7")}
+  </div>`;
+  const rows = details.map(detail => {
+    const contacts = normalizeInvestorEmailContacts(detail.record?.investorEmailContacts);
+    const plans = normalizeCommunityFloorPlans(detail.record?.communityFloorPlans).filter(plan => String(plan.name || "").trim()).length;
+    return `<tr>
+      <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+      <td>${detail.summary.totalUnits || "—"}</td>
+      <td class="l">${escapeHtml(detail.record?.communityAddress || "Address not saved")}</td>
+      <td>${contacts.length}</td>
+      <td>${plans}</td>
+      <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},1)">Open Setup</button></td>
+    </tr>`;
+  }).join("");
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Portfolio setup roster</h2><p>Select an individual community when you want to edit setup details. Portfolio mode keeps the roster and saved metadata in one place.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>Units</th><th class="l">Address</th><th>Contacts</th><th>Floor Plans</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Community Setup", "A read-through of saved setup data across the full portfolio.", cardsHtml, bodyHtml);
+}
+
+function renderPortfolioScopedOverviewTab() {
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("Physical Occupancy", `${getSummaryOccPct(aggregate).toFixed(1)}%`, `${aggregate.occupied.toLocaleString()} occupied units`, "#4493f8")}
+    ${statBox("Leased Occupancy", `${getSummaryLeasedPct(aggregate).toFixed(1)}%`, `${aggregate.leased.toLocaleString()} leased units`, "#a371f7")}
+    ${statBox("Net Absorption", formatSignedDisplay(aggregate.monthAbsorption ?? 0), `${Math.round(aggregate.moveIns ?? 0)} move-ins · ${Math.round(aggregate.moveOuts ?? 0)} move-outs`, "#3fb950")}
+    ${statBox("Budget Gap Units", Math.max(aggregate.occGapUnits ?? 0, 0), `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities on budget pace`, "#d29922")}
+  </div>`;
+  const bodyHtml = `<div class="portfolio-list-card">
+    <h3>Communities needing attention</h3>
+    <p>Highest occupancy and pacing pressure inside the selected portfolio month.</p>
+    <div class="portfolio-rank-list">${details
+      .slice()
+      .sort((a, b) => (Number(b.summary?.occGapUnits ?? 0) + Number(b.summary?.leasedGapUnits ?? 0)) - (Number(a.summary?.occGapUnits ?? 0) + Number(a.summary?.leasedGapUnits ?? 0)))
+      .slice(0, 6)
+      .map(detail => `<div class="portfolio-rank-item">
+        <div>
+          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+          <div class="meta">${getSummaryOccPct(detail.summary).toFixed(1)}% occupied · ${getSummaryLeasedPct(detail.summary).toFixed(1)}% leased</div>
+        </div>
+        <div style="text-align:right">
+          <div class="metric" style="color:#f85149">${Math.max(detail.summary.occGapUnits ?? 0, 0)}</div>
+          <div class="metric-sub">occ gap units</div>
+        </div>
+      </div>`).join("")}</div>
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Overview", "Aggregate operating position for the selected month across all saved communities.", cardsHtml, bodyHtml);
+}
+
+function renderPortfolioScopedTrafficTab() {
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("Guest Cards", Math.round(aggregate.guestCards ?? 0), "Month-to-date portfolio lead volume", "#4493f8")}
+    ${statBox("Tours", Math.round(aggregate.tours ?? 0), `${(aggregate.tourToAppPct ?? 0).toFixed(1)}% tour to app`, "#a371f7")}
+    ${statBox("Applications", Math.round(aggregate.applications ?? 0), `${Math.round(aggregate.applicationsApproved ?? 0)} approved applications`, "#d29922")}
+    ${statBox("Tour to Lease", `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`, "Weighted conversion across the portfolio scope", "#3fb950")}
+  </div>`;
+  const rows = details.map(detail => `<tr>
+    <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+    <td>${Math.round(detail.summary.guestCards ?? 0)}</td>
+    <td>${Math.round(detail.summary.tours ?? 0)}</td>
+    <td>${Math.round(detail.summary.applications ?? 0)}</td>
+    <td>${Math.round(detail.summary.applicationsApproved ?? 0)}</td>
+    <td>${(detail.summary.tourToLeasePct ?? 0).toFixed(1)}%</td>
+    <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},3)">Open Funnel</button></td>
+  </tr>`).join("");
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Portfolio funnel by community</h2><p>Month-selected funnel totals with historical fallback on tour-to-lease where current-month tours are not yet loaded.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>Leads</th><th>Tours</th><th>Applications</th><th>Approved</th><th>Tour to Lease</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Traffic & Funnel", "Conversion and traffic performance combined across the selected month.", cardsHtml, bodyHtml);
+}
+
+function renderPortfolioScopedRenewalsTab() {
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("Expirations", Math.round(aggregate.renewalExpirations ?? 0), "Current month renewal expirations in scope", "#4493f8")}
+    ${statBox("Renewals Signed", Math.round(aggregate.renewalsSigned ?? 0), `${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}% retention`, "#3fb950")}
+    ${statBox("Undecided / M2M", Math.round(aggregate.renewalUndecided ?? 0), "At-risk renewals still in play", "#d29922")}
+    ${statBox("Projected Attrition", Math.round(aggregate.renewalProjectedAttrition ?? 0), "Renewal-driven attrition risk", "#f97316")}
+  </div>`;
+  const bodyHtml = `<div class="portfolio-list-card">
+    <h3>Renewal risk watchlist</h3>
+    <p>Communities with the most unresolved renewal exposure in the selected month.</p>
+    <div class="portfolio-rank-list">${details
+      .slice()
+      .sort((a, b) => Number(b.summary?.renewalUndecided ?? 0) - Number(a.summary?.renewalUndecided ?? 0))
+      .slice(0, 6)
+      .map(detail => `<div class="portfolio-rank-item">
+        <div>
+          <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
+          <div class="meta">${Math.round(detail.summary.renewalExpirations ?? 0)} expirations · ${(detail.summary.renewalRetentionRate ?? 0).toFixed(1)}% retention</div>
+        </div>
+        <div style="text-align:right">
+          <div class="metric" style="color:#d29922">${Math.round(detail.summary.renewalUndecided ?? 0)}</div>
+          <div class="metric-sub">undecided</div>
+        </div>
+      </div>`).join("")}</div>
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Renewals", "Renewal health across the selected month and community set.", cardsHtml, bodyHtml);
+}
+
+function renderPortfolioScopedReputationTab() {
+  const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("ORA Average", (aggregate.oraScore ?? 0) > 0 ? (aggregate.oraScore ?? 0).toFixed(1) : "—", "Portfolio average reputation score", "#4493f8")}
+    ${statBox("Quarterly Google", (aggregate.googleQuarterlyRating ?? 0) > 0 ? (aggregate.googleQuarterlyRating ?? 0).toFixed(2) : "—", "Blended quarterly rating", "#a371f7")}
+    ${statBox("Lifetime Google", (aggregate.googleLifetimeRating ?? 0) > 0 ? (aggregate.googleLifetimeRating ?? 0).toFixed(2) : "—", "Blended lifetime rating", "#3fb950")}
+    ${statBox("Communities with ORA", details.filter(detail => Number(detail.summary?.oraScore ?? 0) > 0).length, "Saved reputation data currently in scope", "#d29922")}
+  </div>`;
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Community reputation rollup</h2><p>Saved reputation metrics by community for the selected month scope.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>ORA</th><th>Quarterly Google</th><th>Lifetime Google</th><th>Action</th></tr></thead>
+      <tbody>${details.map(detail => `<tr>
+        <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+        <td>${Number(detail.summary?.oraScore ?? 0) > 0 ? Number(detail.summary.oraScore).toFixed(1) : "—"}</td>
+        <td>${Number(detail.summary?.googleQuarterlyRating ?? 0) > 0 ? Number(detail.summary.googleQuarterlyRating).toFixed(2) : "—"}</td>
+        <td>${Number(detail.summary?.googleLifetimeRating ?? 0) > 0 ? Number(detail.summary.googleLifetimeRating).toFixed(2) : "—"}</td>
+        <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},5)">Open Reputation</button></td>
+      </tr>`).join("")}</tbody>
+    </table>
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Reputation", "Resident sentiment and review performance across the selected portfolio month.", cardsHtml, bodyHtml);
+}
+
+function renderPortfolioScopedImportTab() {
+  const { details } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const dlrLoaded = details.filter(detail => hasDlrBoxScoreSnapshot(normalizeDlrBoxScoreSnapshot(detail.record?.latestDlrSummary?.dailyBoxScore))).length;
+  const surveyLoaded = details.filter(detail => hasMarketSurveyData(normalizeMarketSurveyData(detail.record?.marketSurveyData))).length;
+  const renewalLoaded = details.filter(detail => details && detail.record?.monthlyData?.some(entry => Number(entry?.renewalExpirations ?? 0) > 0 || Number(entry?.renewalSigned ?? 0) > 0)).length;
+  const bodyHtml = `<div class="tbl-wrap">
+    <div class="tbl-header"><h2>Import readiness by community</h2><p>Uploads are still community-specific. Portfolio mode gives you the coverage read so you can decide which assets still need fresh source files.</p></div>
+    <table>
+      <thead><tr><th class="l">Community</th><th>DLR Box Score</th><th>Market Survey</th><th>Renewals</th><th>Action</th></tr></thead>
+      <tbody>${details.map(detail => {
+        const hasDlr = hasDlrBoxScoreSnapshot(normalizeDlrBoxScoreSnapshot(detail.record?.latestDlrSummary?.dailyBoxScore));
+        const hasSurvey = hasMarketSurveyData(normalizeMarketSurveyData(detail.record?.marketSurveyData));
+        const hasRenewal = (detail.record?.monthlyData ?? []).some(entry => Number(entry?.renewalExpirations ?? 0) > 0 || Number(entry?.renewalSigned ?? 0) > 0);
+        return `<tr>
+          <td class="l" style="font-weight:700">${escapeHtml(detail.name)}</td>
+          <td>${hasDlr ? "Loaded" : "Pending"}</td>
+          <td>${hasSurvey ? "Loaded" : "Pending"}</td>
+          <td>${hasRenewal ? "Loaded" : "Pending"}</td>
+          <td><button class="btn btn-gray btn-sm" onclick="openCommunityWorkspace(${JSON.stringify(detail.name)},6)">Open Import</button></td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>
+  </div>`;
+  const cardsHtml = `<div class="grid-4">
+    ${statBox("DLR Coverage", `${dlrLoaded}/${details.length}`, "Communities with a saved daily box score", "#4493f8")}
+    ${statBox("Survey Coverage", `${surveyLoaded}/${details.length}`, "Communities with market survey data", "#3fb950")}
+    ${statBox("Renewal Coverage", `${renewalLoaded}/${details.length}`, "Communities with renewal data loaded", "#d29922")}
+    ${statBox("Contacts Loaded", details.filter(detail => normalizeInvestorEmailContacts(detail.record?.investorEmailContacts).length > 0).length, "Communities with report recipients saved", "#a371f7")}
+  </div>`;
+  return renderPortfolioScopePanel("Portfolio Import Coverage", "A portfolio-level read on data readiness before you export reporting.", cardsHtml, bodyHtml);
+}
+
 function renderSetupTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedSetupTab();
   const p = getProp();
   const totalUnits = getTotalUnits();
   const unitsIsOverridden = parseInt(customUnits) > 0;
@@ -6018,6 +6318,7 @@ function updateMsoeQuarter(quarter, val) {
 }
 
 function renderReputationTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedReputationTab();
   const portfolioScope = getJacRoleScope({ id: "portfolio" });
   const regionalRoles = getJacsTeamRoles().filter(role => role.id.startsWith("regional_"));
   const regionalCards = regionalRoles.map(role => {
@@ -6283,6 +6584,7 @@ function renderRecommendationsCard(items, title, subtitle) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function renderOverviewTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedOverviewTab();
   const totalUnits = getTotalUnits();
   const oCPct = currentOccPct();
   const lCPct = currentLeasedPct();
@@ -6770,6 +7072,7 @@ function renderOverviewTab() {
 
 // ─── Traffic Tab ──────────────────────────────────────────────────────────────
 function renderTrafficTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedTrafficTab();
   const cm = monthlyData[currentMonth] ?? {};
   const leadSources = getLeadSourceBreakdown(cm);
   const schedule = computeSchedule();
@@ -8357,7 +8660,7 @@ async function handleRegionalPricingSnapshotUpload(input) {
 }
 
 function getMonthlyPresentationScopeCommunityNames() {
-  const details = getMonthlyPresentationScopedDetails(getCurrentPortfolioDetails());
+  const details = getMonthlyPresentationScopedDetails(buildPortfolioDetailsForMonth(getSelectedDashboardMonthIndex()));
   return [...new Set(details.map(detail => detail.name))];
 }
 
@@ -8434,6 +8737,7 @@ async function processMarketSurveyFiles(files) {
 }
 
 function renderRenewalsTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedRenewalsTab();
   const currentEntry = monthlyData[currentMonth] ?? {};
   const currentSummary = getRenewalSummaryForMonth(currentEntry);
   const currentSchedule = computeSchedule()[currentMonth] ?? {};
@@ -9913,11 +10217,11 @@ function renderBonusTab() {
 function renderPortfolioHomeTab() {
   const selectedMonth = currentMonth;
   const selectedLabel = FULL_MONTHS[selectedMonth];
-  const details = buildPortfolioDetailsForMonth(selectedMonth);
+  const details = getWorkspaceScopedDetails(selectedMonth);
   const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
   const previousMonthIdx = Math.max(selectedMonth - 1, 0);
   const previousAggregate = selectedMonth > 0
-    ? aggregateCommunitySummaries(buildPortfolioDetailsForMonth(previousMonthIdx).map(detail => detail.summary))
+    ? aggregateCommunitySummaries(getWorkspaceScopedDetails(previousMonthIdx).map(detail => detail.summary))
     : null;
   const investorGroups = buildInvestorPortfolioGroups(details);
   const marketSurveyScopedDetails = details
@@ -10075,9 +10379,9 @@ function renderPortfolioHomeTab() {
       <div class="portfolio-hero">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
           <div>
-            <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(240,247,255,0.72);margin-bottom:8px">RISE Portfolio Command Center</div>
-            <h2>${escapeHtml(selectedLabel)} portfolio snapshot</h2>
-            <p>This landing view gives you the whole-book read before you drop into a single community. It uses the same saved community records that power the existing tabs, so nothing is being re-keyed or stored separately.</p>
+            <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(240,247,255,0.72);margin-bottom:8px">${isPortfolioWorkspaceSelected() ? "RISE Portfolio Command Center" : "Community Command Center"}</div>
+            <h2>${escapeHtml(selectedLabel)} ${isPortfolioWorkspaceSelected() ? "portfolio snapshot" : `${getProp().name} snapshot`}</h2>
+            <p>${isPortfolioWorkspaceSelected() ? "This landing view gives you the whole-book read before you drop into a single community." : "This landing view gives you a fast management snapshot for the selected community before you move deeper into Overview, Traffic, Renewals, or Reporting."} It uses the same saved community records that power the existing tabs, so nothing is being re-keyed or stored separately.</p>
           </div>
         </div>
         <div class="portfolio-shortcut-row">
@@ -10097,19 +10401,19 @@ function renderPortfolioHomeTab() {
     </div>
     <div class="portfolio-list-card">
       <h3>Portfolio priorities</h3>
-      <p>Use this list as the first management read for the selected month before drilling into any one asset.</p>
+      <p>${isPortfolioWorkspaceSelected() ? "Use this list as the first management read for the selected month before drilling into any one asset." : "Use this list as the first management read for the selected month before drilling into detailed tabs for this community."}</p>
       <div class="portfolio-rank-list">${watchlistHtml}</div>
     </div>
   </div>
   <div class="portfolio-section-grid" style="margin-top:16px">
     <div class="portfolio-list-card">
       <h3>Top application drivers</h3>
-      <p>Highest approved-application communities for the selected month-to-date snapshot.</p>
+      <p>${isPortfolioWorkspaceSelected() ? "Highest approved-application communities for the selected month-to-date snapshot." : "Top funnel and application signals for the selected community this month."}</p>
       <div class="portfolio-rank-list">${topAppHtml}</div>
     </div>
     <div class="portfolio-list-card">
       <h3>Investor portfolio rollup</h3>
-      <p>Grouped ownership performance so you can spot which portfolios are strongest or need follow-up.</p>
+      <p>${isPortfolioWorkspaceSelected() ? "Grouped ownership performance so you can spot which portfolios are strongest or need follow-up." : "Ownership and investor alignment for the selected community."}</p>
       <div class="portfolio-rank-list">${investorRollupHtml}</div>
     </div>
   </div>
@@ -10201,6 +10505,21 @@ function renderPortfolioHomeTab() {
 }
 
 function renderReportingTab() {
+  ensureValidReportHubAction();
+  const reportHubContacts = ensureReportHubRecipientSelection();
+  const reportHubActionOptions = getReportHubActionOptions();
+  const reportBuilderDetails = buildPortfolioDetailsForMonth(getSelectedDashboardMonthIndex());
+  const selectedRecipientCount = reportHubContacts.filter(contact => reportHubRecipientKeys.includes(contact.key)).length;
+  const reportHubRecipientsHtml = reportHubContacts.length > 0
+    ? reportHubContacts.map(contact => {
+        const isActive = reportHubRecipientKeys.includes(contact.key);
+        const label = contact.name ? `${contact.name} · ${contact.community}` : `${contact.email} · ${contact.community}`;
+        return `<button type="button" class="bonus-community-chip${isActive ? " active" : ""}" onclick='toggleReportHubRecipient(${JSON.stringify(contact.key)})'>
+          ${escapeHtml(label)}
+          <span>${escapeHtml(contact.email)}</span>
+        </button>`;
+      }).join("")
+    : `<div style="font-size:0.72rem;color:var(--muted)">No saved community contacts are available in the current scope yet.</div>`;
   const weeklyBaseline = getStoredWeeklySnapshotPayload();
   const weeklyBaselineText = weeklyBaseline?.exportedAt
     ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
@@ -10222,7 +10541,7 @@ function renderReportingTab() {
         <div class="report-hub-card">
           <div class="card-title" style="margin-bottom:8px">Communities</div>
           <div class="bonus-assignment-chip-wrap">
-            ${getCurrentPortfolioDetails().map(detail => {
+            ${reportBuilderDetails.map(detail => {
               const name = detail.name;
               const isActive = (portfolioReportFilters.investorCommunities ?? []).includes(name);
               return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("investorCommunities", ${JSON.stringify(name)})'>${escapeHtml(name)}</button>`;
@@ -10243,7 +10562,7 @@ function renderReportingTab() {
         <div class="report-hub-card">
           <div class="card-title" style="margin-bottom:8px">Communities</div>
           <div class="bonus-assignment-chip-wrap">
-            ${getCurrentPortfolioDetails().map(detail => {
+            ${reportBuilderDetails.map(detail => {
               const name = detail.name;
               const isActive = (portfolioReportFilters.regionalCommunities ?? []).includes(name);
               return `<button class="bonus-community-chip ${isActive ? "active" : ""}" onclick='togglePortfolioReportFilter("regionalCommunities", ${JSON.stringify(name)})'>${escapeHtml(name)}</button>`;
@@ -10255,7 +10574,7 @@ function renderReportingTab() {
     <h3>Bonus payout reporting</h3>
     <p>Pull payroll-ready bonus payout views from the same commission and bonus logic already used in Bonus Calc.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-gray btn-sm" onclick="downloadBonusPayoutCSV()">⬇ CSV</button>
+      <button class="btn btn-gray btn-sm" onclick="exportBonusPayoutCSV()">⬇ CSV</button>
       <button class="btn btn-gray btn-sm" onclick="openBonusPayoutReport(false)">🧾 Printable HTML</button>
       <button class="btn btn-blue btn-sm" onclick="openBonusPayoutReport(true)">🖨 PDF / Print</button>
       <button class="btn btn-gray btn-sm" onclick="setTab(8)">Open Bonus Calc</button>
@@ -10282,10 +10601,53 @@ function renderReportingTab() {
     </div>
   </div>`;
   return `<div class="card mb4">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px">
+      <div class="report-hub-card">
+        <div class="card-title" style="margin-bottom:6px">Current Scope</div>
+        <div style="font-size:0.82rem;font-weight:700;color:var(--accent)">${escapeHtml(getWorkspaceScopeDisplayName())}</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px">${escapeHtml(getDashboardMonthLabel(getSelectedDashboardMonthIndex()))} reporting month · ${isPortfolioWorkspaceSelected() ? "portfolio aggregate mode" : "community-specific mode"}</div>
+      </div>
+      <div class="report-hub-card">
+        <div class="card-title" style="margin-bottom:6px">Report Type</div>
+        <select onchange="setReportHubType(this.value)">
+          <option value="weekly_csuite" ${reportHubType==="weekly_csuite"?"selected":""}>Weekly C-Suite Snapshot</option>
+          <option value="portfolio_report" ${reportHubType==="portfolio_report"?"selected":""}>Portfolio Report Builder</option>
+          <option value="investor_deck" ${reportHubType==="investor_deck"?"selected":""}>Monthly Investor Deck</option>
+          <option value="dlr_overview" ${reportHubType==="dlr_overview"?"selected":""}>Daily Leasing Report</option>
+          <option value="bonus_payout" ${reportHubType==="bonus_payout"?"selected":""}>Bonus Payout Report</option>
+        </select>
+      </div>
+      <div class="report-hub-card">
+        <div class="card-title" style="margin-bottom:6px">Action</div>
+        <select onchange="setReportHubAction(this.value)">
+          ${reportHubActionOptions.map(option => `<option value="${option.value}" ${reportHubAction===option.value?"selected":""}>${option.label}</option>`).join("")}
+        </select>
+      </div>
+      <div class="report-hub-card">
+        <div class="card-title" style="margin-bottom:6px">Run Selected Action</div>
+        <button class="btn btn-blue btn-sm" onclick="runReportHubAction()">${reportHubActionOptions.find(option => option.value === reportHubAction)?.label || "Run"}</button>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px">${selectedRecipientCount} recipient${selectedRecipientCount === 1 ? "" : "s"} selected for email actions.</div>
+      </div>
+    </div>
+    <div class="report-hub-card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <h3 style="font-size:0.85rem;font-weight:700;margin-bottom:6px">Recipient Selection</h3>
+          <p style="font-size:0.72rem;color:var(--muted)">Use the saved community contact list for the current scope. Select one, many, or all before using the email draft action.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gray btn-sm" onclick="setAllReportHubRecipients(true)">Select All</button>
+          <button class="btn btn-gray btn-sm" onclick="setAllReportHubRecipients(false)">Clear</button>
+        </div>
+      </div>
+      <div class="bonus-assignment-chip-wrap">${reportHubRecipientsHtml}</div>
+    </div>
+  </div>
+  <div class="card mb4">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
       <div>
         <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:4px">🗂 Reporting Hub</h2>
-        <p style="font-size:0.72rem;color:var(--muted)">This is the cleaner front door for internal operations reporting, investor-facing reporting, and bonus payout output. The underlying exports still read from the same saved dashboard data by community.</p>
+        <p style="font-size:0.72rem;color:var(--muted)">This is the cleaner front door for internal operations reporting, investor-facing reporting, and bonus payout output. The underlying exports read from the selected month and the selected workspace scope.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-gray btn-sm" onclick="setTab(6)">Open Data Import</button>
@@ -10628,6 +10990,62 @@ function getPortfolioReportScopeSummary(report) {
   return `${parts.join(" · ")} · ${report.details.length} communities included`;
 }
 
+function getWorkspaceScopedRecipientContacts() {
+  const contacts = [];
+  const seen = new Set();
+  const details = getWorkspaceScopedDetails(getSelectedDashboardMonthIndex());
+  details.forEach(detail => {
+    normalizeInvestorEmailContacts(detail.record?.investorEmailContacts).forEach((entry, idx) => {
+      const email = String(entry.email || "").trim();
+      if (!email) return;
+      const key = `${detail.name}::${email.toLowerCase()}::${idx}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      contacts.push({
+        key,
+        community: detail.name,
+        name: String(entry.name || "").trim(),
+        email
+      });
+    });
+  });
+  return contacts;
+}
+
+function ensureReportHubRecipientSelection() {
+  const contacts = getWorkspaceScopedRecipientContacts();
+  const validKeys = new Set(contacts.map(contact => contact.key));
+  reportHubRecipientKeys = (Array.isArray(reportHubRecipientKeys) ? reportHubRecipientKeys : []).filter(key => validKeys.has(key));
+  if (reportHubRecipientKeys.length === 0 && contacts.length > 0) {
+    reportHubRecipientKeys = contacts.map(contact => contact.key);
+  }
+  return contacts;
+}
+
+function toggleReportHubRecipient(key) {
+  const current = new Set(reportHubRecipientKeys);
+  if (current.has(key)) current.delete(key);
+  else current.add(key);
+  reportHubRecipientKeys = [...current];
+  renderTab();
+}
+
+function setAllReportHubRecipients(enabled) {
+  const contacts = getWorkspaceScopedRecipientContacts();
+  reportHubRecipientKeys = enabled ? contacts.map(contact => contact.key) : [];
+  renderTab();
+}
+
+function setReportHubType(value) {
+  reportHubType = String(value || "weekly_csuite");
+  renderTab();
+}
+
+function setReportHubAction(value) {
+  reportHubAction = String(value || "preview");
+  renderTab();
+}
+
 function formatPortfolioReportValue(value, kind = "number") {
   if (value === null || value === undefined || value === "") return "—";
   if (kind === "currency") return `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -10931,8 +11349,8 @@ function buildWeeklyExecutiveNarrative(report) {
   const leasedPct = getSummaryLeasedPct(aggregate);
   const communityCount = report.details.length;
   const investorCount = report.investorGroups.length;
-  const firstParagraph = `RISE closed the week with physical occupancy at ${occPct.toFixed(1)}% and leased occupancy at ${leasedPct.toFixed(1)}% across ${communityCount} communities spanning ${investorCount} investment portfolio${investorCount === 1 ? "" : "s"}. Net absorption sits at ${formatSignedDisplay(aggregate.monthAbsorption)} units month to date, approved applications total ${(aggregate.applicationsApproved ?? 0).toFixed(0)}, renewals are closing at ${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}% of expirations, and the portfolio ORA average is ${(aggregate.oraScore ?? 0).toFixed(1)}.`;
-  let secondParagraph = `Saved-budget tracking shows ${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities currently on track to occupancy budget.`;
+  const firstParagraph = `${report.scopeLabel} is sitting at ${occPct.toFixed(1)}% physical occupancy and ${leasedPct.toFixed(1)}% leased occupancy for ${report.currentMonthLabel}. Approved applications are at ${(aggregate.applicationsApproved ?? 0).toFixed(0)} month to date, net absorption is ${formatSignedDisplay(aggregate.monthAbsorption)} units, renewal retention is ${(aggregate.renewalRetentionRate ?? 0).toFixed(1)}%, and ORA is ${(aggregate.oraScore ?? 0).toFixed(1)} across ${communityCount} communit${communityCount === 1 ? "y" : "ies"}.`;
+  let secondParagraph = `Saved-budget tracking shows ${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities currently on track to occupancy budget, with ${Math.max(aggregate.occGapUnits ?? 0, 0)} units still below current physical occupancy targets.`;
   if (previousAggregate) {
     const occDelta = occPct - getSummaryOccPct(previousAggregate);
     const appDelta = (aggregate.applicationsApproved ?? 0) - (previousAggregate.applicationsApproved ?? 0);
@@ -10988,21 +11406,28 @@ function buildWeeklyExecutiveMetricCards(report) {
 
 function buildWeeklyExecutiveReportData() {
   const selectedMonth = getSelectedDashboardMonthIndex();
-  const details = buildPortfolioDetailsForMonth(selectedMonth);
+  const details = getWorkspaceScopedDetails(selectedMonth);
   if (details.length === 0) {
     alert("Save at least one community before building the weekly C-suite report.");
     return null;
   }
   const previousPayload = getStoredWeeklySnapshotPayload();
-  const previousDetails = previousPayload ? getSnapshotPortfolioDetails(previousPayload) : [];
+  const previousDetails = previousPayload
+    ? (isPortfolioWorkspaceSelected()
+        ? getSnapshotPortfolioDetails(previousPayload)
+        : getSnapshotPortfolioDetails(previousPayload).filter(detail => detail.name === getProp().name))
+    : [];
   const previousGroups = buildInvestorPortfolioGroups(previousDetails);
   const previousGroupsByName = new Map(previousGroups.map(group => [group.name, group]));
   const investorGroups = buildInvestorPortfolioGroups(details, previousGroupsByName);
   const generatedAt = new Date();
+  const scopeLabel = isPortfolioWorkspaceSelected() ? PORTFOLIO_SCOPE_LABEL : getProp().name;
   return {
-    title: "RISE Weekly C-Suite Portfolio Performance",
-    subtitle: "High-level leadership report grouped by investment portfolio",
+    title: isPortfolioWorkspaceSelected() ? "RISE Weekly C-Suite Portfolio Snapshot" : `RISE Weekly C-Suite Snapshot - ${scopeLabel}`,
+    subtitle: isPortfolioWorkspaceSelected() ? "CEO-level weekly operating brief grouped by investment portfolio" : "CEO-level weekly operating brief for the selected community",
     generatedAt,
+    scopeLabel,
+    currentMonthLabel: getDashboardMonthLabel(selectedMonth),
     details,
     aggregate: aggregateCommunitySummaries(details.map(detail => detail.summary)),
     previousAggregate: previousDetails.length > 0 ? aggregateCommunitySummaries(previousDetails.map(detail => detail.summary)) : null,
@@ -13433,12 +13858,29 @@ function openWeeklyExecutiveReport(printImmediately = false) {
   const baselineLabel = report.previousGeneratedAt
     ? `Weekly comparison baseline: ${new Date(report.previousGeneratedAt).toLocaleString()}`
     : "Weekly comparison baseline: not yet synced in this browser";
+  const riskList = report.details
+    .slice()
+    .sort((a, b) => ((Number(b.summary?.occGapUnits ?? 0) + Number(b.summary?.renewalUndecided ?? 0)) - (Number(a.summary?.occGapUnits ?? 0) + Number(a.summary?.renewalUndecided ?? 0))))
+    .slice(0, 5);
+  const applicationLeaders = report.details
+    .slice()
+    .sort((a, b) => Number(b.summary?.applicationsApproved ?? 0) - Number(a.summary?.applicationsApproved ?? 0))
+    .slice(0, 5);
+  const biggestMoves = report.details
+    .slice()
+    .sort((a, b) => Math.abs(Number(b.summary?.monthAbsorption ?? 0)) - Math.abs(Number(a.summary?.monthAbsorption ?? 0)))
+    .slice(0, 5);
+  const asks = [
+    `${Math.max(report.aggregate.occGapUnits ?? 0, 0)} unit${Math.abs(report.aggregate.occGapUnits ?? 0) === 1 ? "" : "s"} are still needed to close the current physical occupancy gap to budget.`,
+    `${Math.round(report.aggregate.renewalUndecided ?? 0)} renewal${Math.round(report.aggregate.renewalUndecided ?? 0) === 1 ? "" : "s"} remain undecided / M2M and should be the first save push before backfill demand expands.`,
+    `${Math.round(report.aggregate.applicationsApproved ?? 0)} approved application${Math.round(report.aggregate.applicationsApproved ?? 0) === 1 ? "" : "s"} need to convert cleanly into signed leases to protect month-end pace.`
+  ];
   const brandMark = `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #d1d5db">
     <div style="display:flex;align-items:center;gap:14px">
       <img src="${EXPORT_BRAND_LOGO_URI}" alt="RISE logo" style="height:38px;width:auto;object-fit:contain;display:block;flex:0 0 auto">
       <div>
         <div style="font-size:22px;font-weight:700;color:#1d4ed8">${escapeHtml(report.title)}</div>
-        <div style="font-size:12px;color:#6b7280">${escapeHtml(report.subtitle)}</div>
+        <div style="font-size:12px;color:#6b7280">${escapeHtml(report.subtitle)} · ${escapeHtml(report.currentMonthLabel)}</div>
       </div>
     </div>
     <div style="text-align:right;font-size:11px;color:#6b7280">
@@ -13456,8 +13898,28 @@ function openWeeklyExecutiveReport(printImmediately = false) {
   const narrativeHtml = `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;margin-bottom:18px">
     ${narrative.map(paragraph => `<p style="font-size:13px;line-height:1.7;color:#1f2937;margin:${paragraph === narrative[0] ? "0 0 10px" : "0"}">${escapeHtml(paragraph)}</p>`).join("")}
   </div>`;
+  const ceoPanels = `<div style="display:grid;grid-template-columns:1.05fr 0.95fr 1fr;gap:12px;margin-bottom:18px">
+    <div style="border:1px solid #d1d5db;border-radius:12px;padding:14px;background:#ffffff">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px">CEO Focus</div>
+      ${asks.map(item => `<div style="font-size:12px;line-height:1.65;color:#1f2937;margin-bottom:8px">• ${escapeHtml(item)}</div>`).join("")}
+    </div>
+    <div style="border:1px solid #d1d5db;border-radius:12px;padding:14px;background:#ffffff">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px">Biggest Movers</div>
+      ${biggestMoves.map(detail => `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:1.55;margin-bottom:8px">
+        <span>${escapeHtml(detail.name)}</span>
+        <strong style="color:${Number(detail.summary?.monthAbsorption ?? 0) >= 0 ? "#047857" : "#b91c1c"}">${escapeHtml(formatSignedDisplay(detail.summary?.monthAbsorption ?? 0))}</strong>
+      </div>`).join("") || `<div style="font-size:12px;color:#6b7280">No move-in / move-out movement has been saved yet.</div>`}
+    </div>
+    <div style="border:1px solid #d1d5db;border-radius:12px;padding:14px;background:#ffffff">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px">Application Leaders</div>
+      ${applicationLeaders.map(detail => `<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:1.55;margin-bottom:8px">
+        <span>${escapeHtml(detail.name)}</span>
+        <strong style="color:#1d4ed8">${Math.round(detail.summary?.applicationsApproved ?? 0)} approved</strong>
+      </div>`).join("") || `<div style="font-size:12px;color:#6b7280">No approved applications are saved yet.</div>`}
+    </div>
+  </div>`;
   const highlightHtml = `<div style="margin-bottom:18px">
-    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">Investment Portfolio Highlights</div>
+    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">${isPortfolioWorkspaceSelected() ? "Investment Portfolio Highlights" : "Community Spotlight"}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">
       ${report.investorGroups.map(group => `<div style="border:1px solid #d1d5db;border-radius:12px;padding:14px;background:#ffffff">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
@@ -13471,34 +13933,60 @@ function openWeeklyExecutiveReport(printImmediately = false) {
       </div>`).join("")}
     </div>
   </div>`;
-  const investorTable = `<div>
-    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">Portfolio Snapshot by Investment Group</div>
+  const investorTable = `<div style="margin-bottom:18px">
+    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">Scope Snapshot by Community</div>
     <table style="width:100%;border-collapse:collapse;border:1px solid #d1d5db;border-radius:12px;overflow:hidden">
       <thead>
         <tr style="background:#eff6ff">
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:left">Investment Portfolio</th>
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Occ</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:left">Community</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Physical</th>
           <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Leased</th>
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">On Track</th>
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Approved Apps (MTD)</th>
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Absorption (MTD)</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Approved Apps</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Net Absorption</th>
           <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Renewal %</th>
-          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">ORA</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Tour to Lease</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Risk</th>
         </tr>
       </thead>
       <tbody>
-        ${report.investorGroups.map(group => `<tr>
+        ${report.details.map(detail => `<tr>
           <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;color:#111827">
-            <div style="font-weight:700">${escapeHtml(group.name)}</div>
-            <div style="font-size:11px;color:#6b7280">${group.communityCount} communit${group.communityCount === 1 ? "y" : "ies"}</div>
+            <div style="font-weight:700">${escapeHtml(detail.name)}</div>
+            <div style="font-size:11px;color:#6b7280">${escapeHtml(getInvestorPortfolioName(detail.record))}</div>
           </td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${getSummaryOccPct(group.aggregate).toFixed(1)}%</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${getSummaryLeasedPct(group.aggregate).toFixed(1)}%</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${group.aggregate.onTrackBudgetOccCount ?? 0}/${group.aggregate.trackedBudgetOccCount ?? 0}</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.round(group.aggregate.applicationsApproved ?? 0)}</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatSignedDisplay(group.aggregate.monthAbsorption ?? 0)}</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${(group.aggregate.renewalRetentionRate ?? 0).toFixed(1)}%</td>
-          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${(group.aggregate.oraScore ?? 0) > 0 ? (group.aggregate.oraScore ?? 0).toFixed(1) : "—"}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${getSummaryOccPct(detail.summary).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${getSummaryLeasedPct(detail.summary).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.round(detail.summary?.applicationsApproved ?? 0)}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatSignedDisplay(detail.summary?.monthAbsorption ?? 0)}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${(detail.summary?.renewalRetentionRate ?? 0).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${(detail.summary?.tourToLeasePct ?? 0).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;color:${(Number(detail.summary?.occGapUnits ?? 0) + Number(detail.summary?.renewalUndecided ?? 0)) > 0 ? "#b45309" : "#047857"}">${Math.max(Number(detail.summary?.occGapUnits ?? 0), 0)} occ gap · ${Math.round(detail.summary?.renewalUndecided ?? 0)} undecided</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  </div>`;
+  const riskWatch = `<div>
+    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">Risk Watchlist</div>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #d1d5db;border-radius:12px;overflow:hidden">
+      <thead>
+        <tr style="background:#eff6ff">
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:left">Community</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Occ Gap</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Leased Gap</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:center">Renewal Undecided</th>
+          <th style="padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#4b5563;text-align:left">Recommended Focus</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${riskList.map(detail => `<tr>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;color:#111827">
+            <div style="font-weight:700">${escapeHtml(detail.name)}</div>
+            <div style="font-size:11px;color:#6b7280">${escapeHtml(getInvestorPortfolioName(detail.record))}</div>
+          </td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.max(detail.summary?.occGapUnits ?? 0, 0)}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.max(detail.summary?.leasedGapUnits ?? 0, 0)}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.round(detail.summary?.renewalUndecided ?? 0)}</td>
+          <td style="padding:10px 12px;border-top:1px solid #e5e7eb;font-size:12px;color:#374151">${escapeHtml(detail.recommendations?.[0]?.body || "Monitor occupancy pace and funnel quality.")}</td>
         </tr>`).join("")}
       </tbody>
     </table>
@@ -13510,7 +13998,7 @@ function openWeeklyExecutiveReport(printImmediately = false) {
     *{box-sizing:border-box}
     table{width:100%;border-collapse:collapse}
     @media print { body{padding:18px} }
-  </style></head><body>${brandMark}${metricCardsHtml}${narrativeHtml}${highlightHtml}${investorTable}</body></html>`);
+  </style></head><body>${brandMark}${metricCardsHtml}${narrativeHtml}${ceoPanels}${highlightHtml}${investorTable}${riskWatch}</body></html>`);
   win.document.close();
   if (printImmediately) {
     win.focus();
@@ -13541,6 +14029,130 @@ function buildWeeklyExecutiveEmailBody(report) {
     "",
     "Attach the branded weekly PDF before sending."
   ].join("\n");
+}
+
+function getReportHubActionOptions(type = reportHubType) {
+  const common = [
+    { value: "preview", label: "Preview" },
+    { value: "print", label: "Print / PDF" },
+    { value: "email", label: "Draft Email" }
+  ];
+  if (type === "portfolio_report") return [...common, { value: "export_csv", label: "Export CSV" }, { value: "export_excel", label: "Export Excel" }];
+  if (type === "investor_deck") return [...common, { value: "export_canva", label: "Export for Canva" }, { value: "export_html", label: "Download Editable HTML" }];
+  if (type === "dlr_overview") return [...common, { value: "export_html", label: "Download Editable HTML" }];
+  if (type === "bonus_payout") return [...common, { value: "export_csv", label: "Export CSV" }];
+  return common;
+}
+
+function ensureValidReportHubAction() {
+  const valid = new Set(getReportHubActionOptions().map(option => option.value));
+  if (!valid.has(reportHubAction)) reportHubAction = "preview";
+}
+
+function buildReportHubEmailDraft(type = reportHubType) {
+  const selectedRecipients = ensureReportHubRecipientSelection().filter(contact => reportHubRecipientKeys.includes(contact.key));
+  const to = selectedRecipients.map(contact => contact.email).join("; ");
+  const scopeLabel = getWorkspaceScopeDisplayName();
+  if (type === "weekly_csuite") {
+    const report = buildWeeklyExecutiveReportData();
+    if (!report) return null;
+    return {
+      to,
+      subject: `${report.title} | ${report.currentMonthLabel}`,
+      body: buildWeeklyExecutiveEmailBody(report)
+    };
+  }
+  if (type === "portfolio_report") {
+    const payload = buildPortfolioReportRows();
+    if (!payload) return null;
+    return {
+      to,
+      subject: `${payload.report.title} | ${payload.report.currentMonthLabel || getDashboardMonthLabel(getSelectedDashboardMonthIndex())}`,
+      body: [
+        `${payload.report.title}`,
+        `${payload.report.scopeSummary}`,
+        "",
+        "The attached export should summarize occupancy, traffic, renewals, and reputation for the selected scope.",
+        "Use the Reporting Hub export action to generate the CSV, Excel, or print-ready version before sending."
+      ].join("\n")
+    };
+  }
+  if (type === "investor_deck") {
+    const report = buildMonthlyInvestorPresentationData();
+    if (!report) return null;
+    return {
+      to,
+      subject: `${report.title} | ${report.currentMonthLabel}`,
+      body: [
+        `${report.title}`,
+        `${report.scopeSummary}`,
+        "",
+        "The latest investor presentation is ready from the Reporting Hub.",
+        "Use Preview, Print / PDF, Export for Canva, or Download Editable HTML before sending."
+      ].join("\n")
+    };
+  }
+  if (type === "dlr_overview") {
+    const report = buildDashboardDlrInvestorOverview();
+    if (!report) return null;
+    return {
+      to,
+      subject: `${report.communityName} DLR | ${report.reportPeriodLabel}`,
+      body: [
+        `${report.communityName} Daily Leasing Report`,
+        report.reportPeriodLabel,
+        "",
+        "The latest DLR snapshot is ready from the dashboard.",
+        "Use Print / PDF or Download Editable HTML before sending."
+      ].join("\n")
+    };
+  }
+  return {
+    to,
+    subject: `${scopeLabel} Bonus Payout Snapshot`,
+    body: [
+      `${scopeLabel} bonus payout snapshot`,
+      "",
+      "The latest bonus payout report is ready from the dashboard.",
+      "Use CSV or Print / PDF before sending."
+    ].join("\n")
+  };
+}
+
+async function runReportHubAction() {
+  ensureValidReportHubAction();
+  if (reportHubAction === "preview") {
+    if (reportHubType === "weekly_csuite") return openWeeklyExecutiveReport(false);
+    if (reportHubType === "portfolio_report") return openPortfolioPerformanceReport(false);
+    if (reportHubType === "investor_deck") return openMonthlyInvestorPresentation(false);
+    if (reportHubType === "dlr_overview") return openDlrInvestorOverview(false);
+    return openBonusPayoutReport(false);
+  }
+  if (reportHubAction === "print") {
+    if (reportHubType === "weekly_csuite") return openWeeklyExecutiveReport(true);
+    if (reportHubType === "portfolio_report") return openPortfolioPerformanceReport(true);
+    if (reportHubType === "investor_deck") return openMonthlyInvestorPresentation(true);
+    if (reportHubType === "dlr_overview") return openDlrInvestorOverview(true);
+    return openBonusPayoutReport(true);
+  }
+  if (reportHubAction === "export_csv") {
+    if (reportHubType === "portfolio_report") return exportPortfolioReportCSV();
+    return exportBonusPayoutCSV();
+  }
+  if (reportHubAction === "export_excel") return exportPortfolioReportExcel();
+  if (reportHubAction === "export_canva") return exportMonthlyInvestorPresentationPptx();
+  if (reportHubAction === "export_html") {
+    if (reportHubType === "investor_deck") return downloadMonthlyInvestorPresentationBrief();
+    return downloadDlrInvestorOverviewHtml();
+  }
+  if (reportHubAction === "email") {
+    const draft = buildReportHubEmailDraft(reportHubType);
+    if (!draft) return;
+    openOutlookComposeDraft(draft);
+    setTimeout(() => {
+      alert(`Outlook draft requested for ${getWorkspaceScopeDisplayName()}. Export or print the selected report first if you need an attachment or inline visual.`);
+    }, 250);
+  }
 }
 
 function draftWeeklyExecutiveOutlookEmail() {
@@ -14638,6 +15250,7 @@ function downloadDlrInvestorOverviewHtml() {
 }
 
 function renderCSVTab() {
+  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedImportTab();
   const errorHTML = csvError ? `<div class="alert-red mb4">${csvError}</div>` : "";
   const logHTML = csvLog.length > 0 ? `<div class="alert-green mb4">${csvLog.map((l,i) => `<div style="${i===0?"color:#3fb950;font-weight:600":"color:var(--muted)"}">${l}</div>`).join('')}</div>` : "";
   const imageInventory = getPresentationImageInventory();
