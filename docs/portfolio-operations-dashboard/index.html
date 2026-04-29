@@ -3258,10 +3258,10 @@ function getCommunitySummary(propName, sourceData) {
   const previousRenewalSummary = getRenewalSummaryForMonth(prevMonthData);
   const closedQuarterRetention = getClosedOutRetentionAverageForMonths(scopeMonthlyData, getQuarterMonths(bonusQuarter), scopeCurrentMonth);
   const applications = applicationMetrics.applications;
-  const previousApplications = Number(prevMonthData.applications) || 0;
   const previousGuestCards = getLeadSourceTotal(prevMonthData);
   const previousTours = Number(prevMonthData.tours) || 0;
   const previousApplicationsApproved = prevApplicationMetrics.approvals;
+  const previousApplicationsDenied = prevApplicationMetrics.denials;
   const leasesSigned = Number(curMonthData.leasesSignedActual) || 0;
   const previousLeasesSigned = Number(prevMonthData.leasesSignedActual) || 0;
   const moveOuts = getEffectiveMoveOutsForMonth(scopeCurrentMonth, scopeMonthlyData).effective;
@@ -3306,9 +3306,10 @@ function getCommunitySummary(propName, sourceData) {
     applicationDenialPct: applicationMetrics.denialPct,
     tourToLeasePct: getTourToLeasePctForMonth(scopeMonthlyData, scopeCurrentMonth, scopeCurrentMonth),
     previousTourToLeasePct: getTourToLeasePctForMonth(scopeMonthlyData, Math.max(scopeCurrentMonth - 1, 0), Math.max(scopeCurrentMonth - 1, 0)),
-    previousApplications,
+    previousApplications: prevApplicationMetrics.applications,
     leasesSigned,
     previousLeasesSigned,
+    previousApplicationsDenied,
     moveOuts,
     moveIns,
     previousMoveOuts,
@@ -3373,6 +3374,7 @@ function aggregateCommunitySummaries(summaries) {
     acc.applicationsPendingDecision += summary.applicationsPendingDecision || 0;
     acc.previousApplications += summary.previousApplications;
     acc.previousApplicationsApproved += summary.previousApplicationsApproved;
+    acc.previousApplicationsDenied += summary.previousApplicationsDenied || 0;
     acc.leasesSigned += summary.leasesSigned;
     acc.previousLeasesSigned += summary.previousLeasesSigned;
     acc.tourToLeasePctWeightTours += summary.tours;
@@ -3452,6 +3454,7 @@ function aggregateCommunitySummaries(summaries) {
     applicationsPendingDecision: 0,
     previousApplications: 0,
     previousApplicationsApproved: 0,
+    previousApplicationsDenied: 0,
     leasesSigned: 0,
     previousLeasesSigned: 0,
     tourToLeasePctWeightTours: 0,
@@ -3513,6 +3516,7 @@ function aggregateCommunitySummaries(summaries) {
     applicationsPendingDecision: totals.applicationsPendingDecision,
     previousApplications: totals.previousApplications,
     previousApplicationsApproved: totals.previousApplicationsApproved,
+    previousApplicationsDenied: totals.previousApplicationsDenied,
     leasesSigned: totals.leasesSigned,
     previousLeasesSigned: totals.previousLeasesSigned,
     moveOuts: totals.moveOuts,
@@ -3549,8 +3553,8 @@ function aggregateCommunitySummaries(summaries) {
     previousTourToLeasePct: totals.previousTourToLeasePctWeightTours > 0 ? (totals.previousTourToLeasePctWeightLeases / totals.previousTourToLeasePctWeightTours) * 100 : 0,
     applicationApprovalPct: totals.applications > 0 ? (totals.applicationsApproved / totals.applications) * 100 : 0,
     previousApplicationApprovalPct: totals.previousApplications > 0 ? (totals.previousApplicationsApproved / totals.previousApplications) * 100 : 0,
-    applicationDenialPct: totals.applications > 0 ? ((totals.applications - totals.applicationsApproved) / totals.applications) * 100 : 0,
-    previousApplicationDenialPct: totals.previousApplications > 0 ? ((totals.previousApplications - totals.previousApplicationsApproved) / totals.previousApplications) * 100 : 0,
+    applicationDenialPct: totals.applications > 0 ? (totals.applicationsDenied / totals.applications) * 100 : 0,
+    previousApplicationDenialPct: totals.previousApplications > 0 ? (totals.previousApplicationsDenied / totals.previousApplications) * 100 : 0,
     moveInGoalPct: totals.moveInGoal > 0 ? Math.min((totals.moveIns / totals.moveInGoal) * 100, 200) : 0,
     renewalExpirations: totals.renewalExpirations,
     renewalsSigned: totals.renewalsSigned,
@@ -10215,7 +10219,7 @@ function renderBonusTab() {
 }
 
 function renderPortfolioHomeTab() {
-  const selectedMonth = currentMonth;
+  const selectedMonth = getSelectedDashboardMonthIndex();
   const selectedLabel = FULL_MONTHS[selectedMonth];
   const details = getWorkspaceScopedDetails(selectedMonth);
   const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
@@ -12053,6 +12057,13 @@ function buildMonthlyInvestorPresentationData() {
   const generatedAt = new Date();
   const selectedSections = getMonthlyInvestorPresentationSections();
   const aggregate = aggregateCommunitySummaries(details.map(detail => detail.summary));
+  const previousMonthIdx = selectedMonth > 0 ? selectedMonth - 1 : null;
+  const previousAggregate = previousMonthIdx !== null
+    ? aggregateCommunitySummaries(
+        getMonthlyPresentationScopedDetails(buildPortfolioDetailsForMonth(previousMonthIdx))
+          .map(detail => detail.summary)
+      )
+    : null;
   const photoPool = collectMonthlyPresentationPhotos(details, 8);
   const regionalStaff = getMonthlyPresentationRegionalStaffForDetails(details);
   const communityNames = details.map(detail => detail.name);
@@ -12064,9 +12075,10 @@ function buildMonthlyInvestorPresentationData() {
     subtitle,
     generatedAt,
     currentMonthLabel: getDashboardMonthLabel(selectedMonth),
-    previousMonthLabel: getDashboardMonthLabel(selectedMonth - 1),
+    previousMonthLabel: previousMonthIdx !== null ? getDashboardMonthLabel(previousMonthIdx) : "",
     details,
     aggregate,
+    previousAggregate,
     investorGroups: buildInvestorPortfolioGroups(details),
     selectedSections,
     scopeSummary: getMonthlyPresentationScopeSummary(details),
@@ -12079,18 +12091,25 @@ function buildMonthlyInvestorPresentationData() {
 
 function buildMonthlyInvestorPresentationMetricCards(report) {
   const aggregate = report.aggregate;
+  const previousAggregate = report.previousAggregate;
   const occPct = getSummaryOccPct(aggregate);
   const leasedPct = getSummaryLeasedPct(aggregate);
+  const previousOccPct = previousAggregate ? getSummaryOccPct(previousAggregate) : null;
+  const previousLeasedPct = previousAggregate ? getSummaryLeasedPct(previousAggregate) : null;
   return [
     {
       label: "Physical Occupancy",
       value: `${occPct.toFixed(1)}%`,
-      sub: `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities on track`
+      sub: previousAggregate
+        ? formatPortfolioTrendValue(occPct, previousOccPct, "point")
+        : `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities on track`
     },
     {
       label: "Leased Occupancy",
       value: `${leasedPct.toFixed(1)}%`,
-      sub: formatPortfolioTrendValue(leasedPct, leasedPct - (aggregate.leasedGapPts ?? 0), "point")
+      sub: previousAggregate
+        ? formatPortfolioTrendValue(leasedPct, previousLeasedPct, "point")
+        : `${Math.max(aggregate.leasedGapUnits ?? 0, 0)} units behind leased target`
     },
     {
       label: "Approved Applications (MTD)",
@@ -12128,10 +12147,16 @@ function buildMonthlyInvestorPresentationAgenda(report) {
 
 function buildMonthlyInvestorPresentationNarrative(report) {
   const aggregate = report.aggregate;
+  const previousAggregate = report.previousAggregate;
   const occPct = getSummaryOccPct(aggregate);
   const leasedPct = getSummaryLeasedPct(aggregate);
   const firstParagraph = `${report.currentMonthLabel} closed with physical occupancy at ${occPct.toFixed(1)}% and leased occupancy at ${leasedPct.toFixed(1)}% across ${report.details.length} selected ${report.details.length === 1 ? "community" : "communities"}. Approved applications reached ${Math.round(aggregate.applicationsApproved ?? 0)} month to date, net absorption landed at ${formatSignedDisplay(aggregate.monthAbsorption ?? 0)} units, and ${aggregate.onTrackBudgetOccCount ?? 0} of ${aggregate.trackedBudgetOccCount ?? 0} communities are pacing on track to saved occupancy budget.`;
-  const secondParagraph = `Versus ${report.previousMonthLabel}, applications are ${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct").replace("MoM", "month over month")}, renewal retention is ${formatPortfolioTrendValue(aggregate.renewalRetentionRate ?? 0, aggregate.previousRenewalRetentionRate ?? 0, "point").replace("MoM", "month over month")}, and the blended tour-to-lease conversion rate is ${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%. This export is built from live dashboard data, not a static slide template, so each monthly deck reflects the current operating picture for the selected communities.`;
+  const tourToLeaseComparison = previousAggregate
+    ? `${formatPortfolioTrendValue(aggregate.tourToLeasePct ?? 0, previousAggregate.tourToLeasePct ?? 0, "point").replace("MoM", "month over month")}`
+    : `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`;
+  const secondParagraph = report.previousMonthLabel
+    ? `Versus ${report.previousMonthLabel}, applications are ${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct").replace("MoM", "month over month")}, renewal retention is ${formatPortfolioTrendValue(aggregate.renewalRetentionRate ?? 0, aggregate.previousRenewalRetentionRate ?? 0, "point").replace("MoM", "month over month")}, and tour-to-lease conversion is ${tourToLeaseComparison}. This export is built from live dashboard data, not a static slide template, so each monthly deck reflects the current operating picture for the selected communities.`
+    : `Tour-to-lease conversion is currently ${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%, and this export is built from live dashboard data rather than a static slide template so the deck always reflects the current operating picture for the selected communities.`;
   return [firstParagraph, secondParagraph];
 }
 
@@ -14807,7 +14832,9 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
         mtm: renewals.undecided,
         pendingMoveOuts: getEffectiveMoveOutsForMonth(idx, scopeMonthlyData).effective,
         pendingMoveIns: Number(entry.moveIns) || 0,
-        budgetedOccupancy: Number(entry.budgetOcc) || 0,
+        budgetedOccupancy: (record.savedBudgetTargets?.[idx] ?? 0) > 0
+          ? Number(record.savedBudgetTargets[idx]) || 0
+          : Number(entry.budgetOcc) || Number(row.budgetOcc) || 0,
         projectedOccupancy: Number(row.occPct) || 0,
         moveInsNeeded: Number(row.netOccLeases) || 0
       };
@@ -14818,7 +14845,9 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
   const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, reportMetricMonthIdx, 3);
   const trendingOccupancyPct = Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct;
-  const budgetOccPct = Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
+  const budgetOccPct = (record.savedBudgetTargets?.[reportMetricMonthIdx] ?? 0) > 0
+    ? Number(record.savedBudgetTargets[reportMetricMonthIdx]) || 0
+    : Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
   const dashboardLeadSources = getLeadSourceBreakdown(monthEntry);
