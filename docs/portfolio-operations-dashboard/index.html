@@ -9812,7 +9812,7 @@ function renderPortfolioHomeTab() {
           return `<div class="portfolio-rank-item">
             <div>
               <div style="font-size:0.78rem;font-weight:700">${escapeHtml(detail.name)}</div>
-              <div class="meta">${strategyLabel} · ${Number(market.subjectOccPct ?? 0) > 0 ? `${Number(market.subjectOccPct).toFixed(1)}% subject occ` : "snapshot uploaded"}${Number(market.compAverageRent ?? 0) > 0 ? ` · comp avg rent ${formatCurrency(market.compAverageRent)}` : ""}</div>
+              <div class="meta">${strategyLabel} · ${Number(market.subjectOccPct ?? 0) > 0 ? `${Number(market.subjectOccPct).toFixed(1)}% subject occ` : "snapshot uploaded"}${Number(market.compAverageRent ?? 0) > 0 ? ` · comp avg rent ${formatDlrCurrency(market.compAverageRent)}` : ""}</div>
             </div>
             <div style="text-align:right;max-width:220px">
               <div class="metric">${Math.round(market.leasesLast30 ?? 0)}</div>
@@ -10007,7 +10007,7 @@ function renderPortfolioHomeTab() {
             <div class="meta">${marketSurveyAggregate.compAverageRentCount > 0 ? `${marketSurveyAggregate.compAverageRentCount} communities with comp rent data` : "Waiting on uploaded rent comps"}</div>
           </div>
           <div style="text-align:right">
-            <div class="metric">${marketSurveyAggregate.compAverageRentCount > 0 ? formatCurrency(marketSurveyAggregate.compAverageRentTotal / marketSurveyAggregate.compAverageRentCount) : "—"}</div>
+            <div class="metric">${marketSurveyAggregate.compAverageRentCount > 0 ? formatDlrCurrency(marketSurveyAggregate.compAverageRentTotal / marketSurveyAggregate.compAverageRentCount) : "—"}</div>
             <div class="metric-sub">portfolio avg comp rent</div>
           </div>
         </div>
