@@ -1462,6 +1462,14 @@ function normalizeDlrBoxScoreSnapshot(input = {}) {
   };
 }
 
+function mergePreferredBoxScoreCount(existingValue, candidateValue) {
+  const existing = normalizeOptionalNumber(existingValue);
+  const candidate = normalizeOptionalNumber(candidateValue);
+  if (candidate === null) return existing;
+  if (existing === null) return candidate;
+  return Math.max(existing, candidate);
+}
+
 function hasDlrBoxScoreSnapshot(snapshot) {
   const normalized = normalizeDlrBoxScoreSnapshot(snapshot);
   return Boolean(
@@ -7007,15 +7015,15 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
   dailySnapshot.firstVisitsTours = extractMetricFromRowsOrText(rows, rawText, ["first visits/tours", "first visits", "first visit tours"], ["First Visits/Tours"]) ?? dailySnapshot.firstVisitsTours;
   dailySnapshot.guestCards = extractMetricFromRowsOrText(rows, rawText, ["guest cards", "guest card", "total leads", "leads"], ["Guest Cards"]) ?? dailySnapshot.guestCards;
   dailySnapshot.tours = extractMetricFromRowsOrText(rows, rawText, ["tours", "tour"], ["Tours"]) ?? dailySnapshot.tours;
-  dailySnapshot.applications = dailySnapshot.applications ?? extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]);
-  dailySnapshot.applicationsApproved = dailySnapshot.applicationsApproved ?? extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]);
-  dailySnapshot.denied = dailySnapshot.denied ?? extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]);
-  dailySnapshot.cancelled = dailySnapshot.cancelled ?? extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]);
-  dailySnapshot.pendingDecision = dailySnapshot.pendingDecision ?? extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]);
-  dailySnapshot.leasesSigned = extractMetricFromRowsOrText(rows, rawText, ["leases signed", "signed leases", "leases"], ["Leases Signed"]) ?? dailySnapshot.leasesSigned;
-  dailySnapshot.moveIns = extractMetricFromRowsOrText(rows, rawText, ["move-ins", "move ins"], ["Move-Ins"]) ?? dailySnapshot.moveIns;
-  dailySnapshot.moveOuts = extractMetricFromRowsOrText(rows, rawText, ["move-outs", "move outs"], ["Move-Outs"]) ?? dailySnapshot.moveOuts;
-  dailySnapshot.renewals = extractMetricFromRowsOrText(rows, rawText, ["renewals", "renewals signed"], ["Renewals"]) ?? dailySnapshot.renewals;
+  dailySnapshot.applications = mergePreferredBoxScoreCount(dailySnapshot.applications, extractMetricFromRowsOrText(rows, rawText, ["gross new applications", "applications", "apps"], ["Gross New Applications", "Net New Applications"]));
+  dailySnapshot.applicationsApproved = mergePreferredBoxScoreCount(dailySnapshot.applicationsApproved, extractMetricFromRowsOrText(rows, rawText, ["applications approved", "approved applications", "approvals"], ["Approved Applications"]));
+  dailySnapshot.denied = mergePreferredBoxScoreCount(dailySnapshot.denied, extractMetricFromRowsOrText(rows, rawText, ["denied"], ["Denied"]));
+  dailySnapshot.cancelled = mergePreferredBoxScoreCount(dailySnapshot.cancelled, extractMetricFromRowsOrText(rows, rawText, ["cancelled", "canceled"], ["Cancelled"]));
+  dailySnapshot.pendingDecision = mergePreferredBoxScoreCount(dailySnapshot.pendingDecision, extractMetricFromRowsOrText(rows, rawText, ["pending decision", "pending decisions", "pipeline", "application started"], ["Pipeline (Application Started)", "Pending Decision"]));
+  dailySnapshot.leasesSigned = mergePreferredBoxScoreCount(dailySnapshot.leasesSigned, extractMetricFromRowsOrText(rows, rawText, ["leases signed", "signed leases", "leases"], ["Leases Signed"]));
+  dailySnapshot.moveIns = mergePreferredBoxScoreCount(dailySnapshot.moveIns, extractMetricFromRowsOrText(rows, rawText, ["move-ins", "move ins"], ["Move-Ins"]));
+  dailySnapshot.moveOuts = mergePreferredBoxScoreCount(dailySnapshot.moveOuts, extractMetricFromRowsOrText(rows, rawText, ["move-outs", "move outs"], ["Move-Outs"]));
+  dailySnapshot.renewals = mergePreferredBoxScoreCount(dailySnapshot.renewals, extractMetricFromRowsOrText(rows, rawText, ["renewals", "renewals signed"], ["Renewals"]));
   const leadSourceRollup = [
     dailySnapshot.walkIn,
     dailySnapshot.offSiteEvent,
@@ -12677,6 +12685,41 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
   return runningUnits;
 }
 
+function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
+  const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
+  let occupiedUnits = startMonth === anchorMonth
+    ? Math.max(0, Number(record?.currentOccupied) || 0)
+    : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
+  if (!Number.isInteger(startMonth) || totalUnits <= 0) {
+    return {
+      occupiedUnits,
+      pct: totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0,
+      endMonthIdx: startMonth
+    };
+  }
+  const endMonthIdx = Math.min(startMonth + Math.max(Number(horizonMonths) || 0, 0), 11);
+  for (let month = startMonth + 1; month <= endMonthIdx; month += 1) {
+    const explicitSnapshot = Number(monthEntries[month]?.occupiedSnapshot ?? 0);
+    if (explicitSnapshot > 0) {
+      occupiedUnits = explicitSnapshot;
+      continue;
+    }
+    occupiedUnits = Math.max(
+      occupiedUnits
+        - getEffectiveMoveOutsForMonth(month, monthEntries).effective
+        + (Number(monthEntries[month]?.moveIns) || 0),
+      0
+    );
+    occupiedUnits = totalUnits > 0 ? Math.min(occupiedUnits, totalUnits) : occupiedUnits;
+  }
+  return {
+    occupiedUnits,
+    pct: totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0,
+    endMonthIdx
+  };
+}
+
 function formatDlrSignedNumber(value) {
   const numeric = Number(value) || 0;
   return numeric > 0 ? `+${numeric}` : `${numeric}`;
@@ -12809,8 +12852,8 @@ function buildDlrInvestorNotes({
       ? `Physical occupancy is ${formatDlrPercent(occupancyPct, 1)} and is pacing on or above the saved leasing schedule budget of ${formatDlrPercent(budgetOccPct, 1)}.`
       : `Physical occupancy is ${formatDlrPercent(occupancyPct, 1)} against the saved leasing schedule budget of ${formatDlrPercent(budgetOccPct, 1)}.`,
     leasedAhead
-      ? `Leased exposure is trending positively at ${formatDlrPercent(leasedPct, 1)}, with the 90-day occupancy trend pacing ${formatDlrPercent(trendingOccupancyPct, 1)}.`
-      : `Leased exposure is ${formatDlrPercent(leasedPct, 1)} with the 90-day occupancy trend pacing ${formatDlrPercent(trendingOccupancyPct, 1)}.`,
+      ? `Leased exposure is trending positively at ${formatDlrPercent(leasedPct, 1)}, and ending physical occupancy over the next 90 days is projected at ${formatDlrPercent(trendingOccupancyPct, 1)} from saved move-ins and move-outs.`
+      : `Leased exposure is ${formatDlrPercent(leasedPct, 1)}, and ending physical occupancy over the next 90 days is projected at ${formatDlrPercent(trendingOccupancyPct, 1)} from saved move-ins and move-outs.`,
     `${renewalsSigned} renewals have been secured from ${expirations} expirations (${formatDlrPercent(retentionRate, 0)} retention) while net absorption is ${formatDlrSignedNumber(netAbsorption)} unit${Math.abs(netAbsorption) === 1 ? "" : "s"} month to date.`,
     Number(avgInPlaceRent) > 0
       ? `${budgetRentDelta >= 0 ? "In-place rent is outperforming the current budget" : "In-place rent is currently below budget"} by ${formatDlrCurrency(Math.abs(budgetRentDelta))}.`
@@ -12819,7 +12862,7 @@ function buildDlrInvestorNotes({
   const wins = [
     netAbsorption > 0 ? `Positive net absorption of ${formatDlrSignedNumber(netAbsorption)} units is supporting occupancy momentum.` : "",
     approvalDelta > 0 ? `Approved applications are ahead of the prior month by ${approvalDelta}.` : "",
-    occupancyAhead && trendingOccupancyPct >= occupancyPct ? `Both current occupancy and the 90-day trend are pacing positively to the saved schedule.` : "",
+    occupancyAhead && trendingOccupancyPct >= occupancyPct ? `Both current occupancy and the 90-day projected ending physical occupancy are pacing positively to the saved schedule.` : "",
     primarySource && primarySource.value >= 5 ? `${primarySource.label} is the strongest source driver so far this month with ${primarySource.value} leads.` : ""
   ].filter(Boolean);
   return { tours, applications, highlights, wins };
@@ -12895,7 +12938,7 @@ function buildDlrEmailPlainTextBody(report) {
     `ATLAS DLR Investor Overview - ${report.communityName}`,
     report.reportPeriodLabel,
     "",
-    `Occupancy: ${formatDlrPercent(report.occupancyPct, 1)} | Leased: ${formatDlrPercent(report.leasedPct, 1)} | 90-Day Trend: ${formatDlrPercent(report.trendingOccupancyPct, 1)}`,
+    `Occupancy: ${formatDlrPercent(report.occupancyPct, 1)} | Leased: ${formatDlrPercent(report.leasedPct, 1)} | 90-Day Projection: ${formatDlrPercent(report.trendingOccupancyPct, 1)}`,
     `Today's Activity: ${today.guestCards || 0} leads | ${today.tours || 0} tours | ${today.applications || 0} apps | ${today.approvals || 0} approved`,
     `Month to Date: ${mtd.rolledGuestCards || 0} leads | ${mtd.tours || 0} tours | ${mtd.applications || 0} apps | ${mtd.approvals || 0} approved`,
     `Move-Ins: ${mtd.moveIns || 0} | Move-Outs: ${mtd.moveOuts || 0} | Renewals: ${mtd.renewals || 0}`,
@@ -13017,9 +13060,8 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, normalizedMonthIdx, "leasedSnapshot");
   const occupancyPct = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
   const leasedPct = totalUnits > 0 ? (leasedUnits / totalUnits) * 100 : 0;
-  const trendMonthIdx = Math.min(normalizedMonthIdx + 2, 11);
-  const trendRow = schedule[trendMonthIdx] ?? scheduleRow;
-  const trendingOccupancyPct = Number(trendRow.occPct ?? occupancyPct) || occupancyPct;
+  const projectedEndingOccupancy = computeProjectedEndingPhysicalOccupancy(record, totalUnits, normalizedMonthIdx, 3);
+  const trendingOccupancyPct = Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct;
   const budgetOccPct = Number(monthEntry.budgetOcc) || Number(scheduleRow.budgetOcc) || 0;
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
@@ -13290,7 +13332,7 @@ function buildDlrInvestorOverviewDocument(report) {
   const heroCards = [
     { label: "Occupancy", value: formatDlrPercent(report.occupancyPct), sub: `${report.occupiedUnits} occupied units` },
     { label: "Leased", value: formatDlrPercent(report.leasedPct), sub: `${report.leasedUnits} leased units` },
-    { label: "90-Day Trend", value: formatDlrPercent(report.trendingOccupancyPct), sub: "Projected occupancy trend" },
+    { label: "90-Day Projection", value: formatDlrPercent(report.trendingOccupancyPct), sub: "Projected ending physical occupancy" },
     { label: "Status", value: report.status, sub: `Budget occ ${formatDlrPercent(report.budgetOccPct)}` },
     { label: "Move-Ins Needed", value: formatDlrMetricValue(report.moveInsNeeded), sub: `${formatDlrMetricValue(report.moveInGoalPerWeek)} / week target` }
   ];
@@ -13563,7 +13605,7 @@ function renderCSVTab() {
         </div>
         <div class="bonus-framework-stat"><div class="k">Occupancy</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.occupancyPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Leased</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.leasedPct)}</div></div>
-        <div class="bonus-framework-stat"><div class="k">90-Day Trend</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.trendingOccupancyPct)}</div></div>
+        <div class="bonus-framework-stat"><div class="k">90-Day Projection</div><div class="v" style="font-size:1rem">${formatDlrPercent(historicalDlrSummary.trendingOccupancyPct)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Move-In Goal / Week</div><div class="v" style="font-size:1rem">${formatDlrMetricValue(historicalDlrSummary.moveInGoalPerWeek)}</div></div>
         <div class="bonus-framework-stat"><div class="k">Property Status</div><div class="v" style="font-size:1rem">${escapeHtml(historicalDlrSummary.status || "—")}</div></div>
       </div>
