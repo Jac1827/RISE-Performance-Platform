@@ -671,6 +671,8 @@ const DASHBOARD_SHARED_SYNC_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519
 const DASHBOARD_SHARED_SYNC_HEALTH_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519f411cab/api/health";
 const DASHBOARD_SHARED_SYNC_WRITE_TOKEN = "atlas-rise-shared-sync-2026";
 const DASHBOARD_SHARED_SYNC_META_KEY = "atlas_dashboard_shared_sync_meta_v1";
+const DASHBOARD_DAILY_BACKUP_INDEX_KEY = "atlas_dashboard_daily_backup_index_v1";
+const DASHBOARD_DAILY_BACKUP_KEY_PREFIX = "atlas_dashboard_daily_backup_v1:";
 function persistOpsPropertyCatalog() {
   try {
     const existingRaw = localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
@@ -2564,7 +2566,93 @@ function persistSaved() {
   }));
   return persistJsonToLocalStorage("rise_leasing_v5", serialized, "Community data");
 }
+function buildDailyBackupDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function loadDailyBackupIndex() {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_DAILY_BACKUP_INDEX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+function persistDailyBackupIndex(index) {
+  return persistJsonToLocalStorage(DASHBOARD_DAILY_BACKUP_INDEX_KEY, index, "Daily backup index");
+}
+function writeDailyBackupSnapshot(reason = "auto") {
+  try {
+    const dateKey = buildDailyBackupDateKey();
+    const backupKey = `${DASHBOARD_DAILY_BACKUP_KEY_PREFIX}${dateKey}`;
+    const payload = {
+      savedAt: new Date().toISOString(),
+      reason,
+      schema: "atlas_dashboard_v1",
+      data: savedData
+    };
+    const backupResult = persistJsonToLocalStorage(backupKey, payload, "Daily backup snapshot");
+    if (backupResult?.ok === false) return backupResult;
+    const nextIndex = Array.from(new Set([dateKey, ...loadDailyBackupIndex()])).sort().reverse().slice(0, 45);
+    const indexResult = persistDailyBackupIndex(nextIndex);
+    if (indexResult?.ok === false) return indexResult;
+    return { ok: true, message: "", dateKey };
+  } catch (error) {
+    return { ok: false, message: String(error?.message || error || "Could not write daily backup snapshot.") };
+  }
+}
+function exportLatestDailyBackupJson() {
+  const index = loadDailyBackupIndex();
+  if (!index.length) {
+    alert("No daily backup is available yet in this browser.");
+    return;
+  }
+  const latestDate = index[0];
+  try {
+    const raw = localStorage.getItem(`${DASHBOARD_DAILY_BACKUP_KEY_PREFIX}${latestDate}`);
+    if (!raw) {
+      alert("The latest daily backup record could not be found.");
+      return;
+    }
+    const blob = new Blob([raw], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `atlas-dashboard-backup-${latestDate}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    alert("Could not export the daily backup JSON from this browser.");
+  }
+}
+function createDailyBackupNow() {
+  const result = writeDailyBackupSnapshot("manual_backup");
+  if (result?.ok === false) {
+    alert(`⚠️ ${result.message}`);
+    return;
+  }
+  csvLog = [`✅ Daily backup saved for ${result.dateKey}.`, ...csvLog];
+  renderTab();
+}
+function getDailyBackupSummaryText() {
+  const index = loadDailyBackupIndex();
+  if (!index.length) return "No daily backups saved yet in this browser.";
+  const latestDate = index[0];
+  try {
+    const raw = localStorage.getItem(`${DASHBOARD_DAILY_BACKUP_KEY_PREFIX}${latestDate}`);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const stamp = parsed?.savedAt ? formatSavedTimestampLabel(parsed.savedAt) : latestDate;
+    return `Latest local daily backup: ${stamp} (${index.length} day${index.length === 1 ? "" : "s"} retained).`;
+  } catch {
+    return `Latest local daily backup date: ${latestDate}.`;
+  }
+}
 savedData = loadSaved();
+if (savedData && Object.keys(savedData).length > 0) {
+  writeDailyBackupSnapshot("startup_retain");
+}
 hydrateOpsGlobalData();
 queuePersistedPhotoStorageCompaction();
 
@@ -5531,10 +5619,11 @@ function saveCommunityData(silent = false) {
   storeCurrentMonthSnapshots(currentMonth, currentOccupied, currentLeased);
   savedData[key] = getCurrentCommunityRecord();
   const savedResult = persistSaved();
+  const dailyBackupResult = writeDailyBackupSnapshot("save_community_data");
   const globalResult = persistOpsGlobalData();
   renderPropGrid();
   if (activeTab === 8 && bonusCalcView === "jac") renderTab();
-  const failures = [savedResult, globalResult].filter(result => result && result.ok === false).map(result => result.message);
+  const failures = [savedResult, dailyBackupResult, globalResult].filter(result => result && result.ok === false).map(result => result.message);
   if (failures.length > 0) {
     alert(`⚠️ ${failures.join(" ")}`);
     return;
@@ -16135,6 +16224,7 @@ function renderCSVTab() {
   const weeklyBaselineText = weeklyBaseline?.exportedAt
     ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
     : "No weekly baseline synced yet. Use Sync This Week as Baseline after you send this week’s report so next week’s export has a true week-over-week comparison.";
+  const backupSummaryText = getDailyBackupSummaryText();
   const dlrReportDateInput = escapeHtml(buildDlrDateInputValue(historicalDlrSummary.reportDateIso));
   const dlrReportDateLabel = historicalDlrSummary.reportDateLabel || historicalDlrSummary.reportPeriodLabel || "No specific daily report date saved";
   const dlrSourceLine = historicalDlrSummary.dailyBoxScoreSourceFile
@@ -16711,6 +16801,20 @@ function renderCSVTab() {
   </div>`;
 
   return [
+    renderWindowshadeCard({
+      key: "import_daily_backup",
+      title: "Daily JSON Backup",
+      subtitle: "Automatic once-per-day snapshot of all local community data in this browser.",
+      countLabel: "Local Safety Net",
+      bodyHtml: `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:0.72rem;color:var(--muted);max-width:640px">${escapeHtml(backupSummaryText)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gray btn-sm" onclick="createDailyBackupNow()">Create Backup Now</button>
+          <button class="btn btn-gray btn-sm" onclick="exportLatestDailyBackupJson()">Export Latest JSON</button>
+        </div>
+      </div>`,
+      collapsedPreview: backupSummaryText
+    }),
     renderWindowshadeCard({
       key: "import_browser_transfer",
       title: "Browser Data Migration",
