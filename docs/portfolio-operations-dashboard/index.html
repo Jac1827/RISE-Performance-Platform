@@ -5509,7 +5509,7 @@ function saveCommunityData(silent = false) {
     alert(`⚠️ ${failures.join(" ")}`);
     return;
   }
-  if (!silent) alert(`✅ Saved data for ${getProp().name}`);
+  if (!silent) alert(`✅ Saved data for ${getWorkspaceScopeDisplayName()}`);
 }
 
 function getWeeklySnapshotPayload() {
@@ -5519,7 +5519,7 @@ function getWeeklySnapshotPayload() {
     exportedAt: new Date().toISOString(),
     sourceKey: "rise_leasing_v5",
     sourceLabel: "ATLAS RISE Ops Dashboard",
-    currentProperty: getProp().name,
+    currentProperty: getWorkspaceScopeDisplayName(),
     portfolioData: savedData,
     opsGlobalData
   };
