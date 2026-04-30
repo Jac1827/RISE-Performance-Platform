@@ -1099,6 +1099,7 @@ function normalizeCommunityFloorPlans(data) {
     const sqft = Number(row?.sqft);
     const budgetRent = Number(row?.budgetRent);
     const marketedRent = Number(row?.marketedRent);
+    const leasedPct = Number(row?.leasedPct);
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
     return {
@@ -1107,6 +1108,7 @@ function normalizeCommunityFloorPlans(data) {
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
       marketedRent: Number.isFinite(marketedRent) && marketedRent > 0 ? marketedRent : null,
+      leasedPct: Number.isFinite(leasedPct) && leasedPct >= 0 ? Math.min(leasedPct, 100) : null,
       marketedRentSource: String(row?.marketedRentSource ?? "").trim(),
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null
@@ -3317,10 +3319,15 @@ function onWorkspaceCommunitySelect(value) {
     renderTab();
     return;
   }
-  const matchedName = matchPropertyName(value, { fallbackToCurrent: false });
-  const matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
+  const rawValue = String(value ?? "").trim();
+  const matchedName = matchPropertyName(rawValue, { fallbackToCurrent: false });
+  let matchedIdx = PROPERTIES.findIndex(prop => prop.name === matchedName);
+  if (matchedIdx < 0 && rawValue) {
+    const normalizedRaw = normalizeCommunityLookupName(rawValue);
+    matchedIdx = PROPERTIES.findIndex(prop => normalizeCommunityLookupName(prop.name) === normalizedRaw);
+  }
   if (matchedIdx >= 0) {
-    workspaceScopeValue = matchedName;
+    workspaceScopeValue = PROPERTIES[matchedIdx].name;
     selectProp(matchedIdx);
   }
 }
@@ -4361,7 +4368,7 @@ function removeInvestorEmailContact(index) {
 function addCommunityFloorPlanRow() {
   communityFloorPlans = [
     ...normalizeCommunityFloorPlans(communityFloorPlans),
-    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, marketedRentSource: "", beds: null, baths: null }
+    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null }
   ];
   renderTab();
 }
@@ -4369,7 +4376,7 @@ function addCommunityFloorPlanRow() {
 function updateCommunityFloorPlanField(index, field, value) {
   const nextPlans = normalizeCommunityFloorPlans(communityFloorPlans).map(entry => ({ ...entry }));
   while (nextPlans.length <= index) {
-    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, marketedRentSource: "", beds: null, baths: null });
+    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null });
   }
   const target = nextPlans[index];
   if (!target) return;
@@ -4377,9 +4384,13 @@ function updateCommunityFloorPlanField(index, field, value) {
     target.name = String(value ?? "").trim();
   } else if (field === "marketedRentSource") {
     target.marketedRentSource = String(value ?? "").trim();
-  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths"].includes(field)) {
+  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths", "leasedPct"].includes(field)) {
     const numeric = Number(value);
-    target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    if (field === "leasedPct") {
+      target[field] = Number.isFinite(numeric) && numeric >= 0 ? Math.min(numeric, 100) : null;
+    } else {
+      target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    }
   }
   communityFloorPlans = nextPlans;
   saveCommunityData(true);
@@ -5512,7 +5523,10 @@ function carryForwardMonthlyData(fromMonth) {
 }
 
 function saveCommunityData(silent = false) {
-  const key = getProp().name;
+  const scopeCommunityName = isPortfolioWorkspaceSelected()
+    ? getProp().name
+    : (matchPropertyName(workspaceScopeValue, { fallbackToCurrent: false }) || getProp().name);
+  const key = scopeCommunityName;
   carryForwardMonthlyData(currentMonth);
   storeCurrentMonthSnapshots(currentMonth, currentOccupied, currentLeased);
   savedData[key] = getCurrentCommunityRecord();
@@ -6220,7 +6234,7 @@ function renderPortfolioScopedImportTab() {
 }
 
 function renderSetupTab() {
-  if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedSetupTab();
+  if (isPortfolioWorkspaceSelected() && workspaceScopeValue === PORTFOLIO_SCOPE_VALUE) return renderPortfolioScopedSetupTab();
   const p = getProp();
   const totalUnits = getTotalUnits();
   const unitsIsOverridden = parseInt(customUnits) > 0;
@@ -6309,7 +6323,7 @@ function renderSetupTab() {
         const varianceColor = row.variance == null ? "var(--muted)" : row.variance >= 0 ? "#3fb950" : "#f97316";
         const displayedMarketedRent = row.marketedRent ?? row.marketRent;
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
-        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
             <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updateCommunityFloorPlanField(${idx},'name',this.value)">
@@ -6334,6 +6348,10 @@ function renderSetupTab() {
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Marketed rent</div>
             <input type="number" min="0" step="1" value="${displayedMarketedRent ?? ""}" placeholder="From website or market survey" onchange="updateCommunityFloorPlanField(${idx},'marketedRent',this.value)">
             <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${displayedMarketedRent != null ? "Editable market rate used in DLR variance" : "Leave blank until website or survey rate is known"}</div>
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">% Leased</div>
+            <input type="number" min="0" max="100" step="0.1" value="${row.leasedPct ?? ""}" placeholder="92.5" onchange="updateCommunityFloorPlanField(${idx},'leasedPct',this.value)">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Market rate source</div>
@@ -15242,7 +15260,7 @@ function buildDlrFloorPlanVarianceChart(report) {
       row.baths != null ? `${row.baths} ba` : "",
       row.sqft != null ? `${Math.round(row.sqft).toLocaleString()} sf` : ""
     ].filter(Boolean).join(" · ");
-    return `<div style="display:grid;grid-template-columns:minmax(170px,1.1fr) minmax(280px,1fr) 120px 120px 92px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #e5e7eb">
+    return `<div style="display:grid;grid-template-columns:minmax(170px,1.1fr) minmax(280px,1fr) 120px 120px 92px 100px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #e5e7eb">
       <div>
         <div style="font-size:13px;font-weight:700;color:#0f172a">${escapeHtml(row.name)}</div>
         <div style="font-size:11px;color:#64748b;margin-top:3px">${escapeHtml(meta || "Budget plan")}</div>
@@ -15263,6 +15281,7 @@ function buildDlrFloorPlanVarianceChart(report) {
       <div style="font-size:12px;color:#334155"><strong>Budget</strong><br>${formatDlrCurrency(row.budgetRent)}</div>
       <div style="font-size:12px;color:#334155"><strong>Market</strong><br>${formatDlrCurrency(row.marketRent)}</div>
       <div style="font-size:12px;font-weight:700;color:${varianceColor}">${row.variance == null ? "—" : formatSignedDisplay(variance, 0, "")}</div>
+      <div style="font-size:12px;color:#334155"><strong>% Leased</strong><br>${row.leasedPct == null ? "—" : `${Number(row.leasedPct).toFixed(1)}%`}</div>
     </div>`;
   }).join("");
   return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
