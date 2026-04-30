@@ -11728,8 +11728,8 @@ function buildWeeklyExecutiveReportData() {
 function buildPortfolioSectionMetrics(sectionKey, summary) {
   if (sectionKey === "overview") {
     return [
-      { metric: "Physical Occupancy", value: formatPortfolioReportValue(summary.totalUnits > 0 ? (summary.occupied / summary.totalUnits) * 100 : 0, "pct") },
-      { metric: "Leased Percentage", value: formatPortfolioReportValue(summary.totalUnits > 0 ? (summary.leased / summary.totalUnits) * 100 : 0, "pct") },
+      { metric: "Physical Occupancy", value: formatPortfolioReportValue(getSummaryOccPct(summary), "pct") },
+      { metric: "Leased Percentage", value: formatPortfolioReportValue(getSummaryLeasedPct(summary), "pct") },
       { metric: "Budget Occ Gap", value: formatPortfolioReportValue(summary.occGapPts, "pct") },
       { metric: "Budget Leased Gap", value: formatPortfolioReportValue(summary.leasedGapPts, "pct") },
       { metric: "Move-Ins (MTD)", value: formatPortfolioReportValueWithTrend(summary.moveIns ?? 0, "number", summary.previousMoveIns ?? 0, "count_pct") },
