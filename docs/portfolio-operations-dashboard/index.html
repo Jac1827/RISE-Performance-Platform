@@ -603,6 +603,7 @@ const WINDOWSHADE_DEFAULTS = {
   reputation_rollup: false,
   import_historical_reports: true,
   import_dlr_summary: true,
+  import_browser_transfer: false,
   import_workspace: false,
   import_report_export: false,
   import_monthly_presentation: false,
@@ -655,6 +656,16 @@ const COMMUNITY_MARKER_ICONS = {
   "Glen Kernan Park": "⛳"
 };
 const OPS_PROPERTY_CATALOG_KEY = "rise_ops_property_catalog_v1";
+const PERFORMANCE_PLATFORM_STORAGE_KEY = "rise_performance_platform_github_v1";
+const DASHBOARD_STORAGE_MIGRATION_KEYS = [
+  "rise_leasing_v5",
+  OPS_GLOBAL_STORAGE_KEY,
+  OPS_WORKSPACE_CONTEXT_KEY,
+  WEEKLY_SNAPSHOT_STORAGE_KEY,
+  OPS_PROPERTY_CATALOG_KEY,
+  SIDE_NAV_STORAGE_KEY,
+  PERFORMANCE_PLATFORM_STORAGE_KEY
+];
 function persistOpsPropertyCatalog() {
   try {
     const existingRaw = localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
@@ -5509,7 +5520,96 @@ function saveCommunityData(silent = false) {
     alert(`⚠️ ${failures.join(" ")}`);
     return;
   }
-  if (!silent) alert(`✅ Saved data for ${getWorkspaceScopeDisplayName()}`);
+  if (!silent) {
+    const saveScopeLabel = isPortfolioWorkspaceSelected()
+      ? `${PORTFOLIO_SCOPE_LABEL} (active community saved: ${key})`
+      : key;
+    alert(`✅ Saved data for ${saveScopeLabel}`);
+  }
+}
+
+function buildDashboardStorageBundle() {
+  saveCommunityData(true);
+  persistOperationsWorkspaceContext();
+  persistOpsPropertyCatalog();
+  const storage = {};
+  DASHBOARD_STORAGE_MIGRATION_KEYS.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) storage[key] = raw;
+    } catch {}
+  });
+  return {
+    app: "atlas-rise-ops-dashboard",
+    bundleType: "atlas_browser_storage_bundle_v1",
+    exportedAt: new Date().toISOString(),
+    sourceLabel: "ATLAS RISE Ops Dashboard",
+    keys: storage
+  };
+}
+
+async function copyDashboardStorageBundleToClipboard() {
+  const bundle = buildDashboardStorageBundle();
+  const payload = JSON.stringify(bundle, null, 2);
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(payload);
+      alert("✅ Browser data bundle copied. Open the live site and use Import Bundle to align data.");
+      return;
+    } catch {}
+  }
+  const blob = new Blob([payload], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `atlas_browser_bundle_${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  alert("Clipboard copy is blocked in this browser. A bundle file was downloaded instead.");
+}
+
+async function importDashboardStorageBundleFromClipboard() {
+  let payloadText = "";
+  if (navigator.clipboard?.readText) {
+    try {
+      payloadText = (await navigator.clipboard.readText()) || "";
+    } catch {}
+  }
+  if (!payloadText.trim()) {
+    payloadText = window.prompt("Paste the ATLAS browser bundle JSON, then press OK:", "") || "";
+  }
+  if (!payloadText.trim()) return;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(payloadText);
+  } catch {
+    alert("Could not parse the pasted bundle JSON.");
+    return;
+  }
+  const incoming = (parsed && typeof parsed === "object" && parsed.keys && typeof parsed.keys === "object")
+    ? parsed.keys
+    : null;
+  if (!incoming) {
+    alert("Bundle format is not valid. Expected a top-level keys object.");
+    return;
+  }
+  const entries = Object.entries(incoming);
+  if (entries.length === 0) {
+    alert("Bundle did not include any storage keys.");
+    return;
+  }
+  let writtenCount = 0;
+  entries.forEach(([key, rawValue]) => {
+    try {
+      localStorage.setItem(String(key), typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue));
+      writtenCount += 1;
+    } catch {}
+  });
+  if (writtenCount === 0) {
+    alert("No keys were written. Browser storage may be blocked or full.");
+    return;
+  }
+  alert(`✅ Imported ${writtenCount} storage key${writtenCount === 1 ? "" : "s"}. Reloading now.`);
+  window.location.reload();
 }
 
 function getWeeklySnapshotPayload() {
@@ -5898,6 +5998,22 @@ function renderPortfolioScopedReputationTab() {
   return renderPortfolioScopePanel("Portfolio Reputation", "Resident sentiment and review performance across the selected portfolio month.", cardsHtml, bodyHtml);
 }
 
+function renderDashboardDataMigrationPanel() {
+  return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <div class="card-title" style="margin-bottom:6px">Browser Data Migration</div>
+        <div style="font-size:0.68rem;color:var(--muted)">Use this to align Playground and live browser data for both ATLAS apps. In Playground, click <strong>Copy Bundle</strong>. On live, click <strong>Import Bundle</strong>.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="copyDashboardStorageBundleToClipboard()">📋 Copy Bundle</button>
+        <button class="btn btn-blue btn-sm" onclick="importDashboardStorageBundleFromClipboard()">⬇ Import Bundle</button>
+      </div>
+    </div>
+    <div style="font-size:0.66rem;color:var(--muted)">Bundle includes dashboard saves, workspace context, reporting baseline, property catalog, nav state, and Performance Platform browser state.</div>
+  </div>`;
+}
+
 function renderPortfolioScopedImportTab() {
   const { details } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
   const dlrLoaded = details.filter(detail => hasDlrBoxScoreSnapshot(normalizeDlrBoxScoreSnapshot(detail.record?.latestDlrSummary?.dailyBoxScore))).length;
@@ -5907,6 +6023,7 @@ function renderPortfolioScopedImportTab() {
     ? `<div class="alert-green" style="margin-top:12px">${marketSurveyImportLog.map((line, idx) => `<div style="${idx===0?"color:#3fb950;font-weight:600":"color:var(--muted)"}">${escapeHtml(line)}</div>`).join("")}</div>`
     : "";
   const bodyHtml = `<div class="tbl-wrap">
+    ${renderDashboardDataMigrationPanel()}
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
@@ -16423,6 +16540,14 @@ function renderCSVTab() {
   </div>`;
 
   return [
+    renderWindowshadeCard({
+      key: "import_browser_transfer",
+      title: "Browser Data Migration",
+      subtitle: "Export from Playground and import into live so both browser environments stay aligned.",
+      countLabel: "Playground ↔ Live",
+      bodyHtml: `<div style="background:transparent;border:0;padding:0">${renderDashboardDataMigrationPanel()}</div>`,
+      collapsedPreview: "Copy Bundle in Playground, then Import Bundle on live"
+    }),
     renderWindowshadeCard({
       key: "import_dlr_summary",
       title: "Daily Leasing Report",

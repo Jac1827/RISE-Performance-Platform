@@ -292,6 +292,14 @@
 <div id="modal-root"></div>
 <script>
 const STORAGE_KEY = 'rise_performance_platform_github_v1';
+const DASHBOARD_STORAGE_MIGRATION_KEYS = [
+  'rise_leasing_v5',
+  'rise_ops_global_v1',
+  'rise_ops_workspace_context_v1',
+  'rise_weekly_portfolio_snapshot_v1',
+  'rise_ops_property_catalog_v1',
+  'atlas_rise_side_nav_collapsed_v1'
+];
 const COMPANY_ROSTER_ASSET = './company-active-employee-roster.xlsx';
 const COMPANY_ROSTER_VERSION = '2026-03-31';
 const HR_ALERT_EMAIL = 'hr@risere.com';
@@ -843,6 +851,102 @@ function saveState(){
     rosterVersion: STATE.rosterVersion,
     currentView: STATE.currentView
   }));
+}
+
+function buildPerformancePlatformStorageBundle(){
+  saveState();
+  const storage = {};
+  try{
+    const platformRaw = localStorage.getItem(STORAGE_KEY);
+    if(platformRaw !== null) storage[STORAGE_KEY] = platformRaw;
+  }catch(err){}
+  DASHBOARD_STORAGE_MIGRATION_KEYS.forEach(key => {
+    try{
+      const raw = localStorage.getItem(key);
+      if(raw !== null) storage[key] = raw;
+    }catch(err){}
+  });
+  return {
+    app: 'rise-performance-platform',
+    bundleType: 'atlas_browser_storage_bundle_v1',
+    exportedAt: new Date().toISOString(),
+    sourceLabel: 'RISE Performance Platform',
+    keys: storage
+  };
+}
+
+async function copyPerformancePlatformBundleToClipboard(){
+  const payload = JSON.stringify(buildPerformancePlatformStorageBundle(), null, 2);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    try{
+      await navigator.clipboard.writeText(payload);
+      alert('Browser data bundle copied. Open the live site and run Import Bundle to align both apps.');
+      return;
+    }catch(err){}
+  }
+  const blob = new Blob([payload], {type:'application/json'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `atlas_browser_bundle_${new Date().toISOString().slice(0,10)}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  alert('Clipboard copy is blocked in this browser. A JSON bundle file was downloaded.');
+}
+
+async function importPerformancePlatformBundleFromClipboard(){
+  let payloadText = '';
+  if(navigator.clipboard && navigator.clipboard.readText){
+    try{
+      payloadText = await navigator.clipboard.readText() || '';
+    }catch(err){}
+  }
+  if(!payloadText.trim()){
+    payloadText = window.prompt('Paste the ATLAS browser bundle JSON, then press OK:', '') || '';
+  }
+  if(!payloadText.trim()) return;
+  let parsed = null;
+  try{
+    parsed = JSON.parse(payloadText);
+  }catch(err){
+    alert('Could not parse the bundle JSON.');
+    return;
+  }
+  const incoming = parsed && typeof parsed === 'object' && parsed.keys && typeof parsed.keys === 'object'
+    ? parsed.keys
+    : null;
+  if(!incoming){
+    alert('Bundle format is not valid. Expected a top-level keys object.');
+    return;
+  }
+  let writtenCount = 0;
+  Object.entries(incoming).forEach(([key, rawValue]) => {
+    try{
+      localStorage.setItem(String(key), typeof rawValue === 'string' ? rawValue : JSON.stringify(rawValue));
+      writtenCount += 1;
+    }catch(err){}
+  });
+  if(writtenCount === 0){
+    alert('No keys were written. Browser storage may be blocked or full.');
+    return;
+  }
+  closeModal();
+  alert(`Imported ${writtenCount} storage key${writtenCount === 1 ? '' : 's'}. Reloading now.`);
+  window.location.reload();
+}
+
+function openPlatformDataTransferModal(){
+  openModal(`
+    <div class="modal narrow">
+      <button class="close-btn" onclick="closeModal()">x</button>
+      <h3>Browser Data Migration</h3>
+      <div class="sub">Use this to transfer Playground data into live so the ATLAS dashboard and the Performance Platform stay aligned in this browser.</div>
+      <div class="stack">
+        <button class="btn btn-soft" onclick="copyPerformancePlatformBundleToClipboard()">Copy Bundle</button>
+        <button class="btn btn-primary" onclick="importPerformancePlatformBundleFromClipboard()">Import Bundle</button>
+      </div>
+      <div class="footer-note">Step 1: open Playground and copy the bundle. Step 2: open live and import the bundle.</div>
+    </div>
+  `);
 }
 
 function genId(){
@@ -2418,6 +2522,7 @@ function renderShell(){
             <span class="badge ${user.role === 'admin' ? 'badge-admin' : 'badge-soft'}">${user.role === 'admin' ? 'Admin' : 'Manager'}</span>
             <span class="badge badge-soft">${escapeHtml(userScopeLabel(user))}</span>
             <span class="small muted">${escapeHtml(user.name)}</span>
+            <button class="btn btn-soft btn-sm" onclick="openPlatformDataTransferModal()">Data Transfer</button>
             <button class="btn btn-soft btn-sm" onclick="logout()">Lock</button>
           </div>
         </div>
