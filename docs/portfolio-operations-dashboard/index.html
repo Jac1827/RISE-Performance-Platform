@@ -17691,6 +17691,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
     }
 
     const normalizedRows = [];
+    const touchedCommunities = new Set();
     const log = [];
     let matched = 0;
     let included = 0;
@@ -17751,6 +17752,50 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         renewal_undecided: "",
         renewal_early_termination: ""
       };
+      const targetRecord = getPropertyRecordForApply(mappedName);
+      if (targetRecord) {
+        touchedCommunities.add(mappedName);
+        const monthlyFieldMap = {
+          occupied: "occupied",
+          leased: "leased",
+          move_outs: "move_outs",
+          move_ins: "move_ins",
+          guest_cards: "guest_cards",
+          tours: "tours",
+          applications: "applications",
+          applications_approved: "applications_approved",
+          leases_signed: "leases_signed",
+          budget_occ: "budget_occ",
+          market_rent: "market_rent",
+          rent_roll_total: "rent_roll_total",
+          concessions: "concessions",
+          ner: "ner",
+          renewal_expirations: "renewal_expirations",
+          renewals_signed: "renewals_signed"
+        };
+        Object.entries(monthlyFieldMap).forEach(([sourceKey, targetKey]) => {
+          const rawVal = mappedRow[sourceKey];
+          if (rawVal === "" || rawVal === null || rawVal === undefined) return;
+          const numeric = Number(String(rawVal).replace(/[$,%]/g, ""));
+          if (!Number.isFinite(numeric)) return;
+          applyValueToRecord(targetRecord, targetMonthIdx, targetKey, numeric);
+        });
+        const totalUnitsVal = Number(String(getCell(row, "total_units") ?? "").replace(/[,]/g, ""));
+        if (Number.isFinite(totalUnitsVal) && totalUnitsVal > 0) {
+          targetRecord.customUnits = Math.round(totalUnitsVal);
+        }
+        const avgRating = Number(String(getCell(row, "avg_review_rating") ?? "").replace(/[,]/g, ""));
+        if (Number.isFinite(avgRating) && avgRating > 0) {
+          targetRecord.reputationData = normalizeReputationData({
+            ...targetRecord.reputationData,
+            googleQuarterlyRating: avgRating,
+            googleLifetimeRating: targetRecord.reputationData?.googleLifetimeRating > 0
+              ? targetRecord.reputationData.googleLifetimeRating
+              : avgRating
+          });
+        }
+        savedData[mappedName] = normalizeSavedCommunityRecord(mappedName, targetRecord);
+      }
       matched += Object.values(mappedRow).filter(value => value !== "" && value !== null && value !== undefined).length;
       normalizedRows.push(mappedRow);
       if (log.length < 18) {
@@ -17765,11 +17810,22 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       return;
     }
     mergeExtractedDashboardRows(normalizedRows, `ATLAS Workbook ${file.name}`);
+    const saveResult = persistSaved();
+    if (saveResult?.ok === false) {
+      csvError = saveResult.message;
+      renderTab();
+      return;
+    }
+    if (touchedCommunities.has(getProp().name)) {
+      loadPropertyData(getProp().name);
+    }
+    renderPropGrid();
     const modeLabel = forcedTarget.monthIdx !== null || importRoutingMode === "force_override"
       ? `month override (${MONTHS[forcedTarget.monthIdx ?? getImportTargetMonth()]})`
       : "file month routing";
-    csvLog = [`✅ Staged ${included} ATLAS Monthly_Upload row(s) from ${file.name} using ${modeLabel}.`, ...log];
+    csvLog = [`✅ Imported ${included} ATLAS Monthly_Upload row(s) from ${file.name} using ${modeLabel}.`, ...log];
     if (skipped > 0) csvLog.push(`ℹ Skipped ${skipped} row(s) marked ERROR or missing community/month mapping.`);
+    csvLog.push(`ℹ Community records updated across tabs/calculations for ${touchedCommunities.size} communit${touchedCommunities.size === 1 ? "y" : "ies"}.`);
     renderTab();
   } catch (err) {
     csvError = "Failed to parse ATLAS workbook: " + err.message;
