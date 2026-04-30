@@ -755,6 +755,8 @@ let communityPhotoBank = [];
 let marketSurveyData = defaultMarketSurveyData();
 let communityFloorPlans = [];
 let communityAddress = "";
+let communityWebsiteUrl = "";
+let floorPlanRatesPageUrl = "";
 let communityGeo = null;
 let financialLedger = {};
 let financialUpdatedAt = "";
@@ -1004,6 +1006,7 @@ function normalizeCommunityFloorPlans(data) {
   return rows.map(row => {
     const sqft = Number(row?.sqft);
     const budgetRent = Number(row?.budgetRent);
+    const marketedRent = Number(row?.marketedRent);
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
     return {
@@ -1011,6 +1014,8 @@ function normalizeCommunityFloorPlans(data) {
       name: String(row?.name ?? "").trim(),
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
+      marketedRent: Number.isFinite(marketedRent) && marketedRent > 0 ? marketedRent : null,
+      marketedRentSource: String(row?.marketedRentSource ?? "").trim(),
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null
     };
@@ -2329,6 +2334,8 @@ function defaultSavedCommunityRecord(propName = getProp().name) {
     investorEmailContacts: [],
     communityFloorPlans: defaultCommunityFloorPlans(),
     communityAddress: "",
+    communityWebsiteUrl: "",
+    floorPlanRatesPageUrl: "",
     communityGeo: null,
     photoBank: [],
     bonusPayouts: { apps: 25, leases: 50, conversion: 75 },
@@ -2379,6 +2386,8 @@ function normalizeSavedCommunityRecord(propName, data) {
     investorEmailContacts: normalizeInvestorEmailContacts(input.investorEmailContacts),
     communityFloorPlans: normalizeCommunityFloorPlans(input.communityFloorPlans),
     communityAddress: String(input.communityAddress ?? defaults.communityAddress).trim(),
+    communityWebsiteUrl: String(input.communityWebsiteUrl ?? defaults.communityWebsiteUrl).trim(),
+    floorPlanRatesPageUrl: String(input.floorPlanRatesPageUrl ?? defaults.floorPlanRatesPageUrl).trim(),
     communityGeo: input.communityGeo && Number.isFinite(Number(input.communityGeo?.lat)) && Number.isFinite(Number(input.communityGeo?.lng))
       ? {
           lat: Number(input.communityGeo.lat),
@@ -2424,6 +2433,8 @@ function getCurrentCommunityRecord() {
     investorEmailContacts,
     communityFloorPlans,
     communityAddress,
+    communityWebsiteUrl,
+    floorPlanRatesPageUrl,
     communityGeo,
     photoBank: communityPhotoBank,
     bonusPayouts,
@@ -3035,6 +3046,8 @@ function loadPropertyData(propName) {
   investorEmailContacts = normalizeInvestorEmailContacts(d.investorEmailContacts);
   communityFloorPlans = normalizeCommunityFloorPlans(d.communityFloorPlans);
   communityAddress = d.communityAddress;
+  communityWebsiteUrl = d.communityWebsiteUrl;
+  floorPlanRatesPageUrl = d.floorPlanRatesPageUrl;
   communityGeo = d.communityGeo;
   communityPhotoBank = d.photoBank;
   bonusPayouts = d.bonusPayouts;
@@ -4235,7 +4248,7 @@ function removeInvestorEmailContact(index) {
 function addCommunityFloorPlanRow() {
   communityFloorPlans = [
     ...normalizeCommunityFloorPlans(communityFloorPlans),
-    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, beds: null, baths: null }
+    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, marketedRentSource: "", beds: null, baths: null }
   ];
   renderTab();
 }
@@ -4243,13 +4256,15 @@ function addCommunityFloorPlanRow() {
 function updateCommunityFloorPlanField(index, field, value) {
   const nextPlans = normalizeCommunityFloorPlans(communityFloorPlans).map(entry => ({ ...entry }));
   while (nextPlans.length <= index) {
-    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, beds: null, baths: null });
+    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, marketedRentSource: "", beds: null, baths: null });
   }
   const target = nextPlans[index];
   if (!target) return;
   if (field === "name") {
     target.name = String(value ?? "").trim();
-  } else if (["sqft", "budgetRent", "beds", "baths"].includes(field)) {
+  } else if (field === "marketedRentSource") {
+    target.marketedRentSource = String(value ?? "").trim();
+  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths"].includes(field)) {
     const numeric = Number(value);
     target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   }
@@ -5058,6 +5073,18 @@ function updateCommunityAddress(val) {
   if (!communityAddress) {
     communityGeo = null;
   }
+  renderTab();
+}
+
+function updateCommunityWebsiteUrl(val) {
+  communityWebsiteUrl = String(val ?? "").trim();
+  saveCommunityData(true);
+  renderTab();
+}
+
+function updateFloorPlanRatesPageUrl(val) {
+  floorPlanRatesPageUrl = String(val ?? "").trim();
+  saveCommunityData(true);
   renderTab();
 }
 
@@ -5894,7 +5921,9 @@ function renderSetupTab() {
   const communityFloorPlanRows = floorPlanVarianceData.rows.length > 0
     ? floorPlanVarianceData.rows.map((row, idx) => {
         const varianceColor = row.variance == null ? "var(--muted)" : row.variance >= 0 ? "#3fb950" : "#f97316";
-        return `<div style="display:grid;grid-template-columns:minmax(170px,1.4fr) 82px 82px 92px 108px 108px 108px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+        const displayedMarketedRent = row.marketedRent ?? row.marketRent;
+        const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
+        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
             <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updateCommunityFloorPlanField(${idx},'name',this.value)">
@@ -5916,9 +5945,14 @@ function renderSetupTab() {
             <input type="number" min="0" step="1" value="${row.budgetRent ?? ""}" placeholder="1895" onchange="updateCommunityFloorPlanField(${idx},'budgetRent',this.value)">
           </div>
           <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">APTIQ market rent</div>
-            <div style="height:40px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:${row.marketRent != null ? "var(--text)" : "var(--muted)"}">${row.marketRent != null ? formatDlrCurrency(row.marketRent) : "Upload survey"}</div>
-            <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${escapeHtml(row.marketRate?.sourceSheet || row.marketRate?.name || "Matched by floor plan name")}</div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Marketed rent</div>
+            <input type="number" min="0" step="1" value="${displayedMarketedRent ?? ""}" placeholder="From website or market survey" onchange="updateCommunityFloorPlanField(${idx},'marketedRent',this.value)">
+            <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${displayedMarketedRent != null ? "Editable market rate used in DLR variance" : "Leave blank until website or survey rate is known"}</div>
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Market rate source</div>
+            <input type="text" value="${escapeHtml(displayedMarketSource)}" placeholder="Website / manual / imported survey" onchange="updateCommunityFloorPlanField(${idx},'marketedRentSource',this.value)">
+            <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${escapeHtml(row.marketRate?.sourceSheet || row.marketRate?.name || "Matched by floor plan name if available")}</div>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Variance</div>
@@ -5927,42 +5961,13 @@ function renderSetupTab() {
           <button class="btn btn-gray btn-sm" type="button" onclick="removeCommunityFloorPlanRow(${idx})">Remove</button>
         </div>`;
       }).join("")
-    : `<div style="font-size:0.72rem;color:var(--muted)">No floor plans saved yet. Add each plan here so the exported DLR can compare budgeted rent against the current APTIQ marketed rent by floor plan.</div>`;
+    : `<div style="font-size:0.72rem;color:var(--muted)">No floor plans saved yet. Add each plan here so the exported DLR can compare budgeted rent against the current marketed rent by floor plan.</div>`;
   const unmatchedFloorPlanRatesHtml = floorPlanVarianceData.unmatchedRates.length > 0
     ? `<div style="margin-top:10px;padding:10px 12px;border:1px dashed rgba(217,153,34,0.45);border-radius:10px;background:rgba(217,153,34,0.06)">
         <div style="font-size:0.68rem;font-weight:700;color:#9d5d14;margin-bottom:6px">Unmatched APTIQ floor plans</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">${floorPlanVarianceData.unmatchedRates.map(rate => `<span style="display:inline-flex;gap:6px;align-items:center;padding:6px 8px;border-radius:999px;background:var(--bg2);border:1px solid rgba(217,153,34,0.35);font-size:0.66rem;color:var(--text)">${escapeHtml(rate.name || "Unnamed plan")}<strong style="color:#9d5d14">${rate.marketRent != null ? formatDlrCurrency(rate.marketRent) : "—"}</strong></span>`).join("")}</div>
       </div>`
     : "";
-  const marketSurveyFloorPlanRows = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length > 0
-    ? normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).map((row, idx) => `<div style="display:grid;grid-template-columns:minmax(170px,1.2fr) 90px 90px 92px 110px minmax(120px,0.9fr) auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
-            <input type="text" value="${escapeHtml(row.name)}" placeholder="APTIQ plan name" onchange="updateMarketSurveyFloorPlanField(${idx},'name',this.value)">
-          </div>
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Beds</div>
-            <input type="number" min="0" step="1" value="${row.beds ?? ""}" placeholder="2" onchange="updateMarketSurveyFloorPlanField(${idx},'beds',this.value)">
-          </div>
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Baths</div>
-            <input type="number" min="0" step="0.5" value="${row.baths ?? ""}" placeholder="2" onchange="updateMarketSurveyFloorPlanField(${idx},'baths',this.value)">
-          </div>
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Sqft</div>
-            <input type="number" min="0" step="1" value="${row.sqft ?? ""}" placeholder="1085" onchange="updateMarketSurveyFloorPlanField(${idx},'sqft',this.value)">
-          </div>
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Marketed rent</div>
-            <input type="number" min="0" step="1" value="${row.marketRent ?? ""}" placeholder="1895" onchange="updateMarketSurveyFloorPlanField(${idx},'marketRent',this.value)">
-          </div>
-          <div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Source sheet</div>
-            <input type="text" value="${escapeHtml(row.sourceSheet || "")}" placeholder="APTIQ tab name" onchange="updateMarketSurveyFloorPlanField(${idx},'sourceSheet',this.value)">
-          </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="removeMarketSurveyFloorPlanRate(${idx})">Remove</button>
-        </div>`).join("")
-    : `<div style="font-size:0.72rem;color:var(--muted)">Upload an APTIQ workbook to prefill plan-level marketed rents here. You can also add or adjust rows manually if the workbook format changes.</div>`;
   const msoeInputs = ["Q1", "Q2", "Q3", "Q4"].map(q => {
     const value = normalizedMsoeByQuarter[q];
     return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
@@ -6161,6 +6166,16 @@ function renderSetupTab() {
           <input type="text" value="${escapeHtml(communityAddress)}" placeholder="Street, City, State ZIP" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCommunityAddress(this.value)">
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">${communityGeo ? `Pinned at ${Number(communityGeo.lat).toFixed(4)}, ${Number(communityGeo.lng).toFixed(4)}` : "Used by the RISE portfolio map and hover details."}</div>
         </div>
+        <div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Community website URL</div>
+          <input type="url" value="${escapeHtml(communityWebsiteUrl)}" placeholder="https://communitysite.com" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCommunityWebsiteUrl(this.value)">
+          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">Needed when we automate marketed rent pulls from the live property website.</div>
+        </div>
+        <div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Floor plan rates page URL</div>
+          <input type="url" value="${escapeHtml(floorPlanRatesPageUrl)}" placeholder="https://communitysite.com/floorplans" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateFloorPlanRatesPageUrl(this.value)">
+          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">Use the direct floor-plan / pricing page when it differs from the main website.</div>
+        </div>
       </div>
       <div id="community-floor-plan-budget-setup" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
@@ -6196,7 +6211,7 @@ function renderSetupTab() {
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
           <div>
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
-            <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the budgeted floor plans for this community here. The DLR export compares these saved budget rents against the current marketed rents imported from the APTIQ market survey.</div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the budgeted floor plans for this community here. The DLR export compares these saved budget rents against the current marketed rents by floor plan, using the value saved here first and imported survey matches as the fallback.</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div style="text-align:right">
@@ -6432,13 +6447,20 @@ function buildCommunityFloorPlanVarianceRows(floorPlans = communityFloorPlans, s
     }, null);
     if (match?.rate?.id) usedRateIds.add(match.rate.id);
     const budgetRent = Number(plan.budgetRent);
-    const marketRent = Number(match?.rate?.marketRent);
+    const savedMarketedRent = Number(plan.marketedRent);
+    const matchedMarketRent = Number(match?.rate?.marketRent);
+    const resolvedMarketRent = Number.isFinite(savedMarketedRent) && savedMarketedRent > 0
+      ? savedMarketedRent
+      : (Number.isFinite(matchedMarketRent) && matchedMarketRent > 0 ? matchedMarketRent : null);
+    const resolvedMarketSource = String(plan.marketedRentSource ?? "").trim()
+      || String(match?.rate?.sourceSheet ?? match?.rate?.name ?? "").trim();
     return {
       ...plan,
       marketRate: match?.rate || null,
-      marketRent: Number.isFinite(marketRent) && marketRent > 0 ? marketRent : null,
-      variance: Number.isFinite(budgetRent) && budgetRent > 0 && Number.isFinite(marketRent) && marketRent > 0
-        ? marketRent - budgetRent
+      marketRent: resolvedMarketRent,
+      marketSource: resolvedMarketSource,
+      variance: Number.isFinite(budgetRent) && budgetRent > 0 && Number.isFinite(resolvedMarketRent) && resolvedMarketRent > 0
+        ? resolvedMarketRent - budgetRent
         : null
     };
   });
@@ -14683,7 +14705,7 @@ function buildDlrFloorPlanVarianceChart(report) {
   }
   const rowsWithVariance = rows.filter(row => row.budgetRent != null || row.marketRent != null);
   if (rowsWithVariance.length === 0) {
-    return `<div style="padding:14px;border:1px dashed #cbd5e1;border-radius:16px;background:#f8fafc;font-size:12px;color:#64748b">Upload an APTIQ market survey or enter marketed rents in the pricing worksheet to populate this chart.</div>`;
+    return `<div style="padding:14px;border:1px dashed #cbd5e1;border-radius:16px;background:#f8fafc;font-size:12px;color:#64748b">Add marketed rents to the saved floor plans or upload a market survey to populate this chart.</div>`;
   }
   const maxAbsVariance = Math.max(25, ...rowsWithVariance.map(row => Math.abs(Number(row.variance) || 0)));
   const rowHtml = rowsWithVariance.map(row => {
@@ -14726,7 +14748,7 @@ function buildDlrFloorPlanVarianceChart(report) {
       </div>
       <div style="text-align:right;font-size:12px;color:#475569">
         <div>${report.marketSurveyUpdatedOn ? `APTIQ updated ${escapeHtml(report.marketSurveyUpdatedOn)}` : "Current APTIQ survey in use"}</div>
-        <div style="margin-top:4px">Variance = marketed rent minus budgeted rent</div>
+        <div style="margin-top:4px">Variance = current marketed rent minus budgeted rent</div>
       </div>
     </div>
     <div style="display:grid">${rowHtml}</div>
@@ -15461,7 +15483,7 @@ function buildDlrInvestorOverviewDocument(report) {
     </div>
     <div class="section section-card">
       <div style="font-size:14px;font-weight:700;margin-bottom:10px">Floor Plan Rent Variance vs Budget</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:12px">This chart compares each saved community floor plan budget rent against the current marketed rent imported from the APTIQ market survey.</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px">This chart compares each saved community floor plan budget rent against the current marketed rent by floor plan, using the saved floor plan rate first and imported market survey matches as fallback.</div>
       ${buildDlrFloorPlanVarianceChart(report)}
     </div>
     <div class="section section-card">
