@@ -16262,7 +16262,7 @@ function renderCSVTab() {
       <div class="csv-drop-icon">🗂</div>
       <div style="font-size:0.82rem;color:#4493f8;font-weight:600">Upload historical CSV / PDF reports for ${escapeHtml(historicalCommunity)} · ${escapeHtml(buildHistoricalMonthLabel(historicalMonthIdx, historicalYear))}</div>
       <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">These uploads are stamped to the selected community + month/year in the preview so they can feed the existing dashboard tabs and bonus metrics without manual remapping.</div>
-      <input type="file" accept=".csv,.pdf" id="historical-report-input" multiple/>
+      <input type="file" accept=".csv,.pdf,.xlsx,.xls,.xlsm" id="historical-report-input" multiple/>
     </label>
     <div style="font-size:0.66rem;color:var(--muted);margin-top:8px">The dashboard still stores values in the current month slots, so the selected year is kept as routing context and preview labeling for historical workflows and future automation hooks.</div>
   </div>`;
@@ -16753,7 +16753,7 @@ function renderCSVTab() {
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div>
         <h2 style="font-size:0.9rem;font-weight:600;margin-bottom:4px">📁 Data Import</h2>
-        <p style="font-size:0.72rem;color:var(--muted)">The cleanest workflow is a normalized CSV with explicit <strong>property</strong> and <strong>month</strong> columns. That lets the dashboard route each row to the right community and month before you apply it.</p>
+        <p style="font-size:0.72rem;color:var(--muted)">Upload CSV/PDF data or the ATLAS advanced monthly workbook template. The importer stages one row per community and routes each row to the month you select or detect before applying.</p>
       </div>
       <button class="btn btn-gray btn-sm" onclick="resetImportWorkspace()">↺ Start Fresh</button>
     </div>
@@ -16771,7 +16771,7 @@ function renderCSVTab() {
         <select data-field="importMonthOverride">
           ${MONTHS.map((m,i) => `<option value="${i}" ${i===getImportTargetMonth()?"selected":""}>${m}</option>`).join('')}
         </select>
-        <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">Use this as the fallback month, or force it for every staged row when needed.</div>
+        <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">Use this as the fallback month, or force it for every staged row when needed. ATLAS Monthly_Upload workbooks respect this override for weekly and historical backfill uploads.</div>
       </div>
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
         <div class="card-title" style="margin-bottom:6px">Ideal Upload Format</div>
@@ -16780,9 +16780,9 @@ function renderCSVTab() {
     </div>
     <label class="csv-dropzone" id="dropzone-area" style="cursor:pointer" ondragover="event.preventDefault();event.target.style.borderColor='#4493f8';event.target.style.background='rgba(68,147,248,0.08)'" ondragleave="event.target.style.borderColor='rgba(68,147,248,0.4)';event.target.style.background=''" ondrop="handleDrop(event)">
       <div class="csv-drop-icon">⬆</div>
-      <div style="font-size:0.85rem;color:#4493f8;font-weight:600">Click to upload one or more CSV / PDF reports</div>
+      <div style="font-size:0.85rem;color:#4493f8;font-weight:600">Click to upload CSV, PDF, or ATLAS monthly workbook files</div>
       <div style="font-size:0.72rem;color:var(--muted);margin-top:4px">Multiple files are staged into one preview workspace before you apply them</div>
-      <input type="file" accept=".csv,.pdf" id="csv-input" multiple/>
+      <input type="file" accept=".csv,.pdf,.xlsx,.xls,.xlsm" id="csv-input" multiple/>
     </label>
     ${errorHTML}${logHTML}
   </div>`;
@@ -17130,10 +17130,13 @@ function handleDrop(e) {
 
 async function processImportFiles(files) {
   for (const file of files) {
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    const lowerName = file.name.toLowerCase();
+    if (file.type === "application/pdf" || lowerName.endsWith(".pdf")) {
       await handlePDF(file);
-    } else if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
+    } else if (file.type === "text/csv" || lowerName.endsWith(".csv")) {
       await handleCSVFile(file);
+    } else if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm")) {
+      await handleAtlasAdvancedWorkbook(file);
     }
   }
 }
@@ -17150,10 +17153,13 @@ async function processHistoricalImportFiles(files) {
   const forcedYear = getHistoricalImportYear();
   csvLog = [`📚 Historical import target: ${forcedProperty} · ${buildHistoricalMonthLabel(forcedMonthIdx, forcedYear)}`];
   for (const file of files) {
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    const lowerName = file.name.toLowerCase();
+    if (file.type === "application/pdf" || lowerName.endsWith(".pdf")) {
       await handlePDF(file, { forcedProperty, forcedMonthIdx, forcedYear });
-    } else if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
+    } else if (file.type === "text/csv" || lowerName.endsWith(".csv")) {
       await handleCSVFile(file, { forcedProperty, forcedMonthIdx, forcedYear });
+    } else if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm")) {
+      await handleAtlasAdvancedWorkbook(file, { forcedProperty, forcedMonthIdx, forcedYear });
     }
   }
 }
@@ -17615,6 +17621,160 @@ async function handlePDF(file, options = {}) {
     ];
     renderTab();
   } catch(err) { csvError = "Failed to parse PDF: " + err.message; renderTab(); }
+}
+
+function normalizeAtlasColumnKey(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function parseAtlasMonthIndex(value) {
+  if (value instanceof Date && !isNaN(value)) return value.getMonth();
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value > 30000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const dt = new Date(excelEpoch.getTime() + (value * 86400000));
+      if (!isNaN(dt)) return dt.getUTCMonth();
+    }
+    if (value >= 0 && value <= 11) return Math.floor(value);
+  }
+  const parsed = parseMonthIndexValue(value);
+  return parsed == null ? null : parsed;
+}
+
+function normalizeAtlasPercentValue(value) {
+  const numeric = Number(String(value ?? "").replace(/[%,$]/g, ""));
+  if (!Number.isFinite(numeric)) return "";
+  return Math.abs(numeric) <= 1 ? Math.round(numeric * 10000) / 100 : numeric;
+}
+
+async function handleAtlasAdvancedWorkbook(file, options = {}) {
+  if (typeof XLSX === "undefined") {
+    csvError = "XLSX parser is unavailable because the XLSX library did not load.";
+    renderTab();
+    return;
+  }
+  csvError = "";
+  csvLog = [];
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const monthlySheet = workbook.SheetNames.find(name => normalizeAtlasColumnKey(name) === "monthly_upload");
+    if (!monthlySheet) {
+      csvError = "This workbook is missing the required Monthly_Upload tab.";
+      renderTab();
+      return;
+    }
+    const monthlyRows = XLSX.utils.sheet_to_json(workbook.Sheets[monthlySheet], { header: 1, defval: "", raw: true });
+    if (!Array.isArray(monthlyRows) || monthlyRows.length < 2) {
+      csvError = "Monthly_Upload has no data rows.";
+      renderTab();
+      return;
+    }
+    const forcedTarget = getForcedImportTarget(options);
+    const headerKeys = (monthlyRows[0] || []).map(normalizeAtlasColumnKey);
+    const colIdx = Object.fromEntries(headerKeys.map((key, idx) => [key, idx]));
+    const getCell = (row, key) => row[colIdx[key]] ?? "";
+    const masterSheet = workbook.SheetNames.find(name => normalizeAtlasColumnKey(name) === "community_master");
+    const communityMap = {};
+    if (masterSheet) {
+      const masterRows = XLSX.utils.sheet_to_json(workbook.Sheets[masterSheet], { header: 1, defval: "", raw: true });
+      const masterHeaders = (masterRows[0] || []).map(normalizeAtlasColumnKey);
+      const mIdx = Object.fromEntries(masterHeaders.map((key, idx) => [key, idx]));
+      for (let r = 1; r < masterRows.length; r += 1) {
+        const row = masterRows[r] || [];
+        const id = String(row[mIdx.community_id] ?? "").trim();
+        if (!id) continue;
+        communityMap[id.toUpperCase()] = {
+          name: String(row[mIdx.community_name] ?? "").trim(),
+          shortName: String(row[mIdx.short_name] ?? "").trim()
+        };
+      }
+    }
+
+    const normalizedRows = [];
+    const log = [];
+    let matched = 0;
+    let included = 0;
+    let skipped = 0;
+    for (let r = 1; r < monthlyRows.length; r += 1) {
+      const row = monthlyRows[r] || [];
+      const communityId = String(getCell(row, "community_id") ?? "").trim();
+      const communityNameRaw = String(getCell(row, "community_name") ?? "").trim();
+      const reportMonthRaw = getCell(row, "report_month");
+      const rowStatus = String(getCell(row, "row_status") ?? "").trim().toUpperCase();
+      const hasContent = communityId || communityNameRaw || reportMonthRaw || Number(getCell(row, "occupied_units")) > 0 || Number(getCell(row, "leased_units")) > 0;
+      if (!hasContent) continue;
+      if (rowStatus === "ERROR") { skipped += 1; continue; }
+
+      const mappedFromId = communityMap[communityId.toUpperCase()] || {};
+      const mappedName = forcedTarget.community
+        || matchPropertyName(communityNameRaw || mappedFromId.name || mappedFromId.shortName || communityId, { fallbackToCurrent: false });
+      if (!mappedName) { skipped += 1; continue; }
+
+      const detectedMonthIdx = parseAtlasMonthIndex(reportMonthRaw);
+      const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override"
+        ? getImportTargetMonth()
+        : (detectedMonthIdx ?? getImportTargetMonth()));
+      if (targetMonthIdx == null || targetMonthIdx < 0 || targetMonthIdx > 11) { skipped += 1; continue; }
+
+      included += 1;
+      const mappedRow = {
+        property: mappedName,
+        month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : MONTHS[targetMonthIdx],
+        occupied: getCell(row, "occupied_units") ?? "",
+        leased: getCell(row, "leased_units") ?? "",
+        move_outs: getCell(row, "move_outs") ?? "",
+        move_ins: getCell(row, "move_ins") ?? "",
+        guest_cards: getCell(row, "leads") || getCell(row, "traffic") || "",
+        walk_in: "",
+        off_site_event: "",
+        phone_calls: "",
+        emails_online: "",
+        text_chat_other: "",
+        tours: getCell(row, "tours") ?? "",
+        applications: getCell(row, "applications") ?? "",
+        applications_approved: getCell(row, "approved_applications") ?? "",
+        denied: "",
+        cancelled: "",
+        pending_decision: "",
+        leases_signed: getCell(row, "move_ins") ?? "",
+        budget_occ: normalizeAtlasPercentValue(getCell(row, "physical_occupancy_")),
+        market_rent: getCell(row, "avg_market_rent") ?? "",
+        budget_rent: "",
+        budget_ner: "",
+        rent_roll_total: getCell(row, "gross_potential_rent_") ?? "",
+        concessions: getCell(row, "concessions_") ?? "",
+        ner: getCell(row, "actual_rent") ?? "",
+        renewal_expirations: getCell(row, "renewals_sent") ?? "",
+        renewals_signed: getCell(row, "renewals_signed") ?? "",
+        renewal_ntvs: "",
+        renewal_transfers: "",
+        renewal_undecided: "",
+        renewal_early_termination: ""
+      };
+      matched += Object.values(mappedRow).filter(value => value !== "" && value !== null && value !== undefined).length;
+      normalizedRows.push(mappedRow);
+      if (log.length < 18) {
+        const monthLabel = MONTHS[targetMonthIdx];
+        log.push(`${mappedName} · ${monthLabel}: occupied ${mappedRow.occupied || "—"}, leased ${mappedRow.leased || "—"}, leads ${mappedRow.guest_cards || "—"}`);
+      }
+    }
+
+    if (!normalizedRows.length) {
+      csvError = "No valid Monthly_Upload rows were found. Check Community_ID/Community_Name and Row_Status values.";
+      renderTab();
+      return;
+    }
+    mergeExtractedDashboardRows(normalizedRows, `ATLAS Workbook ${file.name}`);
+    const modeLabel = forcedTarget.monthIdx !== null || importRoutingMode === "force_override"
+      ? `month override (${MONTHS[forcedTarget.monthIdx ?? getImportTargetMonth()]})`
+      : "file month routing";
+    csvLog = [`✅ Staged ${included} ATLAS Monthly_Upload row(s) from ${file.name} using ${modeLabel}.`, ...log];
+    if (skipped > 0) csvLog.push(`ℹ Skipped ${skipped} row(s) marked ERROR or missing community/month mapping.`);
+    renderTab();
+  } catch (err) {
+    csvError = "Failed to parse ATLAS workbook: " + err.message;
+    renderTab();
+  }
 }
 
 // ─── CSV Handler ──────────────────────────────────────────────────────────────
