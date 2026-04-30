@@ -12031,6 +12031,14 @@ function applyValueToRecord(record, monthIdx, targetKey, numericValue) {
   return false;
 }
 
+function clearMonthlyRecordFields(record, monthIdx, targetKeys = []) {
+  if (!record.monthlyData[monthIdx]) record.monthlyData[monthIdx] = defaultMonthly()[monthIdx];
+  const normalizedKeys = new Set((Array.isArray(targetKeys) ? targetKeys : []).filter(Boolean));
+  normalizedKeys.forEach(targetKey => {
+    applyValueToRecord(record, monthIdx, targetKey, 0);
+  });
+}
+
 function resetImportWorkspace() {
   csvError = "";
   csvLog = ["🧹 Reset the import workspace. Start with a normalized CSV or stage new files below."];
@@ -17772,6 +17780,208 @@ function parseRonaldoGeneratorDetailRows(rows = [], kind, target = {}, sourceLab
   return row && hasRonaldoBackfillValues(row) ? row : null;
 }
 
+function resolveRonaldoCommunityFromRow(row = {}, communityMap = {}, forcedTarget = {}) {
+  const communityId = String(row.community_id ?? "").trim();
+  const communityNameRaw = String(row.community_name ?? "").trim();
+  const mappedFromId = communityId ? (communityMap[communityId.toUpperCase()] || {}) : {};
+  return forcedTarget.community
+    || matchPropertyName(communityNameRaw || mappedFromId.name || mappedFromId.shortName || communityId, { fallbackToCurrent: false });
+}
+
+function buildRonaldoLeadSourceMonthRow(row = {}, target = {}) {
+  const newLeads = normalizeRonaldoBackfillNumber(row.new_leads);
+  const emailLeads = normalizeRonaldoBackfillNumber(row.email_leads);
+  const onlineLeads = normalizeRonaldoBackfillNumber(row.online_leads);
+  const callLeads = normalizeRonaldoBackfillNumber(row.call_leads);
+  const walkInLeads = normalizeRonaldoBackfillNumber(row.walk_in_leads);
+  const offSiteEventLeads = normalizeRonaldoBackfillNumber(row.off_site_event_leads);
+  const chatLeads = normalizeRonaldoBackfillNumber(row.chat_leads);
+  const textLeads = normalizeRonaldoBackfillNumber(row.text_leads);
+  const otherLeads = normalizeRonaldoBackfillNumber(row.other_leads);
+  const firstVisitsTours = normalizeRonaldoBackfillNumber(row.first_visits_tours);
+  const leadMix = {
+    guest_cards: Number.isFinite(newLeads) ? newLeads : "",
+    walk_in: Number.isFinite(walkInLeads) ? walkInLeads : "",
+    off_site_event: Number.isFinite(offSiteEventLeads) ? offSiteEventLeads : "",
+    phone_calls: Number.isFinite(callLeads) ? callLeads : "",
+    emails_online: [emailLeads, onlineLeads].filter(value => Number.isFinite(value)).reduce((sum, value) => sum + value, 0) || "",
+    text_chat_other: [chatLeads, textLeads, otherLeads].filter(value => Number.isFinite(value)).reduce((sum, value) => sum + value, 0) || "",
+    tours: Number.isFinite(firstVisitsTours) ? firstVisitsTours : ""
+  };
+  return makeRonaldoBackfillRow(target, leadMix);
+}
+
+async function processRonaldoLeadSourceRows(workbook, fileName = "", options = {}, communityMap = {}) {
+  const sheetNames = Array.isArray(workbook?.SheetNames) ? workbook.SheetNames : [];
+  if (sheetNames.length === 0) return { rows: [], notes: [] };
+  const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetNames[0]], { header: 1, defval: "", raw: false });
+  if (!Array.isArray(sheetRows) || sheetRows.length < 2) return { rows: [], notes: [] };
+  const headers = (sheetRows[0] || []).map(normalizeAtlasColumnKey);
+  const idx = Object.fromEntries(headers.map((key, i) => [key, i]));
+  const getCell = (row, key) => row[idx[key]] ?? "";
+  const forcedTarget = getForcedImportTarget(options);
+  const rowsByKey = new Map();
+  const notes = [`📎 ${fileName} mapped as lead source box score.`];
+  for (let r = 1; r < sheetRows.length; r += 1) {
+    const row = sheetRows[r] || [];
+    const mappedName = resolveRonaldoCommunityFromRow({
+      community_id: getCell(row, "community_id"),
+      community_name: getCell(row, "community_name")
+    }, communityMap, forcedTarget);
+    if (!mappedName) continue;
+    const detectedMonthIdx = parseAtlasMonthIndex(getCell(row, "report_month"));
+    const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override" ? getImportTargetMonth() : (detectedMonthIdx ?? getImportTargetMonth()));
+    if (targetMonthIdx < 0 || targetMonthIdx > 11) continue;
+    const key = `${mappedName}::${targetMonthIdx}`;
+    const current = rowsByKey.get(key) || {
+      property: mappedName,
+      month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : MONTHS[targetMonthIdx],
+      guest_cards: 0,
+      walk_in: 0,
+      off_site_event: 0,
+      phone_calls: 0,
+      emails_online: 0,
+      text_chat_other: 0,
+      tours: 0
+    };
+    const add = (targetKey, sourceKey) => {
+      const value = normalizeRonaldoBackfillNumber(getCell(row, sourceKey));
+      if (!Number.isFinite(value)) return;
+      current[targetKey] += value;
+    };
+    add("guest_cards", "new_leads");
+    add("walk_in", "walk_in_leads");
+    add("off_site_event", "off_site_event_leads");
+    add("phone_calls", "call_leads");
+    add("emails_online", "email_leads");
+    add("emails_online", "online_leads");
+    add("text_chat_other", "chat_leads");
+    add("text_chat_other", "text_leads");
+    add("text_chat_other", "other_leads");
+    add("tours", "first_visits_tours");
+    rowsByKey.set(key, current);
+  }
+  const rows = Array.from(rowsByKey.values()).map(row => ({
+    ...row,
+    guest_cards: row.guest_cards || "",
+    walk_in: row.walk_in || "",
+    off_site_event: row.off_site_event || "",
+    phone_calls: row.phone_calls || "",
+    emails_online: row.emails_online || "",
+    text_chat_other: row.text_chat_other || "",
+    tours: row.tours || ""
+  }));
+  if (rows.length === 0) return { rows: [], notes };
+  rows.forEach(row => {
+    const record = getPropertyRecordForApply(row.property);
+    if (!record) return;
+    const monthIdx = parseMonthIndexValue(row.month) ?? forcedTarget.monthIdx ?? getImportTargetMonth();
+    clearMonthlyRecordFields(record, monthIdx, ["guest_cards", "walk_in", "off_site_event", "phone_calls", "emails_online", "text_chat_other", "tours"]);
+    const targetMap = {
+      guest_cards: "guest_cards",
+      walk_in: "walk_in",
+      off_site_event: "off_site_event",
+      phone_calls: "phone_calls",
+      emails_online: "emails_online",
+      text_chat_other: "text_chat_other",
+      tours: "tours"
+    };
+    Object.entries(targetMap).forEach(([sourceKey, targetKey]) => {
+      const value = Number(row[sourceKey]);
+      if (Number.isFinite(value)) applyValueToRecord(record, monthIdx, targetKey, value);
+    });
+    savedData[row.property] = normalizeSavedCommunityRecord(row.property, record);
+  });
+  const saveResult = persistSaved();
+  if (saveResult?.ok === false) return { rows: [], notes: [`⚠️ ${saveResult.message}`] };
+  if (rows.some(row => row.property === getProp().name)) loadPropertyData(getProp().name);
+  renderPropGrid();
+  notes.push(`✅ Applied lead source totals across ${rows.length} community-month row${rows.length === 1 ? "" : "s"}.`);
+  return { rows, notes };
+}
+
+async function processRonaldoFloorPlanSnapshotRows(workbook, fileName = "", options = {}, communityMap = {}) {
+  const sheetNames = Array.isArray(workbook?.SheetNames) ? workbook.SheetNames : [];
+  if (sheetNames.length === 0) return { rows: [], notes: [] };
+  const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetNames[0]], { header: 1, defval: "", raw: false });
+  if (!Array.isArray(sheetRows) || sheetRows.length < 2) return { rows: [], notes: [] };
+  const headers = (sheetRows[0] || []).map(normalizeAtlasColumnKey);
+  const idx = Object.fromEntries(headers.map((key, i) => [key, i]));
+  const getCell = (row, key) => row[idx[key]] ?? "";
+  const forcedTarget = getForcedImportTarget(options);
+  const rowsByCommunity = new Map();
+  for (let r = 1; r < sheetRows.length; r += 1) {
+    const row = sheetRows[r] || [];
+    const mappedName = resolveRonaldoCommunityFromRow({
+      community_id: getCell(row, "community_id"),
+      community_name: getCell(row, "source_property_name") || getCell(row, "community_name")
+    }, communityMap, forcedTarget);
+    if (!mappedName) continue;
+    const detectedMonthIdx = parseAtlasMonthIndex(getCell(row, "report_month"));
+    const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override" ? getImportTargetMonth() : (detectedMonthIdx ?? getImportTargetMonth()));
+    if (targetMonthIdx < 0 || targetMonthIdx > 11) continue;
+    const key = `${mappedName}::${targetMonthIdx}`;
+    const current = rowsByCommunity.get(key) || {
+      property: mappedName,
+      month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : MONTHS[targetMonthIdx],
+      floorPlanRates: []
+    };
+    const floorPlanName = String(getCell(row, "unit_type") || getCell(row, "floor_plan") || "").trim();
+    if (!floorPlanName) continue;
+    current.floorPlanRates.push({
+      name: floorPlanName,
+      marketRent: normalizeRonaldoBackfillNumber(getCell(row, "avg_market_rent")),
+      sqft: normalizeRonaldoBackfillNumber(getCell(row, "avg_sqft")),
+      beds: normalizeRonaldoBackfillNumber(getCell(row, "bed_count")),
+      baths: normalizeRonaldoBackfillNumber(getCell(row, "bath_count")),
+      sourceSheet: fileName
+    });
+    rowsByCommunity.set(key, current);
+  }
+  const rows = Array.from(rowsByCommunity.values());
+  if (rows.length === 0) return { rows: [], notes: [] };
+  rows.forEach(row => {
+    const record = getPropertyRecordForApply(row.property);
+    if (!record) return;
+    const existingSurvey = normalizeMarketSurveyData(record.marketSurveyData);
+    const nextSurvey = normalizeMarketSurveyData({
+      ...existingSurvey,
+      sourceFileName: fileName,
+      sourceKind: "boxscore_floor_plan_monthly",
+      uploadedAt: existingSurvey.uploadedAt || new Date().toISOString(),
+      updatedOn: new Date().toISOString(),
+      floorPlanRates: row.floorPlanRates
+    });
+    const existingPlans = normalizeCommunityFloorPlans(record.communityFloorPlans);
+    const existingByName = new Map(existingPlans.map(plan => [normalizeFloorPlanLookupName(plan.name), plan]));
+    const nextPlans = [];
+    row.floorPlanRates.forEach(rate => {
+      const existing = existingByName.get(normalizeFloorPlanLookupName(rate.name));
+      nextPlans.push({
+        id: existing?.id || makeFloorPlanId(),
+        name: String(existing?.name || rate.name || "").trim(),
+        sqft: existing?.sqft ?? rate.sqft ?? null,
+        budgetRent: existing?.budgetRent ?? null,
+        marketedRent: existing?.marketedRent ?? rate.marketRent ?? null,
+        leasedPct: existing?.leasedPct ?? null,
+        marketedRentSource: existing?.marketedRentSource || fileName,
+        beds: existing?.beds ?? rate.beds ?? null,
+        baths: existing?.baths ?? rate.baths ?? null
+      });
+      existingByName.delete(normalizeFloorPlanLookupName(rate.name));
+    });
+    existingByName.forEach(plan => nextPlans.push({ ...plan }));
+    record.marketSurveyData = nextSurvey;
+    record.communityFloorPlans = normalizeCommunityFloorPlans(nextPlans);
+    savedData[row.property] = normalizeSavedCommunityRecord(row.property, record);
+  });
+  const saveResult = persistSaved();
+  if (saveResult?.ok === false) return { rows: [], notes: [`⚠️ ${saveResult.message}`] };
+  if (rows.some(row => row.property === getProp().name)) loadPropertyData(getProp().name);
+  renderPropGrid();
+  return { rows, notes: [`✅ Applied floor plan snapshots across ${rows.length} community-month row${rows.length === 1 ? "" : "s"}.`] };
+}
+
 async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
   const accepted = Array.from(files || []);
   if (accepted.length === 0) return { rows: [], notes: [] };
@@ -17791,6 +18001,20 @@ async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
         } else {
           notes.push(`⚠️ ${file.name} matched Monthly_Upload but no dashboard rows were extracted.`);
         }
+        continue;
+      }
+      if (lowerName.endsWith("boxscore_lead_monthly.csv")) {
+        const workbook = XLSX.read(await file.text(), { type: "string", cellDates: true });
+        const result = await processRonaldoLeadSourceRows(workbook, file.name, options, {});
+        rows.push(...result.rows);
+        notes.push(...result.notes);
+        continue;
+      }
+      if (lowerName.endsWith("boxscore_floor_plan_monthly.csv")) {
+        const workbook = XLSX.read(await file.text(), { type: "string", cellDates: true });
+        const result = await processRonaldoFloorPlanSnapshotRows(workbook, file.name, options, {});
+        rows.push(...result.rows);
+        notes.push(...result.notes);
         continue;
       }
       if (lowerName.endsWith(".pdf")) {
@@ -18542,6 +18766,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
           renewal_expirations: "renewal_expirations",
           renewals_signed: "renewals_signed"
         };
+        clearMonthlyRecordFields(targetRecord, targetMonthIdx, Object.values(monthlyFieldMap));
         Object.entries(monthlyFieldMap).forEach(([sourceKey, targetKey]) => {
           const rawVal = mappedRow[sourceKey];
           if (rawVal === "" || rawVal === null || rawVal === undefined) return;
