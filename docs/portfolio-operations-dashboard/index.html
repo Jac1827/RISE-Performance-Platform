@@ -850,6 +850,7 @@ let communityFloorPlans = [];
 let communityAddress = "";
 let communityWebsiteUrl = "";
 let floorPlanRatesPageUrl = "";
+let portfolioSetupCommunityName = "";
 let communityGeo = null;
 let financialLedger = {};
 let financialUpdatedAt = "";
@@ -2653,6 +2654,7 @@ savedData = loadSaved();
 if (savedData && Object.keys(savedData).length > 0) {
   writeDailyBackupSnapshot("startup_retain");
 }
+portfolioSetupCommunityName = getProp().name;
 hydrateOpsGlobalData();
 queuePersistedPhotoStorageCompaction();
 
@@ -4324,6 +4326,7 @@ function renderQuarterlyTurnoverRollupSection(portfolioScope, regionalRoles, rol
 function selectProp(idx) {
   selectedPropIdx = idx;
   workspaceScopeValue = PROPERTIES[selectedPropIdx]?.name ?? getProp().name;
+  portfolioSetupCommunityName = getProp().name;
   loadPropertyData(getProp().name);
   persistOperationsWorkspaceContext();
   renderPropGrid();
@@ -4336,6 +4339,7 @@ function openCommunityWorkspace(name, tabIdx = null) {
   if (matchedIdx < 0) return;
   workspaceScopeValue = matchedName;
   selectedPropIdx = matchedIdx;
+  portfolioSetupCommunityName = getProp().name;
   loadPropertyData(getProp().name);
   persistOperationsWorkspaceContext();
   renderPropGrid();
@@ -4489,6 +4493,78 @@ function removeCommunityFloorPlanRow(index) {
   communityFloorPlans = normalizeCommunityFloorPlans(communityFloorPlans).filter((_, idx) => idx !== index);
   saveCommunityData(true);
   renderTab();
+}
+
+function getPortfolioSetupCommunityName() {
+  const fallback = portfolioSetupCommunityName || getProp().name;
+  return matchPropertyName(fallback, { fallbackToCurrent: false }) || getProp().name;
+}
+
+function setPortfolioSetupCommunityName(name) {
+  portfolioSetupCommunityName = matchPropertyName(name, { fallbackToCurrent: false }) || getProp().name;
+  renderTab();
+}
+
+function getPortfolioSetupCommunityRecord(propName = getPortfolioSetupCommunityName()) {
+  const matched = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  return matched === getProp().name
+    ? getCurrentCommunityRecord()
+    : normalizeSavedCommunityRecord(matched, savedData[matched]);
+}
+
+function persistPortfolioSetupCommunityRecord(propName, record) {
+  const matched = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  savedData[matched] = normalizeSavedCommunityRecord(matched, record);
+  if (matched === getProp().name) {
+    loadPropertyData(matched);
+  }
+  const savedResult = persistSaved();
+  if (savedResult?.ok === false) {
+    alert(`⚠️ ${savedResult.message}`);
+    return false;
+  }
+  renderPropGrid();
+  renderTab();
+  return true;
+}
+
+function addPortfolioCommunityFloorPlanRow(propName) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  record.communityFloorPlans = [
+    ...normalizeCommunityFloorPlans(record.communityFloorPlans),
+    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null }
+  ];
+  persistPortfolioSetupCommunityRecord(propName, record);
+}
+
+function updatePortfolioCommunityFloorPlanField(propName, index, field, value) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  const nextPlans = normalizeCommunityFloorPlans(record.communityFloorPlans).map(entry => ({ ...entry }));
+  while (nextPlans.length <= index) {
+    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null });
+  }
+  const target = nextPlans[index];
+  if (!target) return;
+  if (field === "name") {
+    target.name = String(value ?? "").trim();
+  } else if (field === "marketedRentSource") {
+    target.marketedRentSource = String(value ?? "").trim();
+  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths", "leasedPct"].includes(field)) {
+    const numeric = Number(value);
+    if (field === "leasedPct") {
+      target[field] = Number.isFinite(numeric) && numeric >= 0 ? Math.min(numeric, 100) : null;
+    } else {
+      target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    }
+  }
+  record.communityFloorPlans = nextPlans;
+  persistPortfolioSetupCommunityRecord(propName, record);
+}
+
+function removePortfolioCommunityFloorPlanRow(propName, index) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  record.communityFloorPlans = normalizeCommunityFloorPlans(record.communityFloorPlans).filter((_, idx) => idx !== index);
+  persistPortfolioSetupCommunityRecord(propName, record);
 }
 
 function optimizeCommunityPhotoFile(file) {
@@ -6100,6 +6176,10 @@ function renderPortfolioScopePanel(title, subtitle, cardsHtml, bodyHtml) {
 
 function renderPortfolioScopedSetupTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
+  const selectedName = getPortfolioSetupCommunityName();
+  const selectedRecord = getPortfolioSetupCommunityRecord(selectedName);
+  const selectedProp = getPropertyByName(selectedName);
+  const selectedTotalUnits = getTotalUnitsFor(selectedProp, selectedRecord.customUnits);
   const contactCount = details.reduce((sum, detail) => sum + normalizeInvestorEmailContacts(detail.record?.investorEmailContacts).length, 0);
   const floorPlanCount = details.reduce((sum, detail) => sum + normalizeCommunityFloorPlans(detail.record?.communityFloorPlans).filter(plan => String(plan.name || "").trim()).length, 0);
   const cardsHtml = `<div class="grid-4">
@@ -6120,9 +6200,98 @@ function renderPortfolioScopedSetupTab() {
       <td class="l"><input type="text" value="${escapeHtml(detail.record?.investorName || "")}" placeholder="Investor / ownership group" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorName", this.value)' style="width:100%"></td>
       <td class="l"><textarea rows="2" onchange='updatePortfolioCommunityField(${JSON.stringify(detail.name)}, "investorEmailContacts", this.value)' style="width:100%;min-height:58px">${escapeHtml(contactText)}</textarea></td>
       <td>${plans}</td>
-      <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return queueWorkspaceNavigation(${JSON.stringify(detail.name)}, 1, { windowshadeKey: "setup_foundation", anchorId: "community-floor-plan-budget-setup" })'>Edit Floor Plans</button></td>
+      <td><button type="button" class="btn btn-gray btn-sm" onmousedown='return setPortfolioSetupCommunityName(${JSON.stringify(detail.name)})'>Edit Floor Plans</button></td>
     </tr>`;
   }).join("");
+  const selectedFloorPlanData = buildCommunityFloorPlanVarianceRows(selectedRecord.communityFloorPlans, selectedRecord.marketSurveyData);
+  const selectedFloorPlanRows = selectedFloorPlanData.rows.length > 0
+    ? selectedFloorPlanData.rows.map((row, idx) => {
+        const varianceColor = row.variance == null ? "var(--muted)" : row.variance >= 0 ? "#3fb950" : "#f97316";
+        const displayedMarketedRent = row.marketedRent ?? row.marketRent;
+        const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
+        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
+            <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'name', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Beds</div>
+            <input type="number" min="0" step="1" value="${row.beds ?? ""}" placeholder="2" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'beds', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Baths</div>
+            <input type="number" min="0" step="0.5" value="${row.baths ?? ""}" placeholder="2" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'baths', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Sqft</div>
+            <input type="number" min="0" step="1" value="${row.sqft ?? ""}" placeholder="1085" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'sqft', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Budget rent</div>
+            <input type="number" min="0" step="1" value="${row.budgetRent ?? ""}" placeholder="1895" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'budgetRent', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Marketed rent</div>
+            <input type="number" min="0" step="1" value="${displayedMarketedRent ?? ""}" placeholder="From website or market survey" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'marketedRent', this.value)">
+            <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${displayedMarketedRent != null ? "Editable market rate used in DLR variance" : "Leave blank until website or survey rate is known"}</div>
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">% Leased</div>
+            <input type="number" min="0" max="100" step="0.1" value="${row.leasedPct ?? ""}" placeholder="92.5" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'leasedPct', this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Market rate source</div>
+            <input type="text" value="${escapeHtml(displayedMarketSource)}" placeholder="Website / manual / imported survey" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'marketedRentSource', this.value)">
+            <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${escapeHtml(row.marketRate?.sourceSheet || row.marketRate?.name || "Matched by floor plan name if available")}</div>
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Variance</div>
+            <div style="height:40px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:${varianceColor};font-weight:700">${row.variance == null ? "—" : formatSignedDisplay(row.variance, 0, "")}</div>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" onclick="removePortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)}, ${idx})">Remove</button>
+        </div>`;
+      }).join("")
+    : `<div style="font-size:0.72rem;color:var(--muted)">No floor plans saved yet for ${escapeHtml(selectedName)}. Add each plan here so the exported DLR can compare budgeted rent against the current marketed rent by floor plan.</div>`;
+  const selectedCommunityEditor = `<div class="card mb4">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <div class="card-title" style="margin-bottom:6px">Selected Community Editor</div>
+        <div style="font-size:0.72rem;color:var(--muted)">Stay in portfolio scope while editing one community at a time. The floor-plan table below writes directly back to that community's saved record.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(220px,300px) auto;gap:10px;align-items:end">
+        <div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Community</div>
+          <select onchange="setPortfolioSetupCommunityName(this.value)">
+            ${getPortfolioScopeCommunityNames().map(name => `<option value="${escapeHtml(name)}" ${name === selectedName ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}
+          </select>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${selectedTotalUnits > 0 ? selectedTotalUnits : "—"}</div>
+          <div style="font-size:0.64rem;color:var(--muted)">selected units</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the budgeted floor plans for ${escapeHtml(selectedName)} here. The DLR export compares these saved budget rents against the current marketed rents by floor plan, using the value saved here first and imported survey matches as the fallback.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="text-align:right">
+            <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${selectedFloorPlanData.rows.length}</div>
+            <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${selectedFloorPlanData.rows.length === 1 ? "" : "s"}</div>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" onclick="addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})">＋ Add Floor Plan</button>
+        </div>
+      </div>
+      <div style="display:grid;gap:0">${selectedFloorPlanRows}</div>
+      ${selectedFloorPlanData.unmatchedRates.length > 0 ? `<div style="margin-top:10px;padding:10px 12px;border:1px dashed rgba(217,153,34,0.45);border-radius:10px;background:rgba(217,153,34,0.06)">
+        <div style="font-size:0.68rem;font-weight:700;color:#9d5d14;margin-bottom:6px">Unmatched APTIQ floor plans</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${selectedFloorPlanData.unmatchedRates.map(rate => `<span style="display:inline-flex;gap:6px;align-items:center;padding:6px 8px;border-radius:999px;background:var(--bg2);border:1px solid rgba(217,153,34,0.35);font-size:0.66rem;color:var(--text)">${escapeHtml(rate.name || "Unnamed plan")}<strong style="color:#9d5d14">${rate.marketRent != null ? formatDlrCurrency(rate.marketRent) : "—"}</strong></span>`).join("")}</div>
+      </div>` : ""}
+    </div>
+  </div>`;
   const bodyHtml = `<div class="tbl-wrap">
     <div class="tbl-header"><h2>Portfolio setup roster</h2><p>Core setup fields are editable directly here. Use the action button when you need the full community setup editor for floor plans, photos, or staffing.</p></div>
     <table>
@@ -6130,7 +6299,7 @@ function renderPortfolioScopedSetupTab() {
       <tbody>${rows}</tbody>
     </table>
   </div>`;
-  return renderPortfolioScopePanel("Portfolio Community Setup", "A read-through of saved setup data across the full portfolio.", cardsHtml, bodyHtml);
+  return renderPortfolioScopePanel("Portfolio Community Setup", "A read-through of saved setup data across the full portfolio.", cardsHtml, bodyHtml + selectedCommunityEditor);
 }
 
 function renderPortfolioScopedOverviewTab() {
@@ -12087,10 +12256,26 @@ function buildPortfolioDetailsFromRecordMap(recordMap) {
   }).filter(Boolean);
 }
 
+function getPortfolioScopeCommunityNames(recordMap = savedData) {
+  const names = [];
+  const seen = new Set();
+  const addName = (name) => {
+    const normalized = String(name ?? "").trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    names.push(normalized);
+  };
+  PROPERTIES.forEach(prop => addName(prop.name));
+  Object.keys(recordMap ?? {}).forEach(addName);
+  addName(getProp().name);
+  return names;
+}
+
 function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
   const map = (recordMap && typeof recordMap === "object") ? recordMap : {};
   const scopedMap = { ...map, [getProp().name]: getCurrentCommunityRecord() };
-  let details = Object.keys(scopedMap).map(name => {
+  const names = getPortfolioScopeCommunityNames(scopedMap);
+  let details = names.map(name => {
     const record = normalizeSavedCommunityRecord(name, scopedMap[name]);
     const prop = getPropertyByName(name);
     const totalUnits = getTotalUnitsFor(prop, record.customUnits);
@@ -12131,7 +12316,7 @@ function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
 }
 
 function getCurrentPortfolioDetails() {
-  const details = buildPortfolioDetailsFromRecordMap({ ...savedData, [getProp().name]: getCurrentCommunityRecord() });
+  const details = buildPortfolioDetailsForMonth(getSelectedDashboardMonthIndex());
   return details.length > 0 ? details : [];
 }
 
