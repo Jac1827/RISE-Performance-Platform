@@ -666,6 +666,11 @@ const DASHBOARD_STORAGE_MIGRATION_KEYS = [
   SIDE_NAV_STORAGE_KEY,
   PERFORMANCE_PLATFORM_STORAGE_KEY
 ];
+const DASHBOARD_SHARED_SYNC_SCOPE = "atlas_dashboard_v1";
+const DASHBOARD_SHARED_SYNC_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519f411cab/api/state";
+const DASHBOARD_SHARED_SYNC_HEALTH_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519f411cab/api/health";
+const DASHBOARD_SHARED_SYNC_WRITE_TOKEN = "atlas-rise-shared-sync-2026";
+const DASHBOARD_SHARED_SYNC_META_KEY = "atlas_dashboard_shared_sync_meta_v1";
 function persistOpsPropertyCatalog() {
   try {
     const existingRaw = localStorage.getItem(OPS_PROPERTY_CATALOG_KEY);
@@ -5526,10 +5531,153 @@ function saveCommunityData(silent = false) {
       : key;
     alert(`✅ Saved data for ${saveScopeLabel}`);
   }
+  if (!suppressDashboardSharedSyncPush) {
+    queueDashboardSharedSyncPush("dashboard_save");
+  }
+}
+
+function loadDashboardSharedSyncMeta() {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_SHARED_SYNC_META_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      lastPulledAt: String(parsed?.lastPulledAt || ""),
+      lastPushedAt: String(parsed?.lastPushedAt || ""),
+      lastAppliedAt: String(parsed?.lastAppliedAt || ""),
+      lastError: String(parsed?.lastError || "")
+    };
+  } catch {
+    return { lastPulledAt: "", lastPushedAt: "", lastAppliedAt: "", lastError: "" };
+  }
+}
+
+let dashboardSharedSyncMeta = loadDashboardSharedSyncMeta();
+let dashboardSharedSyncPushTimer = null;
+let suppressDashboardSharedSyncPush = false;
+
+function persistDashboardSharedSyncMeta() {
+  try {
+    localStorage.setItem(DASHBOARD_SHARED_SYNC_META_KEY, JSON.stringify(dashboardSharedSyncMeta));
+  } catch {}
+}
+
+function getDashboardSharedSyncLastActivityLabel() {
+  const latest = [dashboardSharedSyncMeta.lastPulledAt, dashboardSharedSyncMeta.lastPushedAt]
+    .filter(Boolean)
+    .map((iso) => Date.parse(iso))
+    .filter((ts) => Number.isFinite(ts))
+    .sort((a, b) => b - a)[0];
+  if (!latest) return "No cloud sync yet";
+  return `Last cloud sync ${new Date(latest).toLocaleString()}`;
+}
+
+function getDashboardSharedSyncStatusLine() {
+  const lastActivity = getDashboardSharedSyncLastActivityLabel();
+  const errorLine = dashboardSharedSyncMeta.lastError ? ` · Last issue: ${dashboardSharedSyncMeta.lastError}` : "";
+  return `${lastActivity}${errorLine}`;
+}
+
+async function pullDashboardSharedState({ silent = false, applyRemoteIfNewer = true } = {}) {
+  try {
+    const response = await fetch(`${DASHBOARD_SHARED_SYNC_ENDPOINT}?scope=${encodeURIComponent(DASHBOARD_SHARED_SYNC_SCOPE)}`, { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const record = payload?.record || null;
+    dashboardSharedSyncMeta.lastPulledAt = new Date().toISOString();
+    dashboardSharedSyncMeta.lastError = "";
+    persistDashboardSharedSyncMeta();
+    if (!record || !record.payload?.keys) {
+      if (!silent) alert("Cloud sync is connected, but no shared dataset is available yet.");
+      return false;
+    }
+    const incomingUpdatedAt = String(record.updatedAt || "");
+    const incomingTs = Date.parse(incomingUpdatedAt) || 0;
+    const appliedTs = Date.parse(dashboardSharedSyncMeta.lastAppliedAt || "") || 0;
+    if (applyRemoteIfNewer && incomingTs > appliedTs) {
+      Object.entries(record.payload.keys).forEach(([key, rawValue]) => {
+        try {
+          localStorage.setItem(String(key), typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue));
+        } catch {}
+      });
+      dashboardSharedSyncMeta.lastAppliedAt = incomingUpdatedAt || new Date().toISOString();
+      dashboardSharedSyncMeta.lastError = "";
+      persistDashboardSharedSyncMeta();
+      if (!silent) alert("✅ Pulled the latest shared cloud data. Reloading now.");
+      window.location.reload();
+      return true;
+    }
+    if (!silent) alert("Cloud sync check complete. This browser already has the latest shared data.");
+    return true;
+  } catch (error) {
+    dashboardSharedSyncMeta.lastError = error?.message || "Could not pull cloud state";
+    persistDashboardSharedSyncMeta();
+    if (!silent) alert(`Cloud pull failed: ${dashboardSharedSyncMeta.lastError}`);
+    return false;
+  }
+}
+
+async function pushDashboardSharedState({ silent = false, source = "manual" } = {}) {
+  try {
+    const bundle = buildDashboardStorageBundle();
+    const response = await fetch(DASHBOARD_SHARED_SYNC_ENDPOINT, {
+      method: "POST",
+      body: JSON.stringify({
+        scope: DASHBOARD_SHARED_SYNC_SCOPE,
+        source,
+        updatedAt: new Date().toISOString(),
+        writeToken: DASHBOARD_SHARED_SYNC_WRITE_TOKEN,
+        payload: bundle
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `HTTP ${response.status}`);
+    }
+    const persistedAt = String(payload?.record?.updatedAt || new Date().toISOString());
+    dashboardSharedSyncMeta.lastPushedAt = persistedAt;
+    dashboardSharedSyncMeta.lastAppliedAt = persistedAt;
+    dashboardSharedSyncMeta.lastError = "";
+    persistDashboardSharedSyncMeta();
+    if (!silent) alert("✅ Saved to shared cloud data for all live users.");
+    return true;
+  } catch (error) {
+    dashboardSharedSyncMeta.lastError = error?.message || "Could not push cloud state";
+    persistDashboardSharedSyncMeta();
+    if (!silent) alert(`Cloud save failed: ${dashboardSharedSyncMeta.lastError}`);
+    return false;
+  }
+}
+
+function queueDashboardSharedSyncPush(source = "autosave") {
+  if (dashboardSharedSyncPushTimer) clearTimeout(dashboardSharedSyncPushTimer);
+  dashboardSharedSyncPushTimer = setTimeout(() => {
+    pushDashboardSharedState({ silent: true, source });
+  }, 1200);
+}
+
+async function verifyDashboardSharedSyncConnection() {
+  try {
+    const response = await fetch(DASHBOARD_SHARED_SYNC_HEALTH_ENDPOINT, { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    dashboardSharedSyncMeta.lastError = "";
+    persistDashboardSharedSyncMeta();
+    alert("✅ Shared cloud sync API is reachable.");
+    return true;
+  } catch (error) {
+    dashboardSharedSyncMeta.lastError = error?.message || "Health check failed";
+    persistDashboardSharedSyncMeta();
+    alert(`Cloud sync API check failed: ${dashboardSharedSyncMeta.lastError}`);
+    return false;
+  }
 }
 
 function buildDashboardStorageBundle() {
-  saveCommunityData(true);
+  suppressDashboardSharedSyncPush = true;
+  try {
+    saveCommunityData(true);
+  } finally {
+    suppressDashboardSharedSyncPush = false;
+  }
   persistOperationsWorkspaceContext();
   persistOpsPropertyCatalog();
   const storage = {};
@@ -6006,11 +6154,15 @@ function renderDashboardDataMigrationPanel() {
         <div style="font-size:0.68rem;color:var(--muted)">Use this to align Playground and live browser data for both ATLAS apps. In Playground, click <strong>Copy Bundle</strong>. On live, click <strong>Import Bundle</strong>.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="verifyDashboardSharedSyncConnection()">🔌 Check Cloud</button>
+        <button class="btn btn-blue btn-sm" onclick="pushDashboardSharedState({ silent:false, source:'manual_push' })">☁ Save To Cloud</button>
+        <button class="btn btn-gray btn-sm" onclick="pullDashboardSharedState({ silent:false, applyRemoteIfNewer:true })">☁ Pull From Cloud</button>
         <button class="btn btn-gray btn-sm" onclick="copyDashboardStorageBundleToClipboard()">📋 Copy Bundle</button>
         <button class="btn btn-blue btn-sm" onclick="importDashboardStorageBundleFromClipboard()">⬇ Import Bundle</button>
       </div>
     </div>
     <div style="font-size:0.66rem;color:var(--muted)">Bundle includes dashboard saves, workspace context, reporting baseline, property catalog, nav state, and Performance Platform browser state.</div>
+    <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">${escapeHtml(getDashboardSharedSyncStatusLine())}</div>
   </div>`;
 }
 
@@ -17472,6 +17624,9 @@ loadPropertyData(getProp().name);
 renderPropGrid();
 renderTab();
 persistOperationsWorkspaceContext();
+setTimeout(() => {
+  pullDashboardSharedState({ silent: true, applyRemoteIfNewer: true });
+}, 320);
 </script>
 </body>
 </html>

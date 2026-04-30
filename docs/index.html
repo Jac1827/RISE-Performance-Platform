@@ -300,6 +300,11 @@ const DASHBOARD_STORAGE_MIGRATION_KEYS = [
   'rise_ops_property_catalog_v1',
   'atlas_rise_side_nav_collapsed_v1'
 ];
+const PERFORMANCE_SHARED_SYNC_SCOPE = 'atlas_performance_v1';
+const PERFORMANCE_SHARED_SYNC_ENDPOINT = 'https://api.appdeploy.ai/app/582d88ce519f411cab/api/state';
+const PERFORMANCE_SHARED_SYNC_HEALTH_ENDPOINT = 'https://api.appdeploy.ai/app/582d88ce519f411cab/api/health';
+const PERFORMANCE_SHARED_SYNC_WRITE_TOKEN = 'atlas-rise-shared-sync-2026';
+const PERFORMANCE_SHARED_SYNC_META_KEY = 'atlas_performance_shared_sync_meta_v1';
 const COMPANY_ROSTER_ASSET = './company-active-employee-roster.xlsx';
 const COMPANY_ROSTER_VERSION = '2026-03-31';
 const HR_ALERT_EMAIL = 'hr@risere.com';
@@ -851,10 +856,147 @@ function saveState(){
     rosterVersion: STATE.rosterVersion,
     currentView: STATE.currentView
   }));
+  if(!suppressPerformanceSharedSyncPush){
+    queuePerformanceSharedSyncPush('save_state');
+  }
+}
+
+function loadPerformanceSharedSyncMeta(){
+  try{
+    const raw = localStorage.getItem(PERFORMANCE_SHARED_SYNC_META_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      lastPulledAt: String(parsed?.lastPulledAt || ''),
+      lastPushedAt: String(parsed?.lastPushedAt || ''),
+      lastAppliedAt: String(parsed?.lastAppliedAt || ''),
+      lastError: String(parsed?.lastError || '')
+    };
+  }catch(err){
+    return { lastPulledAt:'', lastPushedAt:'', lastAppliedAt:'', lastError:'' };
+  }
+}
+
+let performanceSharedSyncMeta = loadPerformanceSharedSyncMeta();
+let performanceSharedSyncPushTimer = null;
+let suppressPerformanceSharedSyncPush = false;
+
+function persistPerformanceSharedSyncMeta(){
+  try{
+    localStorage.setItem(PERFORMANCE_SHARED_SYNC_META_KEY, JSON.stringify(performanceSharedSyncMeta));
+  }catch(err){}
+}
+
+function getPerformanceSharedSyncStatusLine(){
+  const latest = [performanceSharedSyncMeta.lastPulledAt, performanceSharedSyncMeta.lastPushedAt]
+    .filter(Boolean)
+    .map(iso => Date.parse(iso))
+    .filter(ts => Number.isFinite(ts))
+    .sort((a,b) => b - a)[0];
+  const base = latest ? `Last cloud sync ${new Date(latest).toLocaleString()}` : 'No cloud sync yet';
+  return performanceSharedSyncMeta.lastError ? `${base} · Last issue: ${performanceSharedSyncMeta.lastError}` : base;
+}
+
+function queuePerformanceSharedSyncPush(source = 'autosave'){
+  if(performanceSharedSyncPushTimer) clearTimeout(performanceSharedSyncPushTimer);
+  performanceSharedSyncPushTimer = setTimeout(() => {
+    pushPerformanceSharedState({ silent:true, source });
+  }, 1200);
+}
+
+async function verifyPerformanceSharedSyncConnection(){
+  try{
+    const response = await fetch(PERFORMANCE_SHARED_SYNC_HEALTH_ENDPOINT, { method:'GET' });
+    if(!response.ok) throw new Error(`HTTP ${response.status}`);
+    performanceSharedSyncMeta.lastError = '';
+    persistPerformanceSharedSyncMeta();
+    alert('Shared cloud sync API is reachable.');
+    return true;
+  }catch(error){
+    performanceSharedSyncMeta.lastError = error?.message || 'Health check failed';
+    persistPerformanceSharedSyncMeta();
+    alert(`Cloud sync API check failed: ${performanceSharedSyncMeta.lastError}`);
+    return false;
+  }
+}
+
+async function pullPerformanceSharedState({ silent = false, applyRemoteIfNewer = true } = {}){
+  try{
+    const response = await fetch(`${PERFORMANCE_SHARED_SYNC_ENDPOINT}?scope=${encodeURIComponent(PERFORMANCE_SHARED_SYNC_SCOPE)}`, { method:'GET' });
+    if(!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const record = payload?.record || null;
+    performanceSharedSyncMeta.lastPulledAt = new Date().toISOString();
+    performanceSharedSyncMeta.lastError = '';
+    persistPerformanceSharedSyncMeta();
+    if(!record || !record.payload?.keys){
+      if(!silent) alert('Cloud sync is connected, but no shared dataset is available yet.');
+      return false;
+    }
+    const incomingUpdatedAt = String(record.updatedAt || '');
+    const incomingTs = Date.parse(incomingUpdatedAt) || 0;
+    const appliedTs = Date.parse(performanceSharedSyncMeta.lastAppliedAt || '') || 0;
+    if(applyRemoteIfNewer && incomingTs > appliedTs){
+      Object.entries(record.payload.keys).forEach(([key, rawValue]) => {
+        try{
+          localStorage.setItem(String(key), typeof rawValue === 'string' ? rawValue : JSON.stringify(rawValue));
+        }catch(err){}
+      });
+      performanceSharedSyncMeta.lastAppliedAt = incomingUpdatedAt || new Date().toISOString();
+      performanceSharedSyncMeta.lastError = '';
+      persistPerformanceSharedSyncMeta();
+      if(!silent) alert('Pulled the latest shared cloud data. Reloading now.');
+      window.location.reload();
+      return true;
+    }
+    if(!silent) alert('Cloud sync check complete. This browser already has the latest shared data.');
+    return true;
+  }catch(error){
+    performanceSharedSyncMeta.lastError = error?.message || 'Could not pull cloud state';
+    persistPerformanceSharedSyncMeta();
+    if(!silent) alert(`Cloud pull failed: ${performanceSharedSyncMeta.lastError}`);
+    return false;
+  }
+}
+
+async function pushPerformanceSharedState({ silent = false, source = 'manual' } = {}){
+  try{
+    const bundle = buildPerformancePlatformStorageBundle();
+    const response = await fetch(PERFORMANCE_SHARED_SYNC_ENDPOINT, {
+      method:'POST',
+      body: JSON.stringify({
+        scope: PERFORMANCE_SHARED_SYNC_SCOPE,
+        source,
+        updatedAt: new Date().toISOString(),
+        writeToken: PERFORMANCE_SHARED_SYNC_WRITE_TOKEN,
+        payload: bundle
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if(!response.ok || !payload?.ok){
+      throw new Error(payload?.error || `HTTP ${response.status}`);
+    }
+    const persistedAt = String(payload?.record?.updatedAt || new Date().toISOString());
+    performanceSharedSyncMeta.lastPushedAt = persistedAt;
+    performanceSharedSyncMeta.lastAppliedAt = persistedAt;
+    performanceSharedSyncMeta.lastError = '';
+    persistPerformanceSharedSyncMeta();
+    if(!silent) alert('Saved to shared cloud data for all live users.');
+    return true;
+  }catch(error){
+    performanceSharedSyncMeta.lastError = error?.message || 'Could not push cloud state';
+    persistPerformanceSharedSyncMeta();
+    if(!silent) alert(`Cloud save failed: ${performanceSharedSyncMeta.lastError}`);
+    return false;
+  }
 }
 
 function buildPerformancePlatformStorageBundle(){
-  saveState();
+  suppressPerformanceSharedSyncPush = true;
+  try{
+    saveState();
+  }finally{
+    suppressPerformanceSharedSyncPush = false;
+  }
   const storage = {};
   try{
     const platformRaw = localStorage.getItem(STORAGE_KEY);
@@ -941,9 +1083,13 @@ function openPlatformDataTransferModal(){
       <h3>Browser Data Migration</h3>
       <div class="sub">Use this to transfer Playground data into live so the ATLAS dashboard and the Performance Platform stay aligned in this browser.</div>
       <div class="stack">
+        <button class="btn btn-soft" onclick="verifyPerformanceSharedSyncConnection()">Check Cloud</button>
+        <button class="btn btn-primary" onclick="pushPerformanceSharedState({ silent:false, source:'manual_push' })">Save To Cloud</button>
+        <button class="btn btn-soft" onclick="pullPerformanceSharedState({ silent:false, applyRemoteIfNewer:true })">Pull From Cloud</button>
         <button class="btn btn-soft" onclick="copyPerformancePlatformBundleToClipboard()">Copy Bundle</button>
         <button class="btn btn-primary" onclick="importPerformancePlatformBundleFromClipboard()">Import Bundle</button>
       </div>
+      <div class="footer-note">${escapeHtml(getPerformanceSharedSyncStatusLine())}</div>
       <div class="footer-note">Step 1: open Playground and copy the bundle. Step 2: open live and import the bundle.</div>
     </div>
   `);
@@ -9117,6 +9263,9 @@ function resetAllData(){
 
 render();
 bootstrapCompanyRoster();
+setTimeout(() => {
+  pullPerformanceSharedState({ silent:true, applyRemoteIfNewer:true });
+}, 320);
 </script>
 </body>
 </html>
