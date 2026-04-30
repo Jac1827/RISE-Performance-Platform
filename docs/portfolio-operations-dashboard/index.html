@@ -871,6 +871,10 @@ let csvLog = [];
 let csvError = "";
 let importMonthOverride = currentMonth;
 let importRoutingMode = "file_first";
+let monthlyTemplateImportTarget = {
+  month: currentMonth,
+  year: new Date().getFullYear()
+};
 let extractedDashboardRows = [];
 let extractedSourceLabel = "";
 let renewalImportLog = [];
@@ -6446,8 +6450,36 @@ function renderPortfolioScopedImportTab() {
   const marketSurveyLogHTML = marketSurveyImportLog.length > 0
     ? `<div class="alert-green" style="margin-top:12px">${marketSurveyImportLog.map((line, idx) => `<div style="${idx===0?"color:#3fb950;font-weight:600":"color:var(--muted)"}">${escapeHtml(line)}</div>`).join("")}</div>`
     : "";
+  const monthlyTemplateBackfillHTML = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <div class="card-title" style="margin-bottom:6px">Ronaldo Monthly Backfill</div>
+        <div style="font-size:0.68rem;color:var(--muted)">Upload the completed <span class="mono">ATLAS_Advanced_Monthly_Upload_Template.xlsx</span> workbook here. It writes the selected month into every saved community record so Overview, Traffic, Renewals, Reputation, and DLR rollups stay aligned. Supporting box-score CSV/PDF files can be attached in the same drop as validation references.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+        <div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Target month</div>
+          <select onchange="updateMonthlyTemplateImportTargetField('month', this.value)">
+            ${MONTHS.map((m,i) => `<option value="${i}" ${i===getMonthlyTemplateImportMonthIndex()?"selected":""}>${m}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Target year</div>
+          <input type="number" min="2020" max="2099" value="${getMonthlyTemplateImportYear()}" onchange="updateMonthlyTemplateImportTargetField('year', this.value)" style="width:110px">
+        </div>
+      </div>
+    </div>
+    <label class="csv-dropzone" style="padding:20px;cursor:pointer">
+      <div class="csv-drop-icon">⬆</div>
+      <div style="font-size:0.82rem;color:#4493f8;font-weight:600">Click to upload the monthly template and optional box-score references</div>
+      <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Supports <span class="mono">.xlsx</span>, <span class="mono">.xlsm</span>, <span class="mono">.xls</span>, <span class="mono">.csv</span>, and <span class="mono">.pdf</span>. The workbook is applied to the target month; box-score files are validated as supporting references.</div>
+      <input type="file" accept=".xlsx,.xls,.xlsm,.csv,.pdf" id="ronaldo-monthly-upload-input" multiple onchange="processRonaldoMonthlyBackfillFiles(this.files); this.value = ''"/>
+    </label>
+    <div style="font-size:0.66rem;color:var(--muted);margin-top:8px">Use this when Ronaldo fills out the template and you want the import to populate every relevant community month record in one pass.</div>
+  </div>`;
   const bodyHtml = `<div class="tbl-wrap">
     ${renderDashboardDataMigrationPanel()}
+    ${monthlyTemplateBackfillHTML}
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
@@ -17330,6 +17362,85 @@ function updateHistoricalImportTargetField(field, value) {
   if (!Object.prototype.hasOwnProperty.call(defaultHistoricalImportTarget(), field)) return;
   historicalImportTarget = normalizeHistoricalImportTarget({ ...historicalImportTarget, [field]: value });
   renderTab();
+}
+
+function normalizeMonthlyTemplateImportTarget(input = {}) {
+  const month = parseMonthIndexValue(input.month) ?? Number(input.month) ?? currentMonth;
+  const year = Number(input.year);
+  return {
+    month: clampNumber(month, 0, 11),
+    year: Number.isFinite(year) && year > 2000 ? Math.floor(year) : new Date().getFullYear()
+  };
+}
+
+function updateMonthlyTemplateImportTargetField(field, value) {
+  if (!Object.prototype.hasOwnProperty.call(monthlyTemplateImportTarget, field)) return;
+  monthlyTemplateImportTarget = normalizeMonthlyTemplateImportTarget({ ...monthlyTemplateImportTarget, [field]: value });
+  renderTab();
+}
+
+function getMonthlyTemplateImportMonthIndex() {
+  return normalizeMonthlyTemplateImportTarget(monthlyTemplateImportTarget).month;
+}
+
+function getMonthlyTemplateImportYear() {
+  return normalizeMonthlyTemplateImportTarget(monthlyTemplateImportTarget).year;
+}
+
+async function processRonaldoMonthlyReferenceFiles(files) {
+  const accepted = Array.from(files || []);
+  if (accepted.length === 0) return [];
+  const notes = [`📎 Received ${accepted.length} supporting box-score file${accepted.length === 1 ? "" : "s"} for validation.`];
+  for (const file of accepted) {
+    const lowerName = String(file?.name ?? "").toLowerCase();
+    if (!(lowerName.endsWith(".csv") || lowerName.endsWith(".pdf"))) {
+      notes.push(`⚠️ ${file.name} skipped: use CSV or PDF for reference box scores.`);
+      continue;
+    }
+    try {
+      const snapshot = await parseDailyBoxScoreFile(file);
+      if (snapshot && hasDlrBoxScoreSnapshot(snapshot)) {
+        notes.push(`✅ ${file.name} parsed as a daily box score reference${snapshot.reportDateLabel ? ` · ${snapshot.reportDateLabel}` : ""}.`);
+      } else {
+        notes.push(`⚠️ ${file.name} did not surface a full daily box score snapshot.`);
+      }
+    } catch (error) {
+      notes.push(`⚠️ ${file.name} could not be read as a reference box score: ${error?.message || error}`);
+    }
+  }
+  return notes;
+}
+
+async function processRonaldoMonthlyBackfillFiles(files) {
+  const accepted = Array.from(files || []);
+  if (accepted.length === 0) return;
+  const targetMonthIdx = getMonthlyTemplateImportMonthIndex();
+  const targetYear = getMonthlyTemplateImportYear();
+  const workbookFiles = accepted.filter(file => {
+    const lowerName = String(file?.name ?? "").toLowerCase();
+    return lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm");
+  });
+  const referenceFiles = accepted.filter(file => {
+    const lowerName = String(file?.name ?? "").toLowerCase();
+    return lowerName.endsWith(".csv") || lowerName.endsWith(".pdf");
+  });
+  if (workbookFiles.length === 0 && referenceFiles.length === 0) {
+    csvError = "Upload the completed ATLAS monthly workbook, or add box-score CSV/PDF reference files.";
+    renderTab();
+    return;
+  }
+  csvError = "";
+  csvLog = [`📦 Ronaldo monthly backfill target: ${MONTHS[targetMonthIdx]} ${targetYear}`];
+  for (const file of workbookFiles) {
+    await handleAtlasAdvancedWorkbook(file, { forcedMonthIdx: targetMonthIdx, forcedYear: targetYear });
+  }
+  if (referenceFiles.length > 0) {
+    const referenceNotes = await processRonaldoMonthlyReferenceFiles(referenceFiles);
+    csvLog = [...referenceNotes, ...csvLog];
+  }
+  if (workbookFiles.length === 0 || referenceFiles.length > 0) {
+    renderTab();
+  }
 }
 
 async function processHistoricalImportFiles(files) {
