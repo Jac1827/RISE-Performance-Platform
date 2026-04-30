@@ -2139,7 +2139,8 @@ function normalizeOpsGlobalData(data) {
     salarySecurity: normalizeSalarySecurity(input.salarySecurity),
     monthlyPresentationCommunities: normalizeMonthlyPresentationCommunities(input.monthlyPresentationCommunities),
     weeklyExecutiveEmail: normalizeWeeklyExecutiveEmailSettings(input.weeklyExecutiveEmail),
-    windowshadeState: normalizeWindowshadeState(input.windowshadeState)
+    windowshadeState: normalizeWindowshadeState(input.windowshadeState),
+    monthlyTemplateImportTarget: normalizeMonthlyTemplateImportTarget(input.monthlyTemplateImportTarget)
   };
 }
 
@@ -2153,7 +2154,8 @@ function getLegacyOpsGlobalSeed() {
     regionalAssignments: legacy.regionalAssignments,
     salarySecurity: legacy.salarySecurity,
     weeklyExecutiveEmail: legacy.weeklyExecutiveEmail,
-    windowshadeState: legacy.windowshadeState
+    windowshadeState: legacy.windowshadeState,
+    monthlyTemplateImportTarget: legacy.monthlyTemplateImportTarget
   } : {};
 }
 
@@ -2167,6 +2169,7 @@ function applyOpsGlobalData(data) {
   monthlyPresentationCommunities = normalized.monthlyPresentationCommunities;
   weeklyExecutiveEmail = normalized.weeklyExecutiveEmail;
   windowshadeState = normalized.windowshadeState;
+  monthlyTemplateImportTarget = normalized.monthlyTemplateImportTarget;
   if (!salarySecurity.enabled) salaryUnlocked = false;
   opsGlobalData = normalized;
 }
@@ -2209,7 +2212,8 @@ function persistOpsGlobalData() {
     salarySecurity,
     monthlyPresentationCommunities,
     weeklyExecutiveEmail,
-    windowshadeState
+    windowshadeState,
+    monthlyTemplateImportTarget
   });
   return persistJsonToLocalStorage(OPS_GLOBAL_STORAGE_KEY, opsGlobalData, "Bonus and presentation settings");
 }
@@ -17482,6 +17486,7 @@ function normalizeMonthlyTemplateImportTarget(input = {}) {
 function updateMonthlyTemplateImportTargetField(field, value) {
   if (!Object.prototype.hasOwnProperty.call(monthlyTemplateImportTarget, field)) return;
   monthlyTemplateImportTarget = normalizeMonthlyTemplateImportTarget({ ...monthlyTemplateImportTarget, [field]: value });
+  persistOpsGlobalData();
   renderTab();
 }
 
@@ -17777,6 +17782,17 @@ async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
   for (const file of accepted) {
     const lowerName = String(file?.name ?? "").toLowerCase();
     try {
+      if (lowerName.endsWith("monthly_upload.csv")) {
+        await handleCSVFile(file, { forcedMonthIdx: forcedTarget.monthIdx, forcedYear: forcedTarget.year });
+        if (extractedDashboardRows.length > 0) {
+          applyExtractedDashboardRows({ forcedMonthIdx: forcedTarget.monthIdx, forcedYear: forcedTarget.year });
+          rows.push(...extractedDashboardRows.map(row => ({ ...row })));
+          notes.push(`✅ ${file.name} imported as a Monthly_Upload CSV and applied across the selected month.`);
+        } else {
+          notes.push(`⚠️ ${file.name} matched Monthly_Upload but no dashboard rows were extracted.`);
+        }
+        continue;
+      }
       if (lowerName.endsWith(".pdf")) {
         const snapshot = await parseDailyBoxScoreFile(file);
         if (snapshot && hasDlrBoxScoreSnapshot(snapshot)) {
