@@ -1978,7 +1978,7 @@
       ],
       rows,
     );
-    downloadBlob(`rise_property_scorecards_${view.portfolio.asOf}.csv`, csv, "text/csv");
+    downloadBlob(`atlas_property_scorecards_${view.portfolio.asOf}.csv`, csv, "text/csv");
   }
 
   function buildSummaryText(view) {
@@ -2005,7 +2005,7 @@
     if (!view) {
       return;
     }
-    downloadBlob(`rise_board_summary_${view.portfolio.asOf}.txt`, buildSummaryText(view), "text/plain");
+    downloadBlob(`atlas_board_summary_${view.portfolio.asOf}.txt`, buildSummaryText(view), "text/plain");
   }
 
   function buildOwnershipReportHtml(view) {
@@ -2090,7 +2090,7 @@
       return;
     }
     downloadBlob(
-      `rise_ownership_report_${view.portfolio.asOf}.html`,
+      `atlas_ownership_report_${view.portfolio.asOf}.html`,
       buildOwnershipReportHtml(view),
       "text/html",
     );
@@ -2110,8 +2110,8 @@
 
     const pptx = new PptxCtor();
     pptx.layout = "LAYOUT_WIDE";
-    pptx.author = "Codex";
-    pptx.company = "RISE";
+    pptx.author = "ATLAS RISE Ops Dashboard";
+    pptx.company = "ATLAS RISE";
     pptx.subject = `Executive Accountability ${view.portfolio.asOf}`;
     pptx.title = "RISE Executive Accountability Workbench";
 
@@ -2323,7 +2323,7 @@
       });
     });
 
-    await pptx.writeFile({ fileName: `rise_executive_accountability_${view.portfolio.asOf}.pptx` });
+    await pptx.writeFile({ fileName: `atlas_executive_accountability_${view.portfolio.asOf}.pptx` });
   }
 
   function handleDatasetUpload(type, file) {

@@ -28,3 +28,6 @@ This repo carries two separate static HTML experiences:
 - Signed documents are also stored in browser storage, so extremely large files are not recommended.
 - Presentation images and related assets use browser storage, so occasional cleanup is still recommended for very large image libraries.
 - The published site serves `docs/index.html` for the performance platform and `docs/portfolio-operations-dashboard/index.html` for the operations dashboard.
+- Daily Glitch Review smoke check:
+  - `node tools/daily_glitch_review_smoke.mjs`
+  - Verifies `index.html` and `financial-accountability.html` load cleanly, render logos, initialize tabs, and expose import/export controls.
