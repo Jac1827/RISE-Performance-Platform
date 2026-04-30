@@ -1143,6 +1143,32 @@ function normalizeMarketSurveyFloorPlanRates(data) {
   });
 }
 
+function createEmptyCommunityFloorPlanRow() {
+  return {
+    id: makeFloorPlanId(),
+    name: "",
+    sqft: null,
+    budgetRent: null,
+    marketedRent: null,
+    leasedPct: null,
+    marketedRentSource: "",
+    beds: null,
+    baths: null
+  };
+}
+
+function persistCurrentCommunityFloorPlans() {
+  savedData[getProp().name] = getCurrentCommunityRecord();
+  const savedResult = persistSaved();
+  if (savedResult?.ok === false) {
+    alert(`⚠️ ${savedResult.message}`);
+    return false;
+  }
+  renderPropGrid();
+  renderTab();
+  return true;
+}
+
 function defaultCommunityTeamProfiles(teamConfig = defaultPropertyTeamConfig()) {
   const profiles = {};
   PROPERTY_TEAM_ROLE_ORDER.forEach(type => {
@@ -4465,9 +4491,9 @@ function removeInvestorEmailContact(index) {
 function addCommunityFloorPlanRow() {
   communityFloorPlans = [
     ...normalizeCommunityFloorPlans(communityFloorPlans),
-    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null }
+    createEmptyCommunityFloorPlanRow()
   ];
-  renderTab();
+  persistCurrentCommunityFloorPlans();
 }
 
 function updateCommunityFloorPlanField(index, field, value) {
@@ -4490,14 +4516,12 @@ function updateCommunityFloorPlanField(index, field, value) {
     }
   }
   communityFloorPlans = nextPlans;
-  saveCommunityData(true);
-  renderTab();
+  persistCurrentCommunityFloorPlans();
 }
 
 function removeCommunityFloorPlanRow(index) {
   communityFloorPlans = normalizeCommunityFloorPlans(communityFloorPlans).filter((_, idx) => idx !== index);
-  saveCommunityData(true);
-  renderTab();
+  persistCurrentCommunityFloorPlans();
 }
 
 function getPortfolioSetupCommunityName() {
@@ -4537,7 +4561,7 @@ function addPortfolioCommunityFloorPlanRow(propName) {
   const record = getPortfolioSetupCommunityRecord(propName);
   record.communityFloorPlans = [
     ...normalizeCommunityFloorPlans(record.communityFloorPlans),
-    { id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null }
+    createEmptyCommunityFloorPlanRow()
   ];
   persistPortfolioSetupCommunityRecord(propName, record);
 }
@@ -4570,6 +4594,40 @@ function removePortfolioCommunityFloorPlanRow(propName, index) {
   const record = getPortfolioSetupCommunityRecord(propName);
   record.communityFloorPlans = normalizeCommunityFloorPlans(record.communityFloorPlans).filter((_, idx) => idx !== index);
   persistPortfolioSetupCommunityRecord(propName, record);
+}
+
+function importPortfolioCommunityFloorPlansFromSurvey(propName) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  const surveyRates = normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates);
+  if (surveyRates.length === 0) {
+    alert("No APTIQ floor-plan rates were found for this community yet. Upload the survey workbook first, then import the floor plans.");
+    return false;
+  }
+  const existingPlans = normalizeCommunityFloorPlans(record.communityFloorPlans);
+  const existingByName = new Map(existingPlans.map(plan => [normalizeFloorPlanLookupName(plan.name), plan]));
+  const nextPlans = [];
+  surveyRates.forEach(rate => {
+    const existing = existingByName.get(normalizeFloorPlanLookupName(rate.name));
+    nextPlans.push({
+      id: existing?.id || makeFloorPlanId(),
+      name: String(existing?.name || rate.name || "").trim(),
+      sqft: existing?.sqft ?? rate.sqft ?? null,
+      budgetRent: existing?.budgetRent ?? null,
+      marketedRent: existing?.marketedRent ?? rate.marketRent ?? null,
+      leasedPct: existing?.leasedPct ?? null,
+      marketedRentSource: existing?.marketedRentSource || String(rate.sourceSheet || "APTIQ survey").trim(),
+      beds: existing?.beds ?? rate.beds ?? null,
+      baths: existing?.baths ?? rate.baths ?? null
+    });
+    existingByName.delete(normalizeFloorPlanLookupName(rate.name));
+  });
+  existingByName.forEach(plan => {
+    nextPlans.push({ ...plan });
+  });
+  record.communityFloorPlans = normalizeCommunityFloorPlans(nextPlans);
+  persistPortfolioSetupCommunityRecord(propName, record);
+  alert(`✅ Imported ${surveyRates.length} APTIQ floor plan${surveyRates.length === 1 ? "" : "s"} into the budget setup for ${matchPropertyName(propName, { fallbackToCurrent: false }) || propName}.`);
+  return true;
 }
 
 function optimizeCommunityPhotoFile(file) {
@@ -6217,43 +6275,43 @@ function renderPortfolioScopedSetupTab() {
         return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
-            <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'name', this.value)">
+            <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "name", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Beds</div>
-            <input type="number" min="0" step="1" value="${row.beds ?? ""}" placeholder="2" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'beds', this.value)">
+            <input type="number" min="0" step="1" value="${row.beds ?? ""}" placeholder="2" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "beds", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Baths</div>
-            <input type="number" min="0" step="0.5" value="${row.baths ?? ""}" placeholder="2" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'baths', this.value)">
+            <input type="number" min="0" step="0.5" value="${row.baths ?? ""}" placeholder="2" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "baths", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Sqft</div>
-            <input type="number" min="0" step="1" value="${row.sqft ?? ""}" placeholder="1085" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'sqft', this.value)">
+            <input type="number" min="0" step="1" value="${row.sqft ?? ""}" placeholder="1085" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "sqft", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Budget rent</div>
-            <input type="number" min="0" step="1" value="${row.budgetRent ?? ""}" placeholder="1895" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'budgetRent', this.value)">
+            <input type="number" min="0" step="1" value="${row.budgetRent ?? ""}" placeholder="1895" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "budgetRent", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Marketed rent</div>
-            <input type="number" min="0" step="1" value="${displayedMarketedRent ?? ""}" placeholder="From website or market survey" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'marketedRent', this.value)">
+            <input type="number" min="0" step="1" value="${displayedMarketedRent ?? ""}" placeholder="From website or market survey" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "marketedRent", this.value)'>
             <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${displayedMarketedRent != null ? "Editable market rate used in DLR variance" : "Leave blank until website or survey rate is known"}</div>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">% Leased</div>
-            <input type="number" min="0" max="100" step="0.1" value="${row.leasedPct ?? ""}" placeholder="92.5" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'leasedPct', this.value)">
+            <input type="number" min="0" max="100" step="0.1" value="${row.leasedPct ?? ""}" placeholder="92.5" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "leasedPct", this.value)'>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Market rate source</div>
-            <input type="text" value="${escapeHtml(displayedMarketSource)}" placeholder="Website / manual / imported survey" onchange="updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, 'marketedRentSource', this.value)">
+            <input type="text" value="${escapeHtml(displayedMarketSource)}" placeholder="Website / manual / imported survey" onchange='updatePortfolioCommunityFloorPlanField(${JSON.stringify(selectedName)}, ${idx}, "marketedRentSource", this.value)'>
             <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">${escapeHtml(row.marketRate?.sourceSheet || row.marketRate?.name || "Matched by floor plan name if available")}</div>
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Variance</div>
             <div style="height:40px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:${varianceColor};font-weight:700">${row.variance == null ? "—" : formatSignedDisplay(row.variance, 0, "")}</div>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="removePortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)}, ${idx})">Remove</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='removePortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)}, ${idx})'>Remove</button>
         </div>`;
       }).join("")
     : `<div style="font-size:0.72rem;color:var(--muted)">No floor plans saved yet for ${escapeHtml(selectedName)}. Add each plan here so the exported DLR can compare budgeted rent against the current marketed rent by floor plan.</div>`;
@@ -6287,7 +6345,8 @@ function renderPortfolioScopedSetupTab() {
             <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${selectedFloorPlanData.rows.length}</div>
             <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${selectedFloorPlanData.rows.length === 1 ? "" : "s"}</div>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})">＋ Add Floor Plan</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})'>＋ Add Floor Plan</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${normalizeMarketSurveyFloorPlanRates(selectedRecord.marketSurveyData?.floorPlanRates).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
         </div>
       </div>
       <div style="display:grid;gap:0">${selectedFloorPlanRows}</div>
@@ -6914,6 +6973,7 @@ function renderSetupTab() {
               <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
             </div>
             <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
+            <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
           </div>
         </div>
         <div style="display:grid;gap:0">${communityFloorPlanRows}</div>
