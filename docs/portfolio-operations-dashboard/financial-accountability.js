@@ -1,7 +1,9 @@
 (() => {
-  const BUILD_ID = "2026-04-10.2";
+  const BUILD_ID = "2026-05-01.1";
   const STORAGE_KEY = "rise_financial_accountability_page_v1";
-  const COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
+  const COMMUNITY_STORAGE_KEY = "rise_ops_dashboard_data_v1";
+  const LEGACY_COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
+  const COMMUNITY_STORAGE_KEYS = [COMMUNITY_STORAGE_KEY, LEGACY_COMMUNITY_STORAGE_KEY];
   const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
   const OPS_PROPERTY_CATALOG_KEY = "rise_ops_property_catalog_v1";
   const FINANCIAL_HISTORY_STORAGE_KEY = "rise_financial_history_v1";
@@ -336,8 +338,13 @@
 
   function loadDashboardCommunityStore() {
     try {
-      const raw = window.localStorage.getItem(COMMUNITY_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
+      for (const key of COMMUNITY_STORAGE_KEYS) {
+        const raw = window.localStorage.getItem(key);
+        if (raw) {
+          return JSON.parse(raw);
+        }
+      }
+      return {};
     } catch (_error) {
       return {};
     }
@@ -5103,7 +5110,9 @@
     }
 
     try {
-      window.localStorage.setItem(COMMUNITY_STORAGE_KEY, JSON.stringify(store));
+      const serialized = JSON.stringify(store);
+      window.localStorage.setItem(COMMUNITY_STORAGE_KEY, serialized);
+      window.localStorage.setItem(LEGACY_COMMUNITY_STORAGE_KEY, serialized);
     } catch (_error) {}
   }
 
@@ -6577,7 +6586,7 @@
     if (!event) {
       return;
     }
-    if (event.key === COMMUNITY_STORAGE_KEY) {
+    if (COMMUNITY_STORAGE_KEYS.includes(event.key)) {
       syncDashboardDriverDatasets();
       persistState();
       render();

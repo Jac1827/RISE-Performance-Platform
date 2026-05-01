@@ -580,6 +580,9 @@ const WEEKLY_SNAPSHOT_STORAGE_KEY = "rise_weekly_portfolio_snapshot_v1";
 const OPS_GLOBAL_STORAGE_KEY = "rise_ops_global_v1";
 const OPS_WORKSPACE_CONTEXT_KEY = "rise_ops_workspace_context_v1";
 const SIDE_NAV_STORAGE_KEY = "atlas_rise_side_nav_collapsed_v1";
+const COMMUNITY_STORAGE_KEY = "rise_ops_dashboard_data_v1";
+const LEGACY_COMMUNITY_STORAGE_KEY = "rise_leasing_v5";
+const COMMUNITY_STORAGE_READ_KEYS = [COMMUNITY_STORAGE_KEY, LEGACY_COMMUNITY_STORAGE_KEY];
 const WINDOWSHADE_DEFAULTS = {
   recommendations: false,
   setup_foundation: false,
@@ -2588,7 +2591,13 @@ function getCurrentCommunityRecord() {
 
 // ─── Load/Save ────────────────────────────────────────────────────────────────
 function loadSaved() {
-  try { const r = localStorage.getItem("rise_leasing_v5"); return r ? JSON.parse(r) : {}; }
+  try {
+    for (const key of COMMUNITY_STORAGE_READ_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    }
+    return {};
+  }
   catch { return {}; }
 }
 function persistSaved() {
@@ -2600,7 +2609,11 @@ function persistSaved() {
       communityTeamProfiles: serializeCommunityTeamProfiles(normalized.communityTeamProfiles, normalized.propertyTeamConfig)
     }];
   }));
-  return persistJsonToLocalStorage("rise_leasing_v5", serialized, "Community data");
+  const persisted = persistJsonToLocalStorage(COMMUNITY_STORAGE_KEY, serialized, "Community data");
+  try {
+    localStorage.setItem(LEGACY_COMMUNITY_STORAGE_KEY, JSON.stringify(serialized));
+  } catch {}
+  return persisted;
 }
 function buildDailyBackupDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -6011,8 +6024,8 @@ function getWeeklySnapshotPayload() {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    sourceKey: "rise_leasing_v5",
-    sourceLabel: "ATLAS RISE Ops Dashboard",
+    sourceKey: COMMUNITY_STORAGE_KEY,
+    sourceLabel: "RISE Portfolio Operations Dashboard",
     currentProperty: getWorkspaceScopeDisplayName(),
     portfolioData: savedData,
     opsGlobalData
@@ -9390,6 +9403,252 @@ function extractMarketSurveyWorkbookData(workbook, fileName = "") {
   };
 }
 
+async function extractPdfTextFromFile(file, options = {}) {
+  if (!window.pdfjsLib?.getDocument) {
+    throw new Error("PDF parsing support did not load.");
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    if (!options.preserveLines) {
+      pages.push(textContent.items.map(item => item.str).join(" "));
+      continue;
+    }
+    const rowMap = new Map();
+    textContent.items.forEach(item => {
+      const transform = Array.isArray(item.transform) ? item.transform : [];
+      const x = Number(transform[4]) || 0;
+      const y = Math.round(Number(transform[5]) || 0);
+      const str = String(item.str ?? "").trim();
+      if (!str) return;
+      if (!rowMap.has(y)) rowMap.set(y, []);
+      rowMap.get(y).push({ x, str });
+    });
+    const pageLines = [...rowMap.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([, items]) => items.sort((a, b) => a.x - b.x).map(item => item.str).join(" ").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    pages.push(pageLines.join("\n"));
+  }
+  return pages.join("\n");
+}
+
+function normalizeAptiqPdfText(value = "") {
+  return String(value ?? "")
+    .replace(/\u00a0/g, " ")
+    .replace(/(\d),\s+(\d{3})/g, "$1,$2")
+    .replace(/(\d)\.\s+(\d)/g, "$1.$2")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+function parseAptiqToken(token = "") {
+  const raw = String(token ?? "").replace(/\s+/g, "").trim();
+  if (!raw) return null;
+  const isCurrency = raw.includes("$");
+  const isPercent = raw.includes("%");
+  const parsed = Number(raw.replace(/[$,%]/g, ""));
+  if (!Number.isFinite(parsed)) return null;
+  return { raw, value: parsed, isCurrency, isPercent };
+}
+
+function getAptiqMetricTokens(value = "") {
+  const text = normalizeAptiqPdfText(value);
+  const matches = text.match(/[+-]?\$?\d[\d,]*(?:\.\d+)?%?/g) || [];
+  return matches.map(parseAptiqToken).filter(Boolean);
+}
+
+function findAptiqLine(lines = [], matcher, startIdx = 0) {
+  for (let idx = Math.max(0, startIdx); idx < lines.length; idx += 1) {
+    if (matcher.test(lines[idx])) return { line: lines[idx], idx };
+  }
+  return { line: "", idx: -1 };
+}
+
+function findAptiqRow(lines = [], rowLabel, options = {}) {
+  const start = options.startMatcher ? findAptiqLine(lines, options.startMatcher, options.startIdx || 0).idx : (options.startIdx || 0);
+  if (start < 0) return { line: "", idx: -1 };
+  const normalizedLabel = normalizeCommunityLookupName(rowLabel);
+  const labelRegex = new RegExp(`^${escapeRegex(String(rowLabel ?? "").replace(/\s+/g, " ").trim())}\\b`, "i");
+  for (let idx = start + 1; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+    if (options.stopMatcher?.test(line)) break;
+    if (labelRegex.test(line) || normalizeCommunityLookupName(line).startsWith(normalizedLabel)) {
+      return { line, idx };
+    }
+  }
+  return { line: "", idx: -1 };
+}
+
+function stripAptiqRowLabel(line = "", label = "") {
+  return normalizeAptiqPdfText(line).replace(new RegExp(`^${escapeRegex(label)}\\s*`, "i"), "").trim();
+}
+
+function getTokenValue(tokens = [], index, predicate = null) {
+  const filtered = predicate ? tokens.filter(predicate) : tokens;
+  return filtered[index]?.value ?? null;
+}
+
+function parseAptiqCreatedDate(lines = []) {
+  const found = findAptiqLine(lines, /created on:/i);
+  return found.line ? formatWorkbookDateLabel(found.line.replace(/^.*created on:\s*/i, "")) : "";
+}
+
+function parseAptiqCommunityName(lines = [], fileName = "") {
+  const executiveIdx = findAptiqLine(lines, /^EXECUTIVE REPORT$/i).idx;
+  if (executiveIdx > -1) {
+    for (let idx = executiveIdx + 1; idx < Math.min(lines.length, executiveIdx + 5); idx += 1) {
+      const line = lines[idx];
+      if (/market$/i.test(line)) {
+        const matched = matchPropertyName(line.replace(/\s+Market$/i, ""), { fallbackToCurrent: false });
+        if (matched) return matched;
+      }
+    }
+  }
+  const fileGuess = guessCommunityNameFromMarketFileName(fileName).replace(/\s+Market$/i, "");
+  return matchPropertyName(fileGuess, { fallbackToCurrent: false }) || getProp().name;
+}
+
+function parseAptiqPerformanceRow(line = "") {
+  const tokens = getAptiqMetricTokens(line);
+  return {
+    leasedPct: getTokenValue(tokens, 0),
+    exposurePct: getTokenValue(tokens, 2),
+    applicationsLast7: getTokenValue(tokens, 4),
+    applicationsLast30: getTokenValue(tokens, 6),
+    cancellationsLast30Pct: getTokenValue(tokens, 9),
+    leasesLast7: getTokenValue(tokens, 11),
+    leasesLast30: getTokenValue(tokens, 13)
+  };
+}
+
+function parseAptiqConcessionRows(lines = [], subjectCommunity = "") {
+  const start = findAptiqLine(lines, /^Concessions by Property/i).idx;
+  if (start < 0) return { marketConcessions: "", subjectConcession: "" };
+  const rows = [];
+  for (let idx = start + 1; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+    if (/^\* No active concessions/i.test(line) || /^Fees and Deposits/i.test(line)) break;
+    if (/^PROPERTY\s+CONCESSION/i.test(line) || /^RISE AT /i.test(line) || /^Created On:/i.test(line)) continue;
+    const match = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)%\s+(.+)$/);
+    if (!match) continue;
+    const property = matchPropertyName(match[1], { fallbackToCurrent: false }) || match[1].trim();
+    const details = `${match[2]}% ${match[3].trim()}`.replace(/\s+/g, " ");
+    rows.push({ property, details });
+  }
+  const subjectName = matchPropertyName(subjectCommunity, { fallbackToCurrent: false }) || subjectCommunity;
+  return {
+    subjectConcession: rows.find(row => row.property === subjectName)?.details || "",
+    marketConcessions: rows.map(row => `${row.property}: ${row.details}`).slice(0, 6).join("; ")
+  };
+}
+
+function parseAptiqUnitTypeRates(lines = [], communityName = "") {
+  const unitTypes = [
+    { label: "Studios", name: "Studio", beds: 0 },
+    { label: "1 Bedrooms", name: "1 Bedroom", beds: 1 },
+    { label: "2 Bedrooms", name: "2 Bedrooms", beds: 2 },
+    { label: "3 Bedrooms", name: "3 Bedrooms", beds: 3 }
+  ];
+  return unitTypes.map(unit => {
+    const primary = findAptiqRow(lines, communityName, {
+      startMatcher: new RegExp(`^${escapeRegex(unit.label)} by Property\\b`, "i"),
+      stopMatcher: /^Average \/ Total\b/i
+    });
+    if (!primary.line) return null;
+    const dollarTokens = getAptiqMetricTokens(stripAptiqRowLabel(primary.line, communityName)).filter(token => token.isCurrency);
+    const marketRent = dollarTokens[1]?.value ?? dollarTokens[0]?.value ?? null;
+    if (!marketRent) return null;
+    const cont = findAptiqRow(lines, communityName, {
+      startMatcher: new RegExp(`^${escapeRegex(unit.label)} by Property Cont\\.`, "i"),
+      startIdx: primary.idx,
+      stopMatcher: /^Average \/ Total\b/i
+    });
+    const plainTokens = getAptiqMetricTokens(stripAptiqRowLabel(cont.line, communityName)).filter(token => !token.isCurrency && !token.isPercent);
+    const sqft = plainTokens.find(token => token.value >= 300 && token.value <= 3000)?.value ?? null;
+    return {
+      id: makeFloorPlanId(),
+      name: unit.name,
+      marketRent,
+      sqft,
+      beds: unit.beds,
+      baths: null,
+      sourceSheet: "APTIQ PDF"
+    };
+  }).filter(Boolean);
+}
+
+function parseAptiqMarketSurveyPdfText(rawText = "", fileName = "") {
+  const normalizedText = normalizeAptiqPdfText(rawText);
+  if (!/ApartmentIQ|Market Summary|Property-Level Performance|Concessions by Property/i.test(normalizedText)) return null;
+  const lines = normalizedText.split(/\r?\n/).map(normalizeAptiqPdfText).filter(Boolean);
+  const communityName = parseAptiqCommunityName(lines, fileName);
+  const updatedOn = parseAptiqCreatedDate(lines);
+  const subjectInsights = findAptiqRow(lines, communityName, {
+    startMatcher: /^Property-Level Insights/i,
+    stopMatcher: /^Average \/ Total\b/i
+  });
+  const averageInsights = findAptiqRow(lines, "Average / Total", {
+    startMatcher: /^Property-Level Insights/i,
+    stopMatcher: /^Calculated Metrics/i
+  });
+  const subjectInsightDollars = getAptiqMetricTokens(stripAptiqRowLabel(subjectInsights.line, communityName)).filter(token => token.isCurrency);
+  const averageInsightDollars = getAptiqMetricTokens(stripAptiqRowLabel(averageInsights.line, "Average / Total")).filter(token => token.isCurrency);
+  const subjectPerformance = parseAptiqPerformanceRow(stripAptiqRowLabel(findAptiqRow(lines, communityName, {
+    startMatcher: /^Property-Level Performance/i,
+    stopMatcher: /^Average \/ Total\b/i
+  }).line, communityName));
+  const averagePerformance = parseAptiqPerformanceRow(stripAptiqRowLabel(findAptiqRow(lines, "Average / Total", {
+    startMatcher: /^Property-Level Performance/i,
+    stopMatcher: /^\*Limited data/i
+  }).line, "Average / Total"));
+  const concessions = parseAptiqConcessionRows(lines, communityName);
+  const floorPlanRates = parseAptiqUnitTypeRates(lines, communityName);
+  const compSummaryStart = findAptiqLine(lines, /^Property Details Live/i).idx;
+  const compRows = compSummaryStart > -1
+    ? lines.slice(compSummaryStart + 1, compSummaryStart + 12)
+      .filter(line => !/^PROPERTY\s+DISTANCE/i.test(line) && !/^Average \/ Total/i.test(line) && !/^\*/.test(line))
+      .map(line => matchPropertyName(line.replace(/^[A-Z]\s+/, ""), { fallbackToCurrent: false }))
+      .filter(name => name && name !== communityName)
+    : [];
+  const primaryCompSet = [...new Set(compRows)].slice(0, 6).join(", ");
+  const compNarrative = [
+    averageInsightDollars[0]?.value ? `Comp average rent is $${Math.round(averageInsightDollars[0].value).toLocaleString()}` : "",
+    averageInsightDollars[1]?.value ? `comp average NER is $${Math.round(averageInsightDollars[1].value).toLocaleString()}` : "",
+    subjectInsightDollars[0]?.value ? `${communityName} is shown at $${Math.round(subjectInsightDollars[0].value).toLocaleString()} average rent` : "",
+    subjectPerformance.applicationsLast30 ? `${Math.round(subjectPerformance.applicationsLast30)} applications were reported in the last 30 days` : ""
+  ].filter(Boolean).join(". ");
+  return {
+    communityName,
+    updatedOn,
+    primaryCompSet,
+    subjectAskingRent: subjectInsightDollars[0]?.value ?? null,
+    subjectNetEffectiveRent: subjectInsightDollars[1]?.value ?? null,
+    compAverageRent: averageInsightDollars[0]?.value ?? null,
+    compAverageNer: averageInsightDollars[1]?.value ?? null,
+    compAverageLeasedPct: averagePerformance.leasedPct,
+    compAverageExposurePct: averagePerformance.exposurePct,
+    applicationsLast7: subjectPerformance.applicationsLast7,
+    applicationsLast30: subjectPerformance.applicationsLast30,
+    leasesLast7: subjectPerformance.leasesLast7,
+    leasesLast30: subjectPerformance.leasesLast30,
+    cancellationsLast30Pct: subjectPerformance.cancellationsLast30Pct,
+    compAverageLeases30: averagePerformance.leasesLast30,
+    compAverageCancelPct: averagePerformance.cancellationsLast30Pct,
+    marketConcessions: concessions.marketConcessions || concessions.subjectConcession,
+    specialsRecommendation: concessions.subjectConcession,
+    compNarrative,
+    pricingNotes: compNarrative,
+    floorPlanRates,
+    sourceFileName: String(fileName ?? "").trim(),
+    uploadedAt: new Date().toISOString(),
+    sourceKind: "aptiq_market_pdf"
+  };
+}
+
 function hasMarketSurveyData(data) {
   const survey = normalizeMarketSurveyData(data);
   const hasMeaningfulFloorPlanRate = (survey.floorPlanRates || []).some(rate => rate.name || rate.marketRent != null || rate.sqft != null || rate.beds != null || rate.baths != null);
@@ -9493,6 +9752,26 @@ async function handleMarketSurveyWorkbook(file) {
   return applied.matchedName;
 }
 
+async function handleMarketSurveyPdf(file) {
+  const fullText = await extractPdfTextFromFile(file, { preserveLines: true });
+  const parsed = parseAptiqMarketSurveyPdfText(fullText, file.name);
+  if (!parsed || !parsed.communityName) {
+    marketSurveyImportLog.push(`⚠️ ${file.name} did not contain a recognizable APTIQ market survey layout.`);
+    return null;
+  }
+  const applied = applyMarketSurveyDataToProperty(parsed.communityName, {
+    ...parsed,
+    sourceFileName: String(file?.name ?? "").trim(),
+    uploadedAt: new Date().toISOString()
+  });
+  if (!applied) {
+    marketSurveyImportLog.push(`⚠️ ${file.name} mapped to "${parsed.communityName}", but that community does not exist in this dashboard yet.`);
+    return null;
+  }
+  marketSurveyImportLog.push(`✅ ${file.name} → ${applied.matchedName} APTIQ PDF mapped${parsed.updatedOn ? ` · updated ${parsed.updatedOn}` : ""}${parsed.compAverageRent ? ` · comp avg rent $${Math.round(parsed.compAverageRent).toLocaleString()}` : ""}${parsed.floorPlanRates?.length ? ` · ${parsed.floorPlanRates.length} unit-type rate${parsed.floorPlanRates.length === 1 ? "" : "s"} imported` : ""}.`);
+  return applied.matchedName;
+}
+
 function parseInvestorSnapshotText(rawText = "", fileName = "") {
   const text = String(rawText ?? "").replace(/\s+/g, " ").trim();
   if (!text) return null;
@@ -9546,15 +9825,8 @@ async function handleRegionalPricingSnapshotUpload(input) {
     let parsed = null;
     const lowerName = String(file.name || "").toLowerCase();
     if (lowerName.endsWith(".pdf")) {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-      let fullText = "";
-      for (let i = 1; i <= pdf.numPages; i += 1) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        fullText += textContent.items.map(item => item.str).join(" ") + "\n";
-      }
-      parsed = parseInvestorSnapshotText(fullText, file.name);
+      const fullText = await extractPdfTextFromFile(file, { preserveLines: true });
+      parsed = parseAptiqMarketSurveyPdfText(fullText, file.name) || parseInvestorSnapshotText(fullText, file.name);
     } else {
       const appliedCommunity = await handleMarketSurveyWorkbook(file);
       if (input) input.value = "";
@@ -9568,7 +9840,7 @@ async function handleRegionalPricingSnapshotUpload(input) {
       if (input) input.value = "";
       return;
     }
-    const applied = applyMarketSurveyDataToProperty(getProp().name, parsed);
+    const applied = applyMarketSurveyDataToProperty(parsed.sourceKind === "aptiq_market_pdf" ? parsed.communityName : getProp().name, parsed);
     if (applied) {
       persistSaved();
       renderTab();
@@ -9651,8 +9923,11 @@ async function processMarketSurveyFiles(files) {
     if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm")) {
       const matchedName = await handleMarketSurveyWorkbook(file);
       if (matchedName) touchedProps.add(matchedName);
+    } else if (lowerName.endsWith(".pdf")) {
+      const matchedName = await handleMarketSurveyPdf(file);
+      if (matchedName) touchedProps.add(matchedName);
     } else {
-      marketSurveyImportLog.push(`⚠️ ${file.name} is not a supported market survey upload. Use XLSX, XLSM, or XLS.`);
+      marketSurveyImportLog.push(`⚠️ ${file.name} is not a supported market survey upload. Use XLSX, XLSM, XLS, or PDF.`);
     }
   }
   if (touchedProps.size > 0) {
@@ -16903,7 +17178,7 @@ function renderCSVTab() {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div class="card-title" style="margin-bottom:6px">APTIQ Market Survey Upload</div>
-          <div style="font-size:0.68rem;color:var(--muted)">Upload one or more APTIQ market workbooks here. Each file routes to the matching community automatically using the workbook title or file name, then updates that community's pricing worksheet for the presentation deck.</div>
+          <div style="font-size:0.68rem;color:var(--muted)">Upload one or more APTIQ market workbooks or scheduled PDF reports here. Each file routes to the matching community automatically using the report title or file name, then updates that community's pricing worksheet for the presentation deck.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-gray btn-sm" onclick="clearCurrentCommunityMarketSurvey()">Clear Current Community</button>
@@ -16912,9 +17187,9 @@ function renderCSVTab() {
       </div>
       <label class="csv-dropzone" style="padding:22px;cursor:pointer">
         <div class="csv-drop-icon">📈</div>
-        <div style="font-size:0.82rem;color:#4493f8;font-weight:600">Click to upload one or more market survey workbooks</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Supports <span class="mono">.xlsx</span>, <span class="mono">.xlsm</span>, and <span class="mono">.xls</span> files. Multiple communities can be updated in one upload pass.</div>
-        <input type="file" accept=".xlsx,.xls,.xlsm" id="market-survey-input" multiple/>
+        <div style="font-size:0.82rem;color:#4493f8;font-weight:600">Click to upload one or more market survey files</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Supports <span class="mono">.xlsx</span>, <span class="mono">.xlsm</span>, <span class="mono">.xls</span>, and <span class="mono">.pdf</span> files. Multiple communities can be updated in one upload pass.</div>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.pdf,application/pdf" id="market-survey-input" multiple/>
       </label>
       ${marketSurveyImportSourceLabel ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:8px">Latest market survey sync: ${escapeHtml(marketSurveyImportSourceLabel)}</div>` : ""}
       <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">Each uploaded workbook is now stored with its matching community and remains active until you clear it or replace it with a newer upload. A fresh workbook overrides the factual comp survey metrics for that community, while your manual pricing direction, specials recommendation, and Regional notes stay in place until you change or clear them.</div>
