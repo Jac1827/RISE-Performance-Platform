@@ -21519,10 +21519,11 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
           ner: "ner",
           renewal_expirations: "renewal_expirations",
           renewals_signed: "renewals_signed",
-          lead_walk_ins: "walk_in",
-          lead_calls: "phone_calls",
-          lead_emails_online: "emails_online",
-          lead_chat_text_other: "text_chat_other"
+          walk_in: "walk_in",
+          off_site_event: "off_site_event",
+          phone_calls: "phone_calls",
+          emails_online: "emails_online",
+          text_chat_other: "text_chat_other"
         };
         clearMonthlyRecordFields(targetRecord, targetMonthIdx, Object.values(monthlyFieldMap));
         Object.entries(monthlyFieldMap).forEach(([sourceKey, targetKey]) => {

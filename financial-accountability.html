@@ -6,6 +6,7 @@
 <title>RISE Residential Financial Platform</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#f8fafc;color:#1a1a2e;font-size:13px}
@@ -30,6 +31,11 @@ const ENTITIES=[
 ];
 const f$=v=>{if(v==null||isNaN(v))return"\u2014";const n=v<0,a=Math.abs(v);return(n?"(":"")+"$"+a.toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0})+(n?")":"");};
 const fp=v=>v==null||isNaN(v)?"\u2014":(v>=0?"+":"")+v.toFixed(1)+"%";
+const ATLAS_DASHBOARD_HREF="./index.html";
+
+function goBackToAtlas(){
+window.location.href=ATLAS_DASHBOARD_HREF;
+}
 
 function parseCSV(text){
 const p=Papa.parse(text,{dynamicTyping:false,skipEmptyLines:true,delimitersToGuess:[",","\t","|",";"]});
@@ -47,6 +53,23 @@ if(c0&&(/^\d{4}/.test(c0)||parseInt(c0)>=1000)){
 rows.push({gl:c0,name:c1,section:sec,subsection:sub,mAct:num(r[2]),mBud:num(r[3]),mVar:num(r[4]),mVarPct:num(r[5]),yAct:num(r[6]),yBud:num(r[7]),yVar:num(r[8]),yVarPct:num(r[9]),annBud:num(r[10]),comment:String(r[11]||"").trim()});
 }}
 return rows;
+}
+
+function parseWorkbook(file){
+if(typeof XLSX==="undefined")throw new Error("Excel parser is not available on this page.");
+return file.arrayBuffer().then(buffer=>{
+const workbook=XLSX.read(buffer,{type:"array"});
+const sheetName=(workbook.SheetNames||[]).find(name=>{
+const sheet=workbook.Sheets[name];
+if(!sheet)return false;
+const rows=XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:""});
+return Array.isArray(rows)&&rows.some(row=>Array.isArray(row)&&row.some(cell=>String(cell||"").trim()!==""));
+})||(workbook.SheetNames||[])[0];
+if(!sheetName)throw new Error("Workbook has no readable sheets.");
+const rows=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:false,defval:""});
+const csvText=(Array.isArray(rows)?rows:[]).map(row=>(Array.isArray(row)?row:[]).map(cell=>String(cell??""))).map(row=>row.map(cell=>/[,"\n]/.test(cell)?`"${cell.replace(/"/g,'""')}"`:cell).join(",")).join("\n");
+return parseCSV(csvText);
+});
 }
 
 function getSt(a,b,inc){if(!b)return"on";if(inc)return a/b>=1?"on":a/b>=.9?"watch":"under";const r=a/b;return r<=1?"on":r<=1.1?"watch":"over";}
@@ -84,8 +107,11 @@ function statusBadge(s){const m={on:{l:"On Track",c:G,b:"#ecfdf5"},watch:{l:"Wat
 
 function loadFile(file,ent){
 state.loading=true;render();
-file.text().then(text=>{
-const rows=parseCSV(text);
+const lowerName=String(file?.name||"").toLowerCase();
+const loader=(lowerName.endsWith(".xlsx")||lowerName.endsWith(".xls")||lowerName.endsWith(".xlsm"))
+? parseWorkbook(file)
+: file.text().then(text=>parseCSV(text));
+loader.then(rows=>{
 const nameMatch=file.name.match(/(\d{2})[.\-_](\d{2})[.\-_](\d{2,4})/);
 let period=file.name.replace(/\.\w+$/,"");
 if(nameMatch){const m=nameMatch[1],y=nameMatch[3];period=m+"/"+(y.length===2?"20"+y:y);}
@@ -161,9 +187,11 @@ let html='<div style="max-width:1000px;margin:0 auto;padding:16px;">';
 html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;border-bottom:2px solid '+L+';padding-bottom:8px;">';
 html+='<div><h1 style="margin:0;font-size:18px;font-weight:700;color:'+D+'">RISE Residential Financial Platform</h1>';
 html+='<p style="margin:0;font-size:11px;color:#64748b;">'+curEntity.label+(active?' &middot; '+(active.period||active.name):'')+'</p></div>';
+html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">';
+html+='<button id="backToAtlasBtn" style="padding:8px 14px;background:'+D+';color:white;border:none;border-radius:999px;cursor:pointer;font-weight:700;font-size:12px;">Back To ATLAS</button>';
 html+='<select id="entitySel" style="padding:6px 10px;border:2px solid '+D+';border-radius:6px;font-size:12px;font-weight:600;color:'+D+';background:white;min-width:220px;">';
 ENTITIES.forEach(e=>{const cnt=(state.store[e.id]||[]).length;html+='<option value="'+e.id+'"'+(state.entity===e.id?' selected':'')+'>'+e.label+(cnt?' ('+cnt+')':'')+'</option>';});
-html+='</select></div>';
+html+='</select></div></div>';
 
 /* TABS */
 const tabs=[["dash","Dashboard"],["detail","Line Items"],["history","Historical"],["compare","Compare"],["recs","Recommendations"],["report","Investor Report"],["upload","Upload"]];
@@ -409,9 +437,9 @@ ENTITIES.forEach(e=>{h+='<option value="'+e.id+'"'+(ent===e.id?' selected':'')+'
 h+='</select></div>';
 h+='<div id="dropZone" style="border:2px dashed #cbd5e1;border-radius:10px;padding:36px;text-align:center;background:white;cursor:pointer;">';
 h+='<div style="font-size:32px;margin-bottom:8px">&#128202;</div>';
-h+='<div style="font-size:14px;font-weight:600;color:'+D+'">Upload Income Statement / Budget CSV</div>';
-h+='<div style="font-size:12px;color:#64748b;margin-top:4px">Click or drag & drop</div>';
-h+='<input id="fileInput" type="file" accept=".csv,.txt" style="display:none"/>';
+h+='<div style="font-size:14px;font-weight:600;color:'+D+'">Upload Income Statement / Budget CSV or Excel</div>';
+h+='<div style="font-size:12px;color:#64748b;margin-top:4px">Click or drag & drop .csv, .xlsx, .xls, or .xlsm</div>';
+h+='<input id="fileInput" type="file" accept=".csv,.txt,.xlsx,.xls,.xlsm" style="display:none"/>';
 h+='</div></div>';
 return h;
 }
@@ -420,6 +448,8 @@ function bindEvents(summary,enriched){
 document.querySelectorAll(".tabBtn").forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();}));
 const entitySel=document.getElementById("entitySel");
 if(entitySel)entitySel.addEventListener("change",()=>{state.entity=entitySel.value;state.selDs=null;state.cmpA=null;state.cmpB=null;render();});
+const backToAtlasBtn=document.getElementById("backToAtlasBtn");
+if(backToAtlasBtn)backToAtlasBtn.addEventListener("click",goBackToAtlas);
 const dsSel=document.getElementById("dsSel");
 if(dsSel)dsSel.addEventListener("change",()=>{state.selDs=parseInt(dsSel.value);render();});
 const searchInp=document.getElementById("searchInp");
