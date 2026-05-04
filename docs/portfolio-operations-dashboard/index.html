@@ -151,6 +151,10 @@
   .side-nav { position:sticky; top:136px; align-self:start; background:rgba(255,255,255,0.94); border:1px solid var(--border); border-radius:16px; padding:10px; box-shadow:0 12px 28px rgba(15,23,42,0.06); transition:width 0.18s ease,padding 0.18s ease; }
   .side-nav-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 4px 10px; border-bottom:1px solid var(--border2); margin-bottom:8px; }
   .side-nav-title { font-size:0.66rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden; }
+  .side-nav-date { margin:2px 4px 10px; font-size:0.74rem; font-weight:700; color:var(--accent); }
+  .side-nav-context { display:grid; gap:8px; margin:6px 0 10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:rgba(248,250,252,0.96); }
+  .side-nav-context-field { display:grid; gap:5px; }
+  .side-nav-context-field span { font-size:0.64rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
   .side-nav-toggle { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:10px; background:var(--bg2); color:var(--accent); font-family:inherit; font-weight:800; cursor:pointer; flex:0 0 auto; }
   .side-nav-toggle:hover { background:var(--bg3); }
   .side-nav-action { width:100%; display:flex; align-items:center; justify-content:center; gap:8px; margin:8px 0 10px; padding:10px 12px; border:1px solid rgba(137,189,215,0.6); border-radius:12px; background:linear-gradient(135deg,#062f49 0%,#0e4b68 60%,#89bdd7 160%); color:#fff; font-family:inherit; font-size:0.78rem; font-weight:800; cursor:pointer; box-shadow:0 8px 18px rgba(6,47,73,0.18); }
@@ -166,6 +170,8 @@
   body.nav-collapsed .app-shell { grid-template-columns:68px minmax(0,1fr); }
   body.nav-collapsed .side-nav { padding:8px; }
   body.nav-collapsed .side-nav-head { justify-content:center; padding:0 0 8px; }
+  body.nav-collapsed .side-nav-date,
+  body.nav-collapsed .side-nav-context { display:none; }
   body.nav-collapsed .side-nav-action { padding:10px 0; }
   body.nav-collapsed .side-nav-action-label { display:none; }
   body.nav-collapsed .side-nav-title,
@@ -174,6 +180,8 @@
   @media(max-width:760px){
     .app-shell { grid-template-columns:64px minmax(0,1fr); gap:10px; }
     .side-nav { top:10px; padding:8px; }
+    .side-nav-date,
+    .side-nav-context { display:none; }
     .side-nav-action-label { display:none; }
     .side-nav-title,
     .tab-label { display:none; }
@@ -668,6 +676,30 @@
         <div class="side-nav-title">Navigation</div>
         <button type="button" class="side-nav-toggle" id="side-nav-toggle" onclick="return toggleSideNav()" aria-label="Collapse navigation" title="Collapse navigation">‹</button>
       </div>
+      <div class="side-nav-date" id="workspace-current-date">Loading date…</div>
+      <div class="side-nav-context">
+        <label class="side-nav-context-field">
+          <span>Community</span>
+          <select id="workspace-community-select" onchange="onWorkspaceCommunitySelect(this.value)"></select>
+        </label>
+        <label class="side-nav-context-field">
+          <span>Current Month</span>
+          <select data-field="currentMonth" id="workspace-current-month">
+            <option value="0">January</option>
+            <option value="1">February</option>
+            <option value="2">March</option>
+            <option value="3">April</option>
+            <option value="4">May</option>
+            <option value="5">June</option>
+            <option value="6">July</option>
+            <option value="7">August</option>
+            <option value="8">September</option>
+            <option value="9">October</option>
+            <option value="10">November</option>
+            <option value="11">December</option>
+          </select>
+        </label>
+      </div>
       <button type="button" class="side-nav-action" onclick="openFinancialAccountabilityPage()" aria-label="Financials" title="Financials">
         <img class="side-nav-action-icon" src="assets/atlas-icon.png" alt="">
         <span class="side-nav-action-label">Financials</span>
@@ -697,29 +729,6 @@
           <div class="workspace-pill" id="workspace-status-pill">Draft</div>
         </div>
         <div class="workspace-subline" id="workspace-subline">Community, reporting month, and unit-count context stays pinned here so you can swap properties without hunting through the Overview tab.</div>
-      </div>
-      <div class="workspace-controls">
-        <label class="workspace-field workspace-community-field">
-          <span>Community</span>
-          <select id="workspace-community-select" onchange="onWorkspaceCommunitySelect(this.value)"></select>
-        </label>
-        <label class="workspace-field">
-          <span>Current Month</span>
-          <select data-field="currentMonth" id="workspace-current-month">
-            <option value="0">January</option>
-            <option value="1">February</option>
-            <option value="2" selected>March</option>
-            <option value="3">April</option>
-            <option value="4">May</option>
-            <option value="5">June</option>
-            <option value="6">July</option>
-            <option value="7">August</option>
-            <option value="8">September</option>
-            <option value="9">October</option>
-            <option value="10">November</option>
-            <option value="11">December</option>
-          </select>
-        </label>
       </div>
     </div>
     <div class="workspace-footer">
@@ -3830,6 +3839,7 @@ function loadPropertyData(propName) {
 function renderPropGrid() {
   const communitySelect = document.getElementById("workspace-community-select");
   const snapshot = document.getElementById("workspace-community-snapshot");
+  const currentDateLabel = document.getElementById("workspace-current-date");
   if (!workspaceScopeValue) workspaceScopeValue = PORTFOLIO_SCOPE_VALUE;
   const savedCount = PROPERTIES.filter(prop => !!savedData[prop.name]).length;
   const totalCount = PROPERTIES.length;
@@ -3910,6 +3920,14 @@ function renderPropGrid() {
   const workspaceSubline = document.getElementById("workspace-subline");
   const workspaceCount = document.getElementById("workspace-count-summary");
   const workspaceUnitNote = document.getElementById("workspace-unit-note");
+  if (currentDateLabel) {
+    currentDateLabel.textContent = new Date().toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    });
+  }
   if (currentMonthSelect) currentMonthSelect.value = String(currentMonth);
   if (customUnitsInput) {
     customUnitsInput.value = isPortfolioWorkspaceSelected() ? "" : (customUnits || "");
@@ -12456,13 +12474,42 @@ function getPortfolioPriorityToneColor(tone = "watch") {
   })[tone] || "#d29922";
 }
 
-function getPortfolioPriorityLeadTrend(currentLeads, previousLeads) {
+function getDaysInMonthFor(year, monthIdx) {
+  return new Date(year, monthIdx + 1, 0).getDate();
+}
+
+function getCurrentCalendarDayContext(selectedMonth = getSelectedDashboardMonthIndex(), year = new Date().getFullYear()) {
+  const today = new Date();
+  const isCurrentCalendarMonth = today.getFullYear() === year && today.getMonth() === selectedMonth;
+  const daysInMonth = getDaysInMonthFor(year, selectedMonth);
+  const dayOfMonth = isCurrentCalendarMonth ? Math.max(1, Math.min(today.getDate(), daysInMonth)) : daysInMonth;
+  return {
+    isCurrentCalendarMonth,
+    dayOfMonth,
+    daysInMonth
+  };
+}
+
+function getPortfolioPriorityLeadTrend(currentLeads, previousLeads, selectedMonth = getSelectedDashboardMonthIndex(), year = new Date().getFullYear()) {
   const current = Math.max(0, Number(currentLeads) || 0);
   const previous = Math.max(0, Number(previousLeads) || 0);
-  if (previous <= 0 || current >= previous) return null;
-  const delta = previous - current;
+  if (previous <= 0) return null;
+  const paceContext = getCurrentCalendarDayContext(selectedMonth, year);
+  const projected = paceContext.isCurrentCalendarMonth
+    ? Math.round((current / Math.max(paceContext.dayOfMonth, 1)) * paceContext.daysInMonth)
+    : current;
+  if (projected >= previous) return null;
+  const delta = previous - projected;
   const pct = (delta / previous) * 100;
-  return { delta, pct };
+  return {
+    delta,
+    pct,
+    projected,
+    actual: current,
+    dayOfMonth: paceContext.dayOfMonth,
+    daysInMonth: paceContext.daysInMonth,
+    isPaceBased: paceContext.isCurrentCalendarMonth
+  };
 }
 
 function buildPortfolioHomePriorities(details = [], selectedMonth = getSelectedDashboardMonthIndex()) {
@@ -12508,14 +12555,18 @@ function buildPortfolioHomePriorities(details = [], selectedMonth = getSelectedD
     if (previousEntry) {
       const currentLeads = getLeadSourceTotal(currentEntry);
       const previousLeads = getLeadSourceTotal(previousEntry);
-      const leadTrend = getPortfolioPriorityLeadTrend(currentLeads, previousLeads);
+      const leadTrend = getPortfolioPriorityLeadTrend(currentLeads, previousLeads, selectedMonth);
       if (leadTrend && (leadTrend.delta >= 3 || leadTrend.pct >= 10)) {
         priorities.push({
           community: detail.name,
-          title: `New leads decreased ${leadTrend.pct.toFixed(1)}% MoM`,
-          body: `${FULL_MONTHS[selectedMonth]} has ${Math.round(currentLeads)} new lead${Math.round(currentLeads) === 1 ? "" : "s"} versus ${Math.round(previousLeads)} in ${FULL_MONTHS[previousMonthIdx]}. Refresh source mix, resident referrals, and speed-to-lead before tour volume softens.`,
+          title: leadTrend.isPaceBased
+            ? `Lead pace is tracking ${leadTrend.pct.toFixed(1)}% below last month`
+            : `New leads decreased ${leadTrend.pct.toFixed(1)}% vs prior month`,
+          body: leadTrend.isPaceBased
+            ? `${FULL_MONTHS[selectedMonth]} has ${Math.round(leadTrend.actual)} new lead${Math.round(leadTrend.actual) === 1 ? "" : "s"} through day ${leadTrend.dayOfMonth}, which projects to about ${Math.round(leadTrend.projected)} by month-end versus ${Math.round(previousLeads)} closed in ${FULL_MONTHS[previousMonthIdx]}. Refresh source mix, resident referrals, and speed-to-lead before tour volume softens.`
+            : `${FULL_MONTHS[selectedMonth]} closed at ${Math.round(leadTrend.projected)} new lead${Math.round(leadTrend.projected) === 1 ? "" : "s"} versus ${Math.round(previousLeads)} in ${FULL_MONTHS[previousMonthIdx]}. Refresh source mix, resident referrals, and speed-to-lead before tour volume softens.`,
           value: `-${Math.round(leadTrend.delta)}`,
-          valueSub: "leads MoM",
+          valueSub: leadTrend.isPaceBased ? "projected leads gap" : "leads vs prior month",
           tone: leadTrend.pct >= 25 ? "critical" : "warn",
           severity: 70 + Math.min(leadTrend.pct, 30),
           tabIdx: 4,
@@ -21674,6 +21725,8 @@ async function initializeAtlasDashboard() {
   await hydrateDashboardPersistentState();
   hydrateOpsGlobalData();
   queuePersistedPhotoStorageCompaction();
+  currentMonth = DEFAULT_CURRENT_MONTH;
+  workspaceMonthOverride = null;
   applyIncomingWorkspaceNavigation();
   loadPropertyData(getProp().name);
   renderPropGrid();
@@ -21690,6 +21743,8 @@ async function initializeAtlasDashboard() {
 initializeAtlasDashboard().catch((error) => {
   markAtlasPersistenceError(error, "ATLAS could not finish loading browser data.");
   hydrateOpsGlobalData();
+  currentMonth = DEFAULT_CURRENT_MONTH;
+  workspaceMonthOverride = null;
   applyIncomingWorkspaceNavigation();
   loadPropertyData(getProp().name);
   renderPropGrid();
