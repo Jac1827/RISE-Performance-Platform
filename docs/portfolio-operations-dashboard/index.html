@@ -3347,14 +3347,17 @@ function getLeadSourceTotal(monthEntry = {}) {
 function getApplicationDecisionMetrics(monthEntry = {}) {
   const applications = Math.max(0, Number(monthEntry.applications) || 0);
   const approvals = Math.max(0, Number(getApplicationsApprovedCount(monthEntry)) || 0);
+  const hasDenied = Object.prototype.hasOwnProperty.call(monthEntry ?? {}, "denied");
+  const hasCancelled = Object.prototype.hasOwnProperty.call(monthEntry ?? {}, "cancelled");
+  const hasPending = Object.prototype.hasOwnProperty.call(monthEntry ?? {}, "pendingDecision");
   const explicitDenials = Math.max(0, Number(monthEntry.denied) || 0);
   const explicitCancelled = Math.max(0, Number(monthEntry.cancelled) || 0);
   const explicitPending = Math.max(0, Number(monthEntry.pendingDecision) || 0);
-  const denials = Math.min(explicitDenials, Math.max(applications - approvals, 0));
-  const cancelled = Math.min(explicitCancelled, Math.max(applications - approvals - denials, 0));
-  const pendingDecision = explicitPending > 0
-    ? Math.min(explicitPending, Math.max(applications - approvals - denials - cancelled, 0))
-    : Math.max(applications - approvals - denials - cancelled, 0);
+  // Treat approvals as carryover-aware so they can exceed same-month applications
+  // while still preserving explicit denial/cancel/pending counts.
+  const denials = hasDenied ? explicitDenials : Math.max(applications - approvals - explicitCancelled - explicitPending, 0);
+  const cancelled = hasCancelled ? explicitCancelled : Math.max(applications - approvals - denials - explicitPending, 0);
+  const pendingDecision = hasPending ? explicitPending : Math.max(applications - approvals - denials - cancelled, 0);
   const leases = Math.max(0, Number(monthEntry.leasesSignedActual) || 0);
   const approvalPct = applications > 0 ? (approvals / applications) * 100 : 0;
   const denialPct = applications > 0 ? (denials / applications) * 100 : 0;
