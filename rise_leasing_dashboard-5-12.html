@@ -1321,6 +1321,7 @@ function normalizeMarketSurveyFloorPlanRates(data) {
   const rows = Array.isArray(data) ? data : [];
   return rows.map(row => {
     const marketRent = Number(row?.marketRent);
+    const budgetRent = Number(row?.budgetRent);
     const sqft = Number(row?.sqft);
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
@@ -1328,6 +1329,7 @@ function normalizeMarketSurveyFloorPlanRates(data) {
       id: String(row?.id || makeFloorPlanId()),
       name: String(row?.name ?? row?.planName ?? "").trim(),
       marketRent: Number.isFinite(marketRent) && marketRent > 0 ? marketRent : null,
+      budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
@@ -5247,7 +5249,7 @@ function importPortfolioCommunityFloorPlansFromSurvey(propName) {
         id: existing.plan.id || makeFloorPlanId(),
         name: String(existing.plan.name || rate.name || "").trim(),
         sqft: existing.plan.sqft ?? rate.sqft ?? null,
-        budgetRent: existing.plan.budgetRent ?? null,
+        budgetRent: existing.plan.budgetRent ?? rate.budgetRent ?? null,
         marketedRent: existing.plan.marketedRent ?? rate.marketRent ?? null,
         leasedPct: existing.plan.leasedPct ?? null,
         marketedRentSource: existing.plan.marketedRentSource || String(rate.sourceSheet || "APTIQ survey").trim(),
@@ -5260,7 +5262,7 @@ function importPortfolioCommunityFloorPlansFromSurvey(propName) {
       id: makeFloorPlanId(),
       name: String(rate.name || "").trim(),
       sqft: rate.sqft ?? null,
-      budgetRent: null,
+      budgetRent: rate.budgetRent ?? null,
       marketedRent: rate.marketRent ?? null,
       leasedPct: null,
       marketedRentSource: String(rate.sourceSheet || "APTIQ survey").trim(),
@@ -7515,7 +7517,7 @@ function renderSetupTab() {
   const selectedMarketSurveyFloorPlanIdSet = new Set(selectedMarketSurveyFloorPlanIds);
   const marketSurveyFloorPlanRows = marketSurveyFloorPlanData.length
     ? marketSurveyFloorPlanData.map((rate, idx) => `
-        <div style="display:grid;grid-template-columns:28px minmax(170px,1.4fr) repeat(4,minmax(90px,0.75fr)) minmax(130px,1fr) auto;gap:8px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid rgba(15,23,42,0.08)"}">
+        <div style="display:grid;grid-template-columns:28px minmax(170px,1.15fr) repeat(5,minmax(90px,0.72fr)) minmax(130px,1fr) auto;gap:8px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid rgba(15,23,42,0.08)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
             <input type="checkbox" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
@@ -7526,6 +7528,10 @@ function renderSetupTab() {
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Market rent</div>
             <input type="number" min="0" step="1" value="${rate.marketRent ?? ""}" placeholder="1850" onchange="updateMarketSurveyFloorPlanField(${idx},'marketRent',this.value)">
+          </div>
+          <div>
+            <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Budget rent</div>
+            <input type="number" min="0" step="1" value="${rate.budgetRent ?? ""}" placeholder="1895" onchange="updateMarketSurveyFloorPlanField(${idx},'budgetRent',this.value)">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Sqft</div>
@@ -7973,7 +7979,7 @@ function addMarketSurveyFloorPlanRate() {
     ...marketSurveyData,
     floorPlanRates: [
       ...normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates),
-      { id: makeFloorPlanId(), name: "", marketRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" }
+      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" }
     ]
   });
   renderTab();
@@ -7982,13 +7988,13 @@ function addMarketSurveyFloorPlanRate() {
 function updateMarketSurveyFloorPlanField(index, field, value) {
   const nextRates = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).map(entry => ({ ...entry }));
   while (nextRates.length <= index) {
-    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" });
+    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" });
   }
   const target = nextRates[index];
   if (!target) return;
   if (field === "name" || field === "sourceSheet") {
     target[field] = String(value ?? "").trim();
-  } else if (["marketRent", "sqft", "beds", "baths"].includes(field)) {
+  } else if (["marketRent", "budgetRent", "sqft", "beds", "baths"].includes(field)) {
     const numeric = Number(value);
     target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   }
