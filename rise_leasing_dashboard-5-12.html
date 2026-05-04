@@ -7535,13 +7535,14 @@ function renderSetupTab() {
       </div>`
     : "";
   const marketSurveyFloorPlanData = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates);
-  const selectedMarketSurveyFloorPlanIds = getFloorPlanSelectionIds("survey", selectedName);
+  const currentCommunityName = getProp().name;
+  const selectedMarketSurveyFloorPlanIds = getFloorPlanSelectionIds("survey", currentCommunityName);
   const selectedMarketSurveyFloorPlanIdSet = new Set(selectedMarketSurveyFloorPlanIds);
   const marketSurveyFloorPlanRows = marketSurveyFloorPlanData.length
     ? marketSurveyFloorPlanData.map((rate, idx) => `
         <div style="display:grid;grid-template-columns:28px minmax(170px,1.4fr) repeat(4,minmax(90px,0.75fr)) minmax(130px,1fr) auto;gap:8px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid rgba(15,23,42,0.08)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(selectedName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Plan name</div>
@@ -7708,11 +7709,11 @@ function renderSetupTab() {
             <div style="font-size:1.15rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${marketSurveyFloorPlanData.length}</div>
             <div style="font-size:0.64rem;color:var(--muted)">survey floor plans</div>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(selectedName)}, ${JSON.stringify(marketSurveyFloorPlanData.map(rate => rate.id))})">Select All</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(selectedName)})">Clear</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(selectedName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(marketSurveyFloorPlanData.map(rate => rate.id))})">Select All</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})">Clear</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="addMarketSurveyFloorPlanRate()">＋ Add Marketed Rate</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${marketSurveyFloorPlanData.length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(currentCommunityName)})' ${marketSurveyFloorPlanData.length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
       </div>
       <div style="display:grid;gap:0">${marketSurveyFloorPlanRows}</div>
