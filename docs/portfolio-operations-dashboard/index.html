@@ -68,12 +68,14 @@
   .btn-gray:hover { background: var(--bg3); }
   .btn-sm { font-size: 0.72rem; padding: 5px 10px; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .save-data-button { position:fixed; top:18px; right:20px; z-index:220; gap:9px; padding:8px 14px 8px 9px; border:1px solid rgba(137,189,215,0.62); border-radius:999px; background:linear-gradient(135deg,#062f49 0%,#0e4b68 58%,#89bdd7 150%); color:#fff; box-shadow:0 12px 28px rgba(6,47,73,0.24); }
+  .save-data-button { gap:9px; padding:8px 14px 8px 9px; border:1px solid rgba(137,189,215,0.62); border-radius:999px; background:linear-gradient(135deg,#062f49 0%,#0e4b68 58%,#89bdd7 150%); color:#fff; box-shadow:0 12px 28px rgba(6,47,73,0.24); }
   .save-data-button:hover { background:linear-gradient(135deg,#05283f 0%,#0b415b 58%,#7fb4d0 150%); transform:translateY(-1px); }
   .save-data-icon { width:26px; height:26px; border-radius:8px; object-fit:cover; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.25); }
   .save-data-button span { line-height:1; }
+  .workspace-card { position:relative; }
+  .workspace-save-button { position:absolute; top:14px; right:14px; z-index:220; }
   @media(max-width:620px){
-    .save-data-button { top:14px; right:14px; padding:7px 11px 7px 8px; font-size:0.75rem; }
+    .workspace-save-button { top:12px; right:12px; padding:7px 11px 7px 8px; font-size:0.75rem; }
     .save-data-icon { width:24px; height:24px; }
   }
 
@@ -118,10 +120,9 @@
   .app-shell { display:grid; grid-template-columns:236px minmax(0,1fr); gap:14px; align-items:start; }
   .content-shell { min-width:0; }
   .side-nav { position:sticky; top:14px; align-self:start; background:rgba(255,255,255,0.94); border:1px solid var(--border); border-radius:16px; padding:10px; box-shadow:0 12px 28px rgba(15,23,42,0.06); transition:width 0.18s ease,padding 0.18s ease; }
-  .side-nav-brand { display:grid; gap:8px; padding:6px 4px 12px; border-bottom:1px solid var(--border2); margin-bottom:8px; }
-  .side-nav-brand-logo { width:100%; max-width:188px; height:72px; object-fit:contain; justify-self:start; }
-  .side-nav-brand-wordmark { width:100%; max-width:138px; height:26px; object-fit:contain; justify-self:start; }
-  .side-nav-brand-tagline { width:100%; max-width:188px; height:40px; object-fit:contain; justify-self:start; }
+  .side-nav-brand { display:grid; justify-items:center; gap:8px; padding:6px 4px 12px; border-bottom:1px solid var(--border2); margin-bottom:8px; }
+  .side-nav-brand-logo { width:100%; max-width:206px; height:82px; object-fit:contain; justify-self:center; }
+  .side-nav-brand-tagline { width:100%; max-width:206px; height:46px; object-fit:contain; justify-self:center; }
   .side-nav-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:2px 4px 10px; margin-bottom:8px; }
   .side-nav-title { font-size:0.66rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden; }
   .side-nav-date { margin:2px 4px 10px; font-size:0.74rem; font-weight:700; color:var(--accent); }
@@ -638,13 +639,10 @@
 
   <!-- Header -->
   <div class="header" aria-hidden="true"></div>
-  <button class="btn save-data-button" onclick="saveCommunityData()" aria-label="Save Data"><img class="save-data-icon" src="assets/atlas-icon.png" alt=""><span>Save Data</span></button>
-
   <div class="app-shell">
     <aside class="side-nav" aria-label="Dashboard navigation">
       <div class="side-nav-brand">
         <img class="side-nav-brand-logo" src="assets/atlas-rise-logo.png" alt="ATLAS Portfolio Tracker Reports for RISE logo">
-        <img class="side-nav-brand-wordmark" src="assets/rise-wordmark-blue.png" alt="RISE wordmark">
         <img class="side-nav-brand-tagline" src="assets/atlas-rise-tagline.png" alt="Love. Serve. Care. Powering better outcomes together for RISE">
       </div>
       <div class="side-nav-head">
@@ -695,7 +693,8 @@
     <main class="content-shell">
 
   <!-- Property Selector -->
-  <div class="card mb4" id="prop-selector-card">
+  <div class="card mb4 workspace-card" id="prop-selector-card">
+    <button class="btn save-data-button workspace-save-button" onclick="saveCommunityData()" aria-label="Save Data"><img class="save-data-icon" src="assets/atlas-icon.png" alt=""><span>Save Data</span></button>
     <div class="workspace-shell">
       <div class="workspace-copy">
         <div class="card-title">Community Workspace</div>
