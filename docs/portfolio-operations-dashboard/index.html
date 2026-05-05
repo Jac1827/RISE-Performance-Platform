@@ -1284,15 +1284,15 @@ function makeFloorPlanId() {
   return `floorplan_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function makeStableFloorPlanId(prefix, parts = []) {
-  const text = `${prefix}:${parts.map(part => String(part ?? "").trim().toLowerCase()).join("|")}`;
-  let hash = 0;
-  for (let idx = 0; idx < text.length; idx += 1) {
-    hash = ((hash << 5) - hash) + text.charCodeAt(idx);
-    hash |= 0;
+function getOrCreateFloorPlanRowId(row) {
+  if (row && typeof row === "object") {
+    const existingId = String(row.id ?? "").trim();
+    if (existingId) return existingId;
+    const nextId = makeFloorPlanId();
+    row.id = nextId;
+    return nextId;
   }
-  const normalizedHash = Math.abs(hash).toString(36);
-  return `${prefix}_${normalizedHash}`;
+  return makeFloorPlanId();
 }
 
 function defaultCommunityFloorPlans() {
@@ -1316,7 +1316,7 @@ function normalizeCommunityFloorPlans(data) {
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
     return {
-      id: String(row?.id || makeFloorPlanId()),
+      id: getOrCreateFloorPlanRowId(row),
       name: String(row?.name ?? "").trim(),
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
@@ -1338,42 +1338,15 @@ function normalizeMarketSurveyFloorPlanRates(data) {
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
     return {
-      id: String(row?.id || makeStableFloorPlanId("survey", [row?.propertyName ?? row?.property ?? "", row?.name ?? row?.planName ?? "", row?.marketRent ?? "", row?.budgetRent ?? "", row?.sqft ?? "", row?.beds ?? "", row?.baths ?? "", row?.sourceSheet ?? ""])),
+      id: getOrCreateFloorPlanRowId(row),
       name: String(row?.name ?? row?.planName ?? "").trim(),
       marketRent: Number.isFinite(marketRent) && marketRent > 0 ? marketRent : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
-      propertyName: String(row?.propertyName ?? row?.property ?? "").trim(),
       sourceSheet: String(row?.sourceSheet ?? "").trim()
     };
-  });
-}
-
-function getCommunityFloorPlanNameSet(record = {}) {
-  return new Set(
-    normalizeCommunityFloorPlans(record?.communityFloorPlans)
-      .map(plan => normalizeFloorPlanLookupName(plan?.name))
-      .filter(Boolean)
-  );
-}
-
-function filterMarketSurveyFloorPlanRatesForCommunity(rates = [], record = {}, communityName = "") {
-  const normalizedRates = normalizeMarketSurveyFloorPlanRates(rates);
-  if (normalizedRates.length === 0) return [];
-  const allowedNames = getCommunityFloorPlanNameSet(record);
-  const normalizedCommunity = normalizeCommunityLookupName(matchPropertyName(communityName || record?.propertyName || "", { fallbackToCurrent: false }) || communityName || record?.propertyName || "");
-  const hasPropertyNames = normalizedRates.some(rate => normalizeCommunityLookupName(rate.propertyName || ""));
-  return normalizedRates.filter(rate => {
-    const rateName = normalizeFloorPlanLookupName(rate.name);
-    if (!rateName) return false;
-    if (allowedNames.size > 0) return allowedNames.has(rateName);
-    if (hasPropertyNames && normalizedCommunity) {
-      const rateProperty = normalizeCommunityLookupName(matchPropertyName(rate.propertyName, { fallbackToCurrent: false }) || rate.propertyName);
-      return rateProperty === normalizedCommunity;
-    }
-    return true;
   });
 }
 
@@ -2842,10 +2815,9 @@ function getDocumentedMonthlyAbsorption(monthIdx) {
 
 function getMonthsToStabilization() {
   const totalUnits = getTotalUnits();
-  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
-  if (occupancyBaseUnits === 0) return { months: null, targetUnits: 0, avgNetAbsorption: 0, reason: "Enter unit count" };
-  const targetUnits = Math.ceil(occupancyBaseUnits * 0.95);
-  const unitsNeeded = Math.max(targetUnits - getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits), 0);
+  if (totalUnits === 0) return { months: null, targetUnits: 0, avgNetAbsorption: 0, reason: "Enter unit count" };
+  const targetUnits = Math.ceil(totalUnits * 0.95);
+  const unitsNeeded = Math.max(targetUnits - currentOccupied, 0);
   if (unitsNeeded === 0) return { months: 0, targetUnits, avgNetAbsorption: 0, reason: "At or above 95%" };
   const documented = getDocumentedMonthlyAbsorption(currentMonth);
   if (documented.length === 0) return { months: null, targetUnits, avgNetAbsorption: 0, reason: "No documented move-in / move-out history yet" };
@@ -3343,12 +3315,6 @@ function normalizeCorporateLeaseUnits(value, totalUnits = null) {
   return maxUnits == null ? numeric : Math.min(numeric, maxUnits);
 }
 
-function getComparableOccupancyUnits(rawUnits, corporateUnits = 0) {
-  const total = Math.max(0, Number(rawUnits) || 0);
-  const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
-  return Math.max(total - corporate, 0);
-}
-
 function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
   const total = Math.max(0, Number(totalUnits) || 0);
   const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
@@ -3357,8 +3323,7 @@ function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
 
 function getOccupancyPctFromUnits(occupiedUnits, totalUnits, corporateUnits = 0) {
   const baseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  const comparableUnits = getComparableOccupancyUnits(occupiedUnits, corporateUnits);
-  return baseUnits > 0 ? (comparableUnits / baseUnits) * 100 : 0;
+  return baseUnits > 0 ? (Math.max(0, Number(occupiedUnits) || 0) / baseUnits) * 100 : 0;
 }
 
 function currentOccPct() { return getOccupancyPctFromUnits(currentOccupied, getTotalUnits(), corporateLeaseUnits); }
@@ -3372,33 +3337,22 @@ function getApplicationsApprovedCount(monthEntry = {}) {
 }
 
 function getLeadSourceBreakdown(monthEntry = {}) {
-  const readLeadSourceValue = (...keys) => {
-    for (const key of keys) {
-      if (Object.prototype.hasOwnProperty.call(monthEntry ?? {}, key)) {
-        return Math.max(0, Number(monthEntry[key]) || 0);
-      }
-    }
-    return 0;
-  };
   return {
-    walkIn: readLeadSourceValue("walkIn", "walk_in"),
-    offSiteEvent: readLeadSourceValue("offSiteEvent", "off_site_event"),
-    phoneCalls: readLeadSourceValue("phoneCalls", "phone_calls"),
-    emailsOnline: readLeadSourceValue("emailsOnline", "emails_online"),
-    textChatOther: readLeadSourceValue("textChatOther", "text_chat_other")
+    walkIn: Math.max(0, Number(monthEntry.walkIn) || 0),
+    offSiteEvent: Math.max(0, Number(monthEntry.offSiteEvent) || 0),
+    phoneCalls: Math.max(0, Number(monthEntry.phoneCalls) || 0),
+    emailsOnline: Math.max(0, Number(monthEntry.emailsOnline) || 0),
+    textChatOther: Math.max(0, Number(monthEntry.textChatOther) || 0)
   };
 }
 
 function getLeadSourceTotal(monthEntry = {}) {
-  const explicitGuestCards = Math.max(0, Number(monthEntry.guestCards ?? monthEntry.guest_cards) || 0);
+  const explicitGuestCards = Math.max(0, Number(monthEntry.guestCards) || 0);
+  if (explicitGuestCards > 0) return explicitGuestCards;
   const sources = getLeadSourceBreakdown(monthEntry);
   const sourceTotal = Object.values(sources).reduce((sum, value) => sum + value, 0);
-  // Prefer the fuller rollup when Ronaldo source buckets are present so the
-  // monthly guest-card total does not undercount a partial explicit value.
-  if (sourceTotal > 0 || explicitGuestCards > 0) {
-    return Math.max(explicitGuestCards, sourceTotal);
-  }
-  return 0;
+  if (sourceTotal > 0) return sourceTotal;
+  return explicitGuestCards;
 }
 
 function getApplicationDecisionMetrics(monthEntry = {}) {
@@ -3553,23 +3507,22 @@ function getLeasedTrendPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  const currentComparableLeased = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
-  let reverseRunning = currentComparableLeased;
-  series[currentMonth] = (currentComparableLeased / occupancyBaseUnits) * 100;
+  let reverseRunning = currentLeased;
+  series[currentMonth] = (currentLeased / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.leasedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
+      reverseRunning = snapshotUnits;
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
+      reverseRunning = Math.min(reverseRunning, totalUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningLeased = currentComparableLeased;
+  let runningLeased = currentLeased;
   for (let i = currentMonth + 1; i < 12; i++) {
     runningLeased = Math.max(runningLeased - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningLeased = Math.min(runningLeased, occupancyBaseUnits);
+    runningLeased = Math.min(runningLeased, totalUnits);
     series[i] = (runningLeased / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3580,23 +3533,22 @@ function getEndingOccPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  const currentComparableOccupied = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
-  let reverseRunning = currentComparableOccupied;
-  series[currentMonth] = (currentComparableOccupied / occupancyBaseUnits) * 100;
+  let reverseRunning = currentOccupied;
+  series[currentMonth] = (currentOccupied / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.occupiedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
+      reverseRunning = snapshotUnits;
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
+      reverseRunning = Math.min(reverseRunning, totalUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningOcc = currentComparableOccupied;
+  let runningOcc = currentOccupied;
   for (let i = currentMonth + 1; i < 12; i++) {
     runningOcc = Math.max(runningOcc - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningOcc = Math.min(runningOcc, occupancyBaseUnits);
+    runningOcc = Math.min(runningOcc, totalUnits);
     series[i] = (runningOcc / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3611,16 +3563,15 @@ function formatGoalGapLabel(gapUnits, onTrack) {
 
 function getUpcomingOccupancyGoalNeed() {
   const totalUnits = getTotalUnits();
-  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const nextMonth = Math.min(currentMonth + 1, 11);
   const targetPct = (savedBudgetTargets[nextMonth] > 0
     ? Number(savedBudgetTargets[nextMonth]) || 0
     : Number(monthlyData[nextMonth]?.budgetOcc) || 0);
-  const targetUnits = occupancyBaseUnits > 0 && targetPct > 0 ? Math.ceil(occupancyBaseUnits * targetPct / 100) : 0;
+  const targetUnits = totalUnits > 0 && targetPct > 0 ? Math.ceil(totalUnits * targetPct / 100) : 0;
   const moveOutMeta = getEffectiveMoveOutsForMonth(nextMonth);
   const scheduledMoveOuts = moveOutMeta.effective;
   const scheduledMoveIns = Number(monthlyData[nextMonth]?.moveIns) || 0;
-  const projectedOccupied = Math.max(getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits) - scheduledMoveOuts + scheduledMoveIns, 0);
+  const projectedOccupied = Math.max(currentOccupied - scheduledMoveOuts + scheduledMoveIns, 0);
   const unitsNeeded = targetUnits > 0 ? Math.max(targetUnits - projectedOccupied, 0) : 0;
   return {
     nextMonth,
@@ -3683,8 +3634,8 @@ function getAllCurves() {
 function computeScheduleFromContext(ctx) {
   const totalUnits = Number(ctx.totalUnits) || 0;
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, ctx.corporateLeaseUnits);
-  const scopeCurrentOccupied = getComparableOccupancyUnits(ctx.currentOccupied, ctx.corporateLeaseUnits);
-  const scopeCurrentLeased = getComparableOccupancyUnits(ctx.currentLeased, ctx.corporateLeaseUnits);
+  const scopeCurrentOccupied = Number(ctx.currentOccupied) || 0;
+  const scopeCurrentLeased = Number(ctx.currentLeased) || 0;
   const scopeOccupancyGoal = Number(ctx.occupancyGoal) || 0;
   const scopeLeasedGoal = Number(ctx.leasedGoal) || 0;
   const scopeCurrentMonth = Number.isInteger(ctx.currentMonth) ? ctx.currentMonth : 0;
@@ -3736,16 +3687,16 @@ function computeScheduleFromContext(ctx) {
     const budgetLeasedPct = Math.min(occTarget + leasedGap, scopeLeasedGoal);
     const leasedTarget    = baseLeasedPct >= budgetLeasedPct ? baseLeasedPct : budgetLeasedPct;
 
-    const netOccNeeded    = Math.max(Math.ceil(occupancyBaseUnits * occTarget    / 100) - baseOcc,    0);
-    const netLeasedNeeded = Math.max(Math.ceil(occupancyBaseUnits * leasedTarget / 100) - baseLeased, 0);
+    const netOccNeeded    = Math.max(Math.ceil(totalUnits * occTarget    / 100) - baseOcc,    0);
+    const netLeasedNeeded = Math.max(Math.ceil(totalUnits * leasedTarget / 100) - baseLeased, 0);
     const netNeeded       = netOccNeeded;
 
     // Gross leases = net needed + replacement for move-outs
     const moveOutsToReplace = moveOuts;
     const recommendedGrossLeases = moveOutsToReplace + netNeeded;
 
-    const newOccupied = Math.min(baseOcc    + netOccNeeded, occupancyBaseUnits);
-    const newLeased   = Math.min(baseLeased + netNeeded,    occupancyBaseUnits);
+    const newOccupied = Math.min(baseOcc    + netOccNeeded, totalUnits);
+    const newLeased   = Math.min(baseLeased + netNeeded,    totalUnits);
 
     simOcc    = newOccupied;
     simLeased = newLeased;
@@ -3876,7 +3827,7 @@ function loadPropertyData(propName) {
   renewalImportLog = [];
   renewalImportSourceLabel = "";
   historicalImportTarget = normalizeHistoricalImportTarget({
-    community: propName,
+    community: historicalImportTarget.community || propName,
     month: importMonthOverride,
     year: historicalImportTarget.year
   });
@@ -3915,13 +3866,10 @@ function renderPropGrid() {
   }
   if (snapshot) {
     const selectedMonth = getSelectedDashboardMonthIndex();
-  const occupiedPct = isPortfolioWorkspaceSelected() ? getSummaryOccPct(aggregate) : (summary ? getSummaryOccPct(summary) : 0);
-  const leasedPct = isPortfolioWorkspaceSelected() ? getSummaryLeasedPct(aggregate) : (summary ? getSummaryLeasedPct(summary) : 0);
-    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? getComparableOccupancyUnits(currentRecord.currentOccupied, currentRecord.corporateLeaseUnits));
-    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? getComparableOccupancyUnits(currentRecord.currentLeased, currentRecord.corporateLeaseUnits));
-    const occupancyBaseUnits = isPortfolioWorkspaceSelected()
-      ? (aggregate.occupancyBaseUnits ?? aggregate.totalUnits ?? 0)
-      : (summary?.occupancyBaseUnits ?? getOccupancyBaseUnits(totalUnitsForCurrent, currentRecord.corporateLeaseUnits));
+    const occupiedPct = isPortfolioWorkspaceSelected() ? getSummaryOccPct(aggregate) : (summary ? getSummaryOccPct(summary) : 0);
+    const leasedPct = isPortfolioWorkspaceSelected() ? getSummaryLeasedPct(aggregate) : (summary ? getSummaryLeasedPct(summary) : 0);
+    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0));
+    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? (Number(currentRecord.currentLeased) || 0));
     const applicationsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applications ?? 0) : Math.round(appMetrics.applications || 0);
     const approvalsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applicationsApproved ?? 0) : Math.round(appMetrics.approvals || 0);
     const pendingMtd = isPortfolioWorkspaceSelected()
@@ -3941,7 +3889,7 @@ function renderPropGrid() {
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
         <div class="workspace-snapshot-label">Physical Occupancy</div>
         <div class="workspace-snapshot-value">${occupiedPct.toFixed(1)}%</div>
-        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${occupancyBaseUnits || 0} eligible units</div>
+        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${totalUnitsForCurrent || 0} units</div>
         <div class="workspace-snapshot-link">Open Overview</div>
       </button>
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
@@ -4091,10 +4039,8 @@ function getCommunitySummary(propName, sourceData) {
   const totalUnits = getTotalUnitsFor(prop, sourceData.customUnits);
   const corporateUnits = getCorporateLeaseUnitsForRecord(sourceData, totalUnits);
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  const occupiedRaw = Number(sourceData.currentOccupied) || 0;
-  const leasedRaw = Number(sourceData.currentLeased) || 0;
-  const occupied = getComparableOccupancyUnits(occupiedRaw, corporateUnits);
-  const leased = getComparableOccupancyUnits(leasedRaw, corporateUnits);
+  const occupied = Number(sourceData.currentOccupied) || 0;
+  const leased = Number(sourceData.currentLeased) || 0;
   const schedule = computeScheduleFromContext({
     totalUnits,
     corporateLeaseUnits: corporateUnits,
@@ -4136,8 +4082,8 @@ function getCommunitySummary(propName, sourceData) {
   const moveIns = Number(curMonthData.moveIns) || 0;
   const previousMoveOuts = getEffectiveMoveOutsForMonth(Math.max(scopeCurrentMonth - 1, 0), scopeMonthlyData).effective;
   const previousMoveIns = Number(prevMonthData.moveIns) || 0;
-  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
-  const budgetLeasedUnits = occupancyBaseUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(occupancyBaseUnits * budgetLeasedPct / 100) : 0;
+  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
+  const budgetLeasedUnits = totalUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(totalUnits * budgetLeasedPct / 100) : 0;
   const moveInGoal = budgetOccUnits > 0 ? Math.max(budgetOccUnits - occupied + moveOuts, 0) : 0;
   const currentNer = (Number(curMonthData.rentRollTotal) || 0) > 0 && occupied > 0
     ? Number(curMonthData.rentRollTotal) / occupied
@@ -4148,8 +4094,6 @@ function getCommunitySummary(propName, sourceData) {
     totalUnits,
     corporateLeaseUnits: corporateUnits,
     occupancyBaseUnits,
-    occupiedRaw,
-    leasedRaw,
     occupied,
     leased,
     currentMonth: scopeCurrentMonth,
@@ -4378,8 +4322,8 @@ function aggregateCommunitySummaries(summaries) {
   });
   const occPct = totals.occupancyBaseUnits > 0 ? (totals.occupied / totals.occupancyBaseUnits) * 100 : 0;
   const leasedPct = totals.occupancyBaseUnits > 0 ? (totals.leased / totals.occupancyBaseUnits) * 100 : 0;
-  const budgetOccPct = totals.occupancyBaseUnits > 0 ? (totals.budgetOccUnits / totals.occupancyBaseUnits) * 100 : 0;
-  const budgetLeasedPct = totals.occupancyBaseUnits > 0 ? (totals.budgetLeasedUnits / totals.occupancyBaseUnits) * 100 : 0;
+  const budgetOccPct = totals.totalUnits > 0 ? (totals.budgetOccUnits / totals.totalUnits) * 100 : 0;
+  const budgetLeasedPct = totals.totalUnits > 0 ? (totals.budgetLeasedUnits / totals.totalUnits) * 100 : 0;
   const avgActualNer = totals.nerWeightUnits > 0 ? totals.nerActualWeight / totals.nerWeightUnits : 0;
   const avgBudgetNer = totals.nerWeightUnits > 0 ? totals.nerBudgetWeight / totals.nerWeightUnits : 0;
   return {
@@ -4493,8 +4437,8 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const budgetOccPct = (record.savedBudgetTargets?.[scopeCurrentMonth] ?? 0) > 0
     ? Number(record.savedBudgetTargets[scopeCurrentMonth]) || 0
     : Number(currentMonthData.budgetOcc ?? 0);
-  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
-  const occupancyGapUnits = Math.max(budgetOccUnits - getComparableOccupancyUnits(Number(record.currentOccupied) || 0, record.corporateLeaseUnits), 0);
+  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
+  const occupancyGapUnits = Math.max(budgetOccUnits - (Number(record.currentOccupied) || 0), 0);
   const quarterTotals = getQuarterMonths(bonusQuarter).reduce((acc, idx) => {
     const row = schedule[idx] ?? {};
     const renewal = getRenewalSummaryForMonth(scopeMonthlyData[idx] ?? {});
@@ -5203,6 +5147,32 @@ function getFloorPlanSelectionIds(section, propName) {
   return Array.isArray(selection) ? [...selection] : [];
 }
 
+function resolveFloorPlanSelectionIds(section, propName, availableIds = []) {
+  const normalizedAvailableIds = [...new Set((Array.isArray(availableIds) ? availableIds : []).map(id => String(id || "").trim()).filter(Boolean))];
+  const availableSet = new Set(normalizedAvailableIds);
+  const bucket = getFloorPlanSelectionSection(section);
+  const candidateKeys = [
+    matchPropertyName(propName, { fallbackToCurrent: false }),
+    getProp().name,
+    typeof portfolioSetupCommunityName === "string" ? matchPropertyName(portfolioSetupCommunityName, { fallbackToCurrent: false }) : ""
+  ].map(key => String(key || "").trim()).filter(Boolean);
+  const uniqueCandidateKeys = [...new Set(candidateKeys)];
+  const pickIds = ids => {
+    const normalized = [...new Set((Array.isArray(ids) ? ids : []).map(id => String(id || "").trim()).filter(Boolean))];
+    if (availableSet.size === 0) return normalized;
+    return normalized.filter(id => availableSet.has(id));
+  };
+  for (const key of uniqueCandidateKeys) {
+    const matched = pickIds(bucket[key]);
+    if (matched.length > 0) return matched;
+  }
+  for (const value of Object.values(bucket)) {
+    const matched = pickIds(value);
+    if (matched.length > 0) return matched;
+  }
+  return [];
+}
+
 function setFloorPlanSelectionIds(section, propName, ids = []) {
   const key = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const bucket = getFloorPlanSelectionSection(section);
@@ -5233,14 +5203,16 @@ function getAllFloorPlanSelectionIds(section, propName) {
   }
   if (section === "survey") {
     const record = getPortfolioSetupCommunityRecord(key);
-    return filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, key).map(rate => String(rate.id || "").trim()).filter(Boolean);
+    return normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => String(rate.id || "").trim()).filter(Boolean);
   }
   return [];
 }
 
 function selectAllFloorPlans(section, propName, ids = []) {
-  const nextIds = Array.isArray(ids) && ids.length > 0 ? ids : getAllFloorPlanSelectionIds(section, propName);
-  setFloorPlanSelectionIds(section, propName, nextIds);
+  const availableIds = Array.isArray(ids) && ids.length > 0 ? ids : getAllFloorPlanSelectionIds(section, propName);
+  const currentIds = getFloorPlanSelectionIds(section, propName);
+  const allSelected = availableIds.length > 0 && availableIds.every(id => currentIds.includes(id));
+  setFloorPlanSelectionIds(section, propName, allSelected ? [] : availableIds);
 }
 
 function deleteSelectedCommunityFloorPlans(propName) {
@@ -5258,14 +5230,18 @@ function deleteSelectedCommunityFloorPlans(propName) {
 
 function deleteSelectedMarketSurveyFloorPlanRates(propName) {
   const record = getPortfolioSetupCommunityRecord(propName);
-  const selectedIds = new Set(getFloorPlanSelectionIds("survey", propName));
+  const selectedIds = new Set(resolveFloorPlanSelectionIds(
+    "survey",
+    propName,
+    normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => rate.id)
+  ));
   if (selectedIds.size === 0) {
     alert("Select one or more APTIQ floor-plan rows first, then use Delete Selected.");
     return false;
   }
   record.marketSurveyData = normalizeMarketSurveyData({
     ...record.marketSurveyData,
-    floorPlanRates: filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, propName).filter(rate => !selectedIds.has(String(rate.id || "").trim()))
+    floorPlanRates: normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).filter(rate => !selectedIds.has(String(rate.id || "").trim()))
   });
   if (propName === getProp().name) {
     marketSurveyData = record.marketSurveyData;
@@ -5310,14 +5286,53 @@ function applySelectedCommunityFloorPlanField(propName) {
   return true;
 }
 
+function applySelectedMarketSurveyFloorPlanField(propName) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  const selectedIds = new Set(resolveFloorPlanSelectionIds(
+    "survey",
+    propName,
+    normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => rate.id)
+  ));
+  if (selectedIds.size === 0) {
+    alert("Select one or more APTIQ floor-plan rows first, then apply the bulk edit.");
+    return false;
+  }
+  const field = String(document.getElementById("market-survey-floor-plan-bulk-field")?.value ?? "").trim();
+  const rawValue = document.getElementById("market-survey-floor-plan-bulk-value")?.value ?? "";
+  if (!field) {
+    alert("Choose an APTIQ floor-plan field to update first.");
+    return false;
+  }
+  const nextRates = normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => {
+    if (!selectedIds.has(String(rate.id || "").trim())) return rate;
+    const nextRate = { ...rate };
+    if (field === "name" || field === "sourceSheet") {
+      nextRate[field] = String(rawValue ?? "").trim();
+    } else if (["marketRent", "budgetRent", "sqft", "beds", "baths"].includes(field)) {
+      const numeric = Number(rawValue);
+      nextRate[field] = rawValue.toString().trim() && Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    }
+    return nextRate;
+  });
+  record.marketSurveyData = normalizeMarketSurveyData({
+    ...record.marketSurveyData,
+    floorPlanRates: nextRates
+  });
+  if (propName === getProp().name) {
+    marketSurveyData = record.marketSurveyData;
+  }
+  persistPortfolioSetupCommunityRecord(propName, record);
+  return true;
+}
+
 function importPortfolioCommunityFloorPlansFromSurvey(propName) {
   const record = getPortfolioSetupCommunityRecord(propName);
-  const surveyRates = filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, propName);
+  const surveyRates = normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates);
   if (surveyRates.length === 0) {
     alert("No APTIQ floor-plan rates were found for this community yet. Upload the survey workbook first, then import the floor plans.");
     return false;
   }
-  const selectedIds = new Set(getFloorPlanSelectionIds("survey", propName));
+  const selectedIds = new Set(resolveFloorPlanSelectionIds("survey", propName, surveyRates.map(rate => rate.id)));
   const selectedRates = selectedIds.size > 0
     ? surveyRates.filter(rate => selectedIds.has(String(rate.id || "").trim()))
     : [];
@@ -7204,7 +7219,7 @@ function renderPortfolioScopedSetupTab() {
             <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           </div>
           <button class="btn btn-gray btn-sm" type="button" onclick='addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})'>＋ Add Floor Plan</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${filterMarketSurveyFloorPlanRatesForCommunity(selectedRecord.marketSurveyData?.floorPlanRates, selectedRecord, selectedName).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${normalizeMarketSurveyFloorPlanRates(selectedRecord.marketSurveyData?.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
       </div>
       <div style="display:grid;gap:0">
@@ -7548,12 +7563,17 @@ function renderSetupTab() {
     ? `${marketSurveyData.rentAdjustmentDirection === "down" ? "-" : "+"}$${Number(marketSurveyData.rentAdjustmentAmount).toLocaleString(undefined,{maximumFractionDigits:0})}`
     : "No adjustment set";
   const floorPlanVarianceData = buildCommunityFloorPlanVarianceRows(communityFloorPlans, marketSurveyData);
+  const selectedCommunityFloorPlanIds = getFloorPlanSelectionIds("community", getProp().name);
+  const selectedCommunityFloorPlanIdSet = new Set(selectedCommunityFloorPlanIds);
   const communityFloorPlanRows = floorPlanVarianceData.rows.length > 0
     ? floorPlanVarianceData.rows.map((row, idx) => {
         const varianceColor = row.variance == null ? "var(--muted)" : row.variance >= 0 ? "#3fb950" : "#f97316";
         const displayedMarketedRent = row.marketedRent ?? row.marketRent;
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
-        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+        return `<div style="display:grid;grid-template-columns:28px minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+          <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
+            <input type="checkbox" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(getProp().name)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+          </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
             <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updateCommunityFloorPlanField(${idx},'name',this.value)">
@@ -7602,13 +7622,8 @@ function renderSetupTab() {
         <div style="display:flex;flex-wrap:wrap;gap:8px">${floorPlanVarianceData.unmatchedRates.map(rate => `<span style="display:inline-flex;gap:6px;align-items:center;padding:6px 8px;border-radius:999px;background:var(--bg2);border:1px solid rgba(217,153,34,0.35);font-size:0.66rem;color:var(--text)">${escapeHtml(rate.name || "Unnamed plan")}<strong style="color:#9d5d14">${rate.marketRent != null ? formatDlrCurrency(rate.marketRent) : "—"}</strong></span>`).join("")}</div>
       </div>`
     : "";
+  const marketSurveyFloorPlanData = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates);
   const currentCommunityName = getProp().name;
-  const currentCommunityRecord = getPortfolioSetupCommunityRecord(currentCommunityName);
-  const marketSurveyFloorPlanData = filterMarketSurveyFloorPlanRatesForCommunity(
-    marketSurveyData.floorPlanRates,
-    currentCommunityRecord,
-    currentCommunityName
-  );
   const selectedMarketSurveyFloorPlanIds = getFloorPlanSelectionIds("survey", currentCommunityName);
   const selectedMarketSurveyFloorPlanIdSet = new Set(selectedMarketSurveyFloorPlanIds);
   const marketSurveyFloorPlanRows = marketSurveyFloorPlanData.length
@@ -7786,7 +7801,26 @@ function renderSetupTab() {
             <div style="font-size:1.15rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${marketSurveyFloorPlanData.length}</div>
             <div style="font-size:0.64rem;color:var(--muted)">survey floor plans</div>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)})">Select All</button>
+          <div style="display:grid;grid-template-columns:150px 140px auto;gap:8px;align-items:end">
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk field</div>
+              <select id="market-survey-floor-plan-bulk-field">
+                <option value="marketRent">Market rent</option>
+                <option value="budgetRent">Budget rent</option>
+                <option value="sqft">Sqft</option>
+                <option value="beds">Beds</option>
+                <option value="baths">Baths</option>
+                <option value="sourceSheet">Source</option>
+                <option value="name">Plan name</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk value</div>
+              <input id="market-survey-floor-plan-bulk-value" type="text" placeholder="Value to apply">
+            </div>
+            <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedMarketSurveyFloorPlanField(${JSON.stringify(currentCommunityName)})">Apply to Selected</button>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)})">${selectedMarketSurveyFloorPlanIds.length === marketSurveyFloorPlanData.length && marketSurveyFloorPlanData.length > 0 ? "Clear All" : "Select All"}</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})">Clear</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="addMarketSurveyFloorPlanRate()">＋ Add Marketed Rate</button>
@@ -7904,15 +7938,40 @@ function renderSetupTab() {
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
             <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the budgeted floor plans for this community here. The DLR export compares these saved budget rents against the current marketed rents by floor plan, using the value saved here first and imported survey matches as the fallback.</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <div style="text-align:right">
-              <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${floorPlanVarianceData.rows.length}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
-            </div>
-            <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${filterMarketSurveyFloorPlanRatesForCommunity(marketSurveyData.floorPlanRates, getPortfolioSetupCommunityRecord(p.name), p.name).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="text-align:right">
+            <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${floorPlanVarianceData.rows.length}</div>
+            <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
           </div>
+          <div style="display:grid;grid-template-columns:150px 140px auto;gap:8px;align-items:end">
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk field</div>
+              <select id="community-floor-plan-bulk-field">
+                <option value="marketedRent">Marketed rent</option>
+                <option value="budgetRent">Budget rent</option>
+                <option value="leasedPct">Leased %</option>
+                <option value="sqft">Sqft</option>
+                <option value="beds">Beds</option>
+                <option value="baths">Baths</option>
+                <option value="marketedRentSource">Market source</option>
+                <option value="name">Plan name</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk value</div>
+              <input id="community-floor-plan-bulk-value" type="text" placeholder="Value to apply">
+            </div>
+            <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedCommunityFloorPlanField(${JSON.stringify(p.name)})">Apply to Selected</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('community', ${JSON.stringify(p.name)})">${selectedCommunityFloorPlanIds.length === floorPlanVarianceData.rows.length && floorPlanVarianceData.rows.length > 0 ? "Clear All" : "Select All"}</button>
+            <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('community', ${JSON.stringify(p.name)})">Clear</button>
+            <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
+      </div>
         <div style="display:grid;gap:0">${communityFloorPlanRows}</div>
         ${unmatchedFloorPlanRatesHtml}
       </div>
@@ -8075,7 +8134,7 @@ function addMarketSurveyFloorPlanRate() {
     ...marketSurveyData,
     floorPlanRates: [
       ...normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates),
-      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, propertyName: "", sourceSheet: "" }
+      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" }
     ]
   });
   renderTab();
@@ -8084,7 +8143,7 @@ function addMarketSurveyFloorPlanRate() {
 function updateMarketSurveyFloorPlanField(index, field, value) {
   const nextRates = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).map(entry => ({ ...entry }));
   while (nextRates.length <= index) {
-    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, propertyName: "", sourceSheet: "" });
+    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" });
   }
   const target = nextRates[index];
   if (!target) return;
@@ -8141,7 +8200,7 @@ function getFloorPlanMatchScore(plan, marketRate) {
 
 function buildCommunityFloorPlanVarianceRows(floorPlans = communityFloorPlans, surveyData = marketSurveyData) {
   const normalizedPlans = normalizeCommunityFloorPlans(floorPlans);
-  const normalizedRates = filterMarketSurveyFloorPlanRatesForCommunity(surveyData?.floorPlanRates, { communityFloorPlans: normalizedPlans }, surveyData?.propertyName || "");
+  const normalizedRates = normalizeMarketSurveyFloorPlanRates(surveyData?.floorPlanRates);
   const usedRateIds = new Set();
   const rows = normalizedPlans.map(plan => {
     const match = normalizedRates.reduce((best, candidate) => {
@@ -8454,20 +8513,17 @@ function renderRecommendationsCard(items, title, subtitle) {
 function renderOverviewTab() {
   if (isPortfolioWorkspaceSelected()) return renderPortfolioScopedOverviewTab();
   const totalUnits = getTotalUnits();
-  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
-  const comparableOccupied = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
-  const comparableLeased = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
   const oCPct = currentOccPct();
   const lCPct = currentLeasedPct();
-  const occGoalUnits = Math.ceil(occupancyBaseUnits * occupancyGoal / 100);
-  const leasedGoalUnits = Math.ceil(occupancyBaseUnits * leasedGoal / 100);
+  const occGoalUnits = Math.ceil(totalUnits * occupancyGoal / 100);
+  const leasedGoalUnits = Math.ceil(totalUnits * leasedGoal / 100);
   const upcomingMoveOuts30 = getEffectiveMoveOutsForMonth(currentMonth).effective;
   const upcomingMoveOuts60 = getEffectiveMoveOutsForMonth(currentMonth).effective + getEffectiveMoveOutsForMonth(Math.min(currentMonth+1,11)).effective;
   const upcomingMoveIns30  = monthlyData[currentMonth]?.moveIns  ?? 0;
-  const exposureAfter30 = Math.max(comparableOccupied - upcomingMoveOuts30 + upcomingMoveIns30, 0);
-  const exposureAfter60 = Math.max(comparableOccupied - upcomingMoveOuts60, 0);
-  const leasedAfter30 = Math.max(comparableLeased - upcomingMoveOuts30 + upcomingMoveIns30, 0);
-  const leasedAfter60 = Math.max(comparableLeased - upcomingMoveOuts60, 0);
+  const exposureAfter30 = Math.max(currentOccupied - upcomingMoveOuts30 + upcomingMoveIns30, 0);
+  const exposureAfter60 = Math.max(currentOccupied - upcomingMoveOuts60, 0);
+  const leasedAfter30 = Math.max(currentLeased - upcomingMoveOuts30 + upcomingMoveIns30, 0);
+  const leasedAfter60 = Math.max(currentLeased - upcomingMoveOuts60, 0);
   const currentMonthBudgetOcc = monthlyData[currentMonth]?.budgetOcc ?? 0;
   const schedule = computeSchedule();
   const currentRow = schedule[currentMonth] ?? {};
@@ -8480,7 +8536,7 @@ function renderOverviewTab() {
   const upcomingOccGoalUnits = upcomingOccupancyGoalNeed.targetUnits;
   const currentMonthBudgetLeased = currentRow.budgetLeased ?? 0;
   const upcomingBudgetLeased = nextRow.budgetLeased ?? currentMonthBudgetLeased;
-  const upcomingBudgetLeasedUnits = occupancyBaseUnits > 0 ? Math.ceil(occupancyBaseUnits * upcomingBudgetLeased / 100) : 0;
+  const upcomingBudgetLeasedUnits = totalUnits > 0 ? Math.ceil(totalUnits * upcomingBudgetLeased / 100) : 0;
   const stabilization = getMonthsToStabilization();
   const quarterlyAbsorption = getQuarterlyAbsorptionTotals();
   const allCurves = getAllCurves();
@@ -8525,7 +8581,7 @@ function renderOverviewTab() {
     }
     // Leased % vs budgetLeased check
     if (upcomingBudgetLeased > 0 && lCPct < upcomingBudgetLeased - 1) {
-      alertBanners += `<div class="alert-banner alert-warn"><div class="alert-icon">📊</div><div class="alert-body"><div class="alert-title">Leased % Below Upcoming Budget Target (${lCPct.toFixed(1)}% vs ${upcomingBudgetLeased.toFixed(1)}% goal)</div><div class="alert-detail">Need ${Math.max(upcomingBudgetLeasedUnits - comparableLeased, 0)} more leased units to hit ${MONTHS[nextMonth]}'s leased budget</div></div></div>`;
+      alertBanners += `<div class="alert-banner alert-warn"><div class="alert-icon">📊</div><div class="alert-body"><div class="alert-title">Leased % Below Upcoming Budget Target (${lCPct.toFixed(1)}% vs ${upcomingBudgetLeased.toFixed(1)}% goal)</div><div class="alert-detail">Need ${Math.max(upcomingBudgetLeasedUnits - currentLeased, 0)} more leased units to hit ${MONTHS[nextMonth]}'s leased budget</div></div></div>`;
     }
   }
 
@@ -8535,8 +8591,8 @@ function renderOverviewTab() {
   const cmRRTotal  = cm.rentRollTotal ?? 0;
   // nerActual: if a total rent roll $ is entered, derive per-unit NER from it;
   // otherwise fall back to the manually entered per-unit value
-  const cmNER = cmRRTotal > 0 && comparableOccupied > 0
-    ? cmRRTotal / comparableOccupied
+  const cmNER = cmRRTotal > 0 && currentOccupied > 0
+    ? cmRRTotal / currentOccupied
     : (cm.nerActual ?? 0);
 
   // Calculations
@@ -8571,8 +8627,8 @@ function renderOverviewTab() {
         <div class="label">Total Rent Roll ($) <span style="font-size:0.62rem;color:var(--muted);font-weight:400">— enter total collected</span></div>
         ${numInp("rentRollTotal", cmRRTotal, `data-idx="${currentMonth}"`, 0, 99999999)}
         <div style="font-size:0.68rem;color:var(--muted);margin-top:3px">
-          ${comparableOccupied > 0
-            ? `÷ ${comparableOccupied} occupied units`
+          ${currentOccupied > 0
+            ? `÷ ${currentOccupied} occupied units`
             : `<span style="color:#f85149">Enter occupied units on Overview first</span>`}
         </div>
 
@@ -8581,8 +8637,8 @@ function renderOverviewTab() {
           <div style="font-size:1.3rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#3fb950">
             ${cmNER > 0 ? "$"+cmNER.toFixed(2) : "—"}
           </div>
-          ${cmRRTotal > 0 && comparableOccupied > 0
-            ? `<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">$${cmRRTotal.toLocaleString()} ÷ ${comparableOccupied} units</div>`
+          ${cmRRTotal > 0 && currentOccupied > 0
+            ? `<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">$${cmRRTotal.toLocaleString()} ÷ ${currentOccupied} units</div>`
             : cmRRTotal === 0
               ? `<div style="font-size:0.62rem;color:var(--muted);margin-top:2px">Or enter per-unit NER manually below</div>`
               : ""}
@@ -8606,7 +8662,7 @@ function renderOverviewTab() {
       ${rrVsMarket !== null ? `<span>RR vs Market: ${varSpan(rrVsMarket)}</span>` : ""}
       ${rrVsBudgetRent !== null ? `<span>RR vs Budget Rent: ${varSpan(rrVsBudgetRent)}</span>` : ""}
       ${cmRRTotal > 0 ? `<span>Total Rent Roll: <strong style="color:#3fb950">$${cmRRTotal.toLocaleString(undefined,{maximumFractionDigits:0})}</strong></span>` : ""}
-      ${cmNER > 0 && comparableOccupied > 0 ? `<span>Est. Monthly Revenue: <strong style="color:#d29922">$${(cmNER * comparableOccupied).toLocaleString(undefined,{maximumFractionDigits:0})}</strong></span>` : ""}
+      ${cmNER > 0 && currentOccupied > 0 ? `<span>Est. Monthly Revenue: <strong style="color:#d29922">$${(cmNER * currentOccupied).toLocaleString(undefined,{maximumFractionDigits:0})}</strong></span>` : ""}
     </div>
   </div>`;
 
@@ -8629,7 +8685,7 @@ function renderOverviewTab() {
       ${numInp("currentLeased", currentLeased)}
       <div class="inp-pct" style="color:#a371f7">${lCPct.toFixed(1)}% leased</div>
       ${pctBar(lCPct, leasedGoal, "#a371f7")}
-      ${upcomingBudgetLeased > 0 ? `<div class="pct-goal" style="color:${lCPct>=upcomingBudgetLeased?"#3fb950":"#f85149"}">${MONTHS[nextMonth]} Budget Leased: ${upcomingBudgetLeased.toFixed(1)}% (${upcomingBudgetLeasedUnits} units) ${lCPct>=upcomingBudgetLeased?"✓":"← need "+Math.max(upcomingBudgetLeasedUnits-comparableLeased,0)+" more"}</div>` : ""}
+      ${upcomingBudgetLeased > 0 ? `<div class="pct-goal" style="color:${lCPct>=upcomingBudgetLeased?"#3fb950":"#f85149"}">${MONTHS[nextMonth]} Budget Leased: ${upcomingBudgetLeased.toFixed(1)}% (${upcomingBudgetLeasedUnits} units) ${lCPct>=upcomingBudgetLeased?"✓":"← need "+Math.max(upcomingBudgetLeasedUnits-currentLeased,0)+" more"}</div>` : ""}
     </div>
     <div class="card">
       <div class="label">Occupancy Goal %</div>
@@ -8661,12 +8717,12 @@ function renderOverviewTab() {
     ? savedBudgetTargets[currentMonth]
     : (monthlyData[currentMonth]?.budgetOcc ?? 0);
   const savedBudgetLeased = nextRow.budgetLeased ?? 0;
-  const savedBudgetOccUnits    = occupancyBaseUnits > 0 && savedBudgetOcc > 0 ? Math.ceil(occupancyBaseUnits * savedBudgetOcc / 100) : 0;
-  const savedBudgetLeasedUnits = occupancyBaseUnits > 0 && savedBudgetLeased > 0 ? Math.ceil(occupancyBaseUnits * savedBudgetLeased / 100) : 0;
+  const savedBudgetOccUnits    = totalUnits > 0 && savedBudgetOcc > 0 ? Math.ceil(totalUnits * savedBudgetOcc / 100) : 0;
+  const savedBudgetLeasedUnits = totalUnits > 0 && savedBudgetLeased > 0 ? Math.ceil(totalUnits * savedBudgetLeased / 100) : 0;
   const onTrackOcc    = savedBudgetOcc > 0 && oCPct >= savedBudgetOcc;
   const onTrackLeased = savedBudgetLeased > 0 && lCPct >= savedBudgetLeased;
-  const occGapUnits = savedBudgetOcc > 0 ? savedBudgetOccUnits - comparableOccupied : 0;
-  const leasedGapUnits = savedBudgetLeased > 0 ? savedBudgetLeasedUnits - comparableLeased : 0;
+  const occGapUnits = savedBudgetOcc > 0 ? savedBudgetOccUnits - currentOccupied : 0;
+  const leasedGapUnits = savedBudgetLeased > 0 ? savedBudgetLeasedUnits - currentLeased : 0;
   const occupancyGoalOnTrack = upcomingOccupancyGoalNeed.onPace;
   const budgetOccSource    = savedBudgetTargets[currentMonth] > 0 ? "saved budget" : "schedule entry";
   const budgetLeasedSource = savedBudgetTargets[nextMonth] > 0 ? "saved budget" : "schedule entry";
@@ -10384,7 +10440,6 @@ function extractFloorPlanRatesFromFloorPlanDataSheet(rows = [], targetCommunity 
       sqft: sqft || null,
       beds: beds || null,
       baths: baths || null,
-      propertyName,
       sourceSheet: "Floor Plan Data"
     });
   }
@@ -10445,7 +10500,6 @@ function extractMarketSurveyFloorPlanRates(workbook, targetCommunity = "") {
         sqft: sqft || null,
         beds: beds || null,
         baths: baths || null,
-        propertyName: "",
         sourceSheet: sheetName
       });
     }
@@ -10863,14 +10917,6 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     ? getCurrentCommunityRecord()
     : normalizeSavedCommunityRecord(matchedName, savedData[matchedName]);
   const existingSurvey = normalizeMarketSurveyData(record.marketSurveyData);
-  const subjectFloorPlanRates = filterMarketSurveyFloorPlanRatesForCommunity(
-    surveyInput.floorPlanRates ?? existingSurvey.floorPlanRates,
-    record,
-    matchedName
-  );
-  const nextFloorPlanRates = subjectFloorPlanRates.length > 0
-    ? subjectFloorPlanRates
-    : normalizeMarketSurveyFloorPlanRates(existingSurvey.floorPlanRates);
   const nextSurvey = normalizeMarketSurveyData({
     ...existingSurvey,
     sourceFileName: surveyInput.sourceFileName || existingSurvey.sourceFileName,
@@ -10904,8 +10950,8 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     surveyComps: Array.isArray(surveyInput.surveyComps) && surveyInput.surveyComps.length > 0
       ? surveyInput.surveyComps
       : existingSurvey.surveyComps,
-    floorPlanRates: nextFloorPlanRates.length > 0
-      ? nextFloorPlanRates
+    floorPlanRates: Array.isArray(surveyInput.floorPlanRates) && surveyInput.floorPlanRates.length > 0
+      ? surveyInput.floorPlanRates
       : existingSurvey.floorPlanRates
   });
   const periodKey = getSelectedDashboardPeriodKey();
@@ -11464,14 +11510,13 @@ function getCurrentBudgetLeasedPct() {
 
 function getCurrentMoveInGoal() {
   const totalUnits = getTotalUnits();
-  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const savedBudgetOccPct = getCurrentBudgetOccPct();
-  const savedBudgetOccUnits = occupancyBaseUnits > 0 && savedBudgetOccPct > 0
-    ? Math.ceil(occupancyBaseUnits * savedBudgetOccPct / 100)
+  const savedBudgetOccUnits = totalUnits > 0 && savedBudgetOccPct > 0
+    ? Math.ceil(totalUnits * savedBudgetOccPct / 100)
     : 0;
   const moveOutsThisMonth = getEffectiveMoveOutsForMonth(currentMonth).effective;
   return savedBudgetOccUnits > 0
-    ? Math.max(savedBudgetOccUnits - getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits) + moveOutsThisMonth, 0)
+    ? Math.max(savedBudgetOccUnits - currentOccupied + moveOutsThisMonth, 0)
     : 0;
 }
 
@@ -13399,7 +13444,7 @@ function compLowMonthly(playbook, market) {
 
 function buildCompCalculatorFloorPlanRows(detail, market) {
   const subjectPlans = normalizeCommunityFloorPlans(detail?.record?.communityFloorPlans);
-  const surveyRates = filterMarketSurveyFloorPlanRatesForCommunity(market?.floorPlanRates, detail?.record ?? {}, detail?.name ?? "");
+  const surveyRates = normalizeMarketSurveyFloorPlanRates(market?.floorPlanRates);
   const usedRateIds = new Set();
   const rows = subjectPlans.map(plan => {
     const match = surveyRates.reduce((best, candidate) => {
@@ -13495,12 +13540,12 @@ function buildCompCalculatorSnapshotData(detail, market, monthIdx = getSelectedD
   const floorPlanRows = buildCompCalculatorFloorPlanRows(detail, market);
   const floorPlanSummary = buildCompCalculatorFloorPlanSummary(floorPlanRows);
   const subjectSqft = compCalcAverage(floorPlanRows.map(row => row.marketedRent ? Number(row.sqft ?? 0) : 0).filter(Boolean));
-  const compSqft = compCalcAverage(filterMarketSurveyFloorPlanRatesForCommunity(market.floorPlanRates, detail?.record ?? {}, detail?.name ?? "").map(rate => Number(rate.sqft ?? 0)).filter(Boolean));
+  const compSqft = compCalcAverage((market.floorPlanRates ?? []).map(rate => Number(rate.sqft ?? 0)).filter(Boolean));
   const floorPlanContext = {
     subjectAvgSqft: subjectSqft,
     compAvgSqft: compSqft,
     subjectPlanCount: floorPlanRows.filter(row => Number(row.marketedRent ?? 0) > 0).length,
-    compPlanCount: filterMarketSurveyFloorPlanRatesForCommunity(market.floorPlanRates, detail?.record ?? {}, detail?.name ?? "").length
+    compPlanCount: Array.isArray(market.floorPlanRates) ? market.floorPlanRates.length : 0
   };
   const recommendation = buildCompCalculatorRecommendation(market, activity, floorPlanContext);
   const playbook = buildCompCalculatorConcessionPlaybook(market, activity);
@@ -14913,15 +14958,6 @@ function getHistoricalImportCommunityName() {
   return matched || getProp().name;
 }
 
-function getDlrReportCommunityName() {
-  const workspaceCommunity = isPortfolioWorkspaceSelected() ? "" : getProp().name;
-  const matchedWorkspace = matchPropertyName(workspaceCommunity, { fallbackToCurrent: false });
-  if (matchedWorkspace) return matchedWorkspace;
-  const matchedHistorical = matchPropertyName(historicalImportTarget.community, { fallbackToCurrent: false });
-  if (matchedHistorical) return matchedHistorical;
-  return getProp().name;
-}
-
 function getHistoricalImportMonthIndex() {
   return Number.isInteger(historicalImportTarget.month) ? historicalImportTarget.month : Number(historicalImportTarget.month ?? importMonthOverride ?? DEFAULT_CURRENT_MONTH);
 }
@@ -15404,14 +15440,12 @@ function getStoredWeeklySnapshotPayload() {
 
 function getSummaryOccPct(summary) {
   const baseUnits = Number(summary?.occupancyBaseUnits ?? summary?.totalUnits) || 0;
-  const occupied = Number(summary?.occupiedComparable ?? summary?.occupied) || 0;
-  return baseUnits > 0 ? occupied / baseUnits * 100 : 0;
+  return baseUnits > 0 ? (Number(summary?.occupied) || 0) / baseUnits * 100 : 0;
 }
 
 function getSummaryLeasedPct(summary) {
   const baseUnits = Number(summary?.occupancyBaseUnits ?? summary?.totalUnits) || 0;
-  const leased = Number(summary?.leasedComparable ?? summary?.leased) || 0;
-  return baseUnits > 0 ? leased / baseUnits * 100 : 0;
+  return baseUnits > 0 ? (Number(summary?.leased) || 0) / baseUnits * 100 : 0;
 }
 
 function buildPortfolioDetailsFromRecordMap(recordMap) {
@@ -18521,21 +18555,20 @@ function getCommunityRecordForScope(propName) {
 
 function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
-  const corporateUnits = normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
   let runningUnits = snapshotKey === "leasedSnapshot"
     ? Math.max(0, Number(record?.currentLeased) || 0)
     : Math.max(0, Number(record?.currentOccupied) || 0);
-  if (!Number.isInteger(targetMonth)) return getComparableOccupancyUnits(runningUnits, corporateUnits);
-  if (targetMonth === anchorMonth) return getComparableOccupancyUnits(runningUnits, corporateUnits);
+  if (!Number.isInteger(targetMonth)) return runningUnits;
+  if (targetMonth === anchorMonth) return runningUnits;
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   if (targetMonth < anchorMonth) {
     for (let month = anchorMonth; month > targetMonth; month -= 1) {
       const priorSnapshot = Number(monthEntries[month - 1]?.[snapshotKey] ?? 0);
-      if (priorSnapshot > 0) return getComparableOccupancyUnits(priorSnapshot, corporateUnits);
+      if (priorSnapshot > 0) return priorSnapshot;
       runningUnits = Math.max(runningUnits + getEffectiveMoveOutsForMonth(month, monthEntries).effective - (monthEntries[month]?.moveIns ?? 0), 0);
       runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
     }
-    return getComparableOccupancyUnits(runningUnits, corporateUnits);
+    return runningUnits;
   }
   for (let month = anchorMonth + 1; month <= targetMonth; month += 1) {
     const explicitSnapshot = Number(monthEntries[month]?.[snapshotKey] ?? 0);
@@ -18546,7 +18579,7 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
     runningUnits = Math.max(runningUnits - getEffectiveMoveOutsForMonth(month, monthEntries).effective + (monthEntries[month]?.moveIns ?? 0), 0);
     runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
   }
-  return getComparableOccupancyUnits(runningUnits, corporateUnits);
+  return runningUnits;
 }
 
 function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
@@ -18554,7 +18587,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record?.corporateLeaseUnits);
   let occupiedUnits = startMonth === anchorMonth
-    ? getComparableOccupancyUnits(record?.currentOccupied, record?.corporateLeaseUnits)
+    ? Math.max(0, Number(record?.currentOccupied) || 0)
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
   if (!Number.isInteger(startMonth) || occupancyBaseUnits <= 0) {
     return {
@@ -19077,7 +19110,7 @@ function resolveDlrSummaryUnits(summary, totalUnits, metric = "occupied") {
   return null;
 }
 
-function buildDashboardDlrInvestorOverview(propName = getDlrReportCommunityName(), monthIdx = getHistoricalImportMonthIndex(), year = getHistoricalImportYear()) {
+function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommunityName(), monthIdx = getHistoricalImportMonthIndex(), year = getHistoricalImportYear()) {
   const communityName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const record = getCommunityRecordForScope(communityName);
   const surveyData = normalizeMarketSurveyData(record.marketSurveyData);
@@ -21851,7 +21884,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         leased: getCell(row, "leased_units") ?? "",
         move_outs: getCell(row, "move_outs") ?? "",
         move_ins: getCell(row, "move_ins") ?? "",
-        guest_cards: leadSourceTotal ?? guestCardsValue ?? "",
+        guest_cards: guestCardsValue || (leadSourceTotal ?? ""),
         walk_in: leadWalkInsValue ?? "",
         off_site_event: "",
         phone_calls: leadCallsValue ?? "",
