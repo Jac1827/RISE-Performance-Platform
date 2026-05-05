@@ -162,6 +162,11 @@ function persistPageState(){
       compareMode:state.compareMode,
       compareBudgetDs:state.compareBudgetDs,
       compareArchivedBudgetId:state.compareArchivedBudgetId,
+      compareActualEntity:state.compareActualEntity,
+      compareActualDs:state.compareActualDs,
+      compareBaselineEntity:state.compareBaselineEntity,
+      compareBaselineBatchId:state.compareBaselineBatchId,
+      compareBaselinePeriod:state.compareBaselinePeriod,
       compareUploadTarget:state.compareUploadTarget,
       search:state.search,
       filterSec:state.filterSec,
@@ -796,11 +801,40 @@ function getApprovedBudgetRowsFor(property){
     .filter(record=>normalizeCommunityLookupName(record&&record.property||"")===normalizeCommunityLookupName(property||""));
 }
 
-function buildApprovedBudgetIndex(property,selectedPeriod,rowsOverride){
+function getApprovedBudgetBatchOptions(property){
+  const current=getApprovedBudgetCurrentBatch(property);
+  const archived=getApprovedBudgetArchivedBatches(property);
+  return [current,...archived].filter(Boolean);
+}
+
+function getApprovedBudgetPeriodsForBatch(batch){
+  if(!batch)return[];
+  return [...new Set((Array.isArray(batch.rows)?batch.rows:[])
+    .map(row=>normalizeFinancialPeriodKey(row&&row.period||""))
+    .filter(Boolean))].sort();
+}
+
+function getCompareDatasetList(entityId){
+  const list=Array.isArray(state&&state.store&&state.store[entityId])?state.store[entityId]:[];
+  return [...list].sort((a,b)=>{
+    const aPeriod=normalizeFinancialPeriodKey(a&&a.period||"");
+    const bPeriod=normalizeFinancialPeriodKey(b&&b.period||"");
+    if(aPeriod&&bPeriod&&aPeriod!==bPeriod)return aPeriod.localeCompare(bPeriod);
+    return Number(a&&a.id||0)-Number(b&&b.id||0);
+  });
+}
+
+function getLatestDatasetIdForEntity(entityId){
+  const list=Array.isArray(state&&state.store&&state.store[entityId])?state.store[entityId]:[];
+  return list.length?list[list.length-1].id:null;
+}
+
+function buildApprovedBudgetIndex(property,selectedPeriod,rowsOverride,options={}){
   const normalizedPeriod=normalizeFinancialPeriodKey(selectedPeriod||"");
   if(!normalizedPeriod)return{map:{},matchCount:0,source:"none"};
   const year=Number(String(normalizedPeriod).slice(0,4));
   const month=Number(String(normalizedPeriod).slice(5,7));
+  const mode=String(options&&options.mode||"cumulative");
   const rows=Array.isArray(rowsOverride)?rowsOverride:getApprovedBudgetRowsFor(property);
   const map={};
   let matchCount=0;
@@ -810,12 +844,271 @@ function buildApprovedBudgetIndex(property,selectedPeriod,rowsOverride){
     const periodMonth=Number(period.slice(5,7));
     const glCode=String(record&&record.glCode||"").trim();
     if(!glCode)return;
-    if(periodMonth<=month){
+    const periodMatches=mode==="month"?period===normalizedPeriod:periodMonth<=month;
+    if(periodMatches){
       map[glCode]=(map[glCode]||0)+(Number(record&&record.budget||0)||0);
       matchCount+=1;
     }
   });
   return{map,matchCount,source:matchCount>0?"approved":"uploaded"};
+}
+
+function getCompareContext(){
+  const actualEntityId=state.compareActualEntity||state.entity;
+  const actualEntity=getEntityById(actualEntityId);
+  const actualList=getCompareDatasetList(actualEntity.id);
+  const actualDatasetId=state.compareActualDs&&actualList.some(item=>Number(item.id)===Number(state.compareActualDs))
+    ? Number(state.compareActualDs)
+    : getLatestDatasetIdForEntity(actualEntity.id);
+  const actualDataset=actualList.find(item=>Number(item.id)===Number(actualDatasetId))||actualList[actualList.length-1]||null;
+  const baselineEntityId=state.compareBaselineEntity||state.baselineEntity||state.entity;
+  const baselineEntity=getEntityById(baselineEntityId);
+  const baselineBatches=getApprovedBudgetBatchOptions(baselineEntity.label);
+  const baselineBatch=(state.compareBaselineBatchId&&baselineBatches.some(batch=>String(batch.id)===String(state.compareBaselineBatchId)))
+    ? baselineBatches.find(batch=>String(batch.id)===String(state.compareBaselineBatchId))
+    : baselineBatches[0]||null;
+  const periodOptions=getApprovedBudgetPeriodsForBatch(baselineBatch);
+  const baselinePeriod=(state.compareBaselinePeriod&&periodOptions.includes(normalizeFinancialPeriodKey(state.compareBaselinePeriod)))
+    ? normalizeFinancialPeriodKey(state.compareBaselinePeriod)
+    : periodOptions[periodOptions.length-1]||periodOptions[0]||"";
+  const actualPeriod=actualDataset&&normalizeFinancialPeriodKey(actualDataset.period||actualDataset.name||"")||"";
+  const budgetRows=baselineBatch&&Array.isArray(baselineBatch.rows)?baselineBatch.rows:[];
+  const budgetIndex=baselineBatch&&baselinePeriod
+    ? buildApprovedBudgetIndex(baselineEntity.label,baselinePeriod,budgetRows,{mode:"month"})
+    : {map:{},matchCount:0,source:"none"};
+  return{
+    actualEntity,
+    actualDataset,
+    actualPeriod,
+    baselineEntity,
+    baselineBatch,
+    baselinePeriod,
+    budgetIndex,
+    budgetRows
+  };
+}
+
+function buildActualVsBaselineResults(context){
+  const actualDataset=context&&context.actualDataset;
+  const budgetIndex=context&&context.budgetIndex||{map:{}};
+  if(!actualDataset||!Array.isArray(actualDataset.rows)||!actualDataset.rows.length||!context.baselineBatch||!context.baselinePeriod)return null;
+  const actualMap=_.keyBy(actualDataset.rows,"gl");
+  const allGLs=[...new Set([...Object.keys(actualMap),...Object.keys(budgetIndex.map||{})])];
+  const rows=allGLs.map(gl=>{
+    const actualRow=actualMap[gl]||{yAct:0,yBud:0};
+    const budgetValue=Number((budgetIndex.map||{})[gl]||0)||0;
+    const actualValue=Number(actualRow.yAct||0)||0;
+    const variance=actualValue-budgetValue;
+    const isIncome=isInc(actualRow);
+    const favorable=isIncome?variance>0:variance<0;
+    return{
+      gl:String(gl||""),
+      name:String(actualRow.name||""),
+      section:String(actualRow.section||""),
+      actual:actualValue,
+      budget:budgetValue,
+      variance,
+      variancePct:budgetValue?Math.abs(variance/budgetValue)*100:0,
+      isIncome,
+      favorable,
+      bad:!favorable
+    };
+  }).filter(row=>row.actual||row.budget);
+  const bySection=_.groupBy(rows,"section");
+  const sectionSummary=Object.entries(bySection).map(([section,items])=>{
+    const actual=items.reduce((s,row)=>s+row.actual,0);
+    const budget=items.reduce((s,row)=>s+row.budget,0);
+    const variance=actual-budget;
+    const favorableCount=items.filter(row=>row.favorable).length;
+    const unfavorableCount=items.filter(row=>row.bad).length;
+    return{
+      section,
+      actual,
+      budget,
+      variance,
+      variancePct:budget?Math.abs(variance/budget)*100:0,
+      favorableCount,
+      unfavorableCount,
+      bad:unfavorableCount>favorableCount
+    };
+  }).filter(row=>row.actual||row.budget).sort((a,b)=>Math.abs(b.variance)-Math.abs(a.variance));
+  const unfavorableRows=rows.filter(row=>row.bad).sort((a,b)=>Math.abs(b.variance)-Math.abs(a.variance));
+  const favorableRows=rows.filter(row=>row.favorable).sort((a,b)=>Math.abs(b.variance)-Math.abs(a.variance));
+  const totalActual=rows.reduce((s,row)=>s+row.actual,0);
+  const totalBudget=rows.reduce((s,row)=>s+row.budget,0);
+  const netVariance=totalActual-totalBudget;
+  const netFavorable=rows.reduce((s,row)=>s+(row.isIncome?(row.actual-row.budget):(row.budget-row.actual)),0);
+  const topNegative=unfavorableRows[0]||null;
+  const posture=netFavorable>=0?"Protect and hold the line":"Escalate recovery actions";
+  const postureDetail=netFavorable>=0
+    ? "The selected actual month is tracking at or ahead of the selected baseline month."
+    : "The selected actual month is trailing the selected baseline month and needs a management response.";
+  return{
+    ...context,
+    rows,
+    sectionSummary,
+    unfavorableRows,
+    favorableRows,
+    totalActual,
+    totalBudget,
+    netVariance,
+    netFavorable,
+    topNegative,
+    posture,
+    postureDetail
+  };
+}
+
+function downloadHtmlBlob(html,fileName){
+  const blob=new Blob([html],{type:"text/html"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=fileName;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),250);
+}
+
+function buildRegionalCorrespondenceHtml(context,results){
+  const actualEntity=context.actualEntity||{};
+  const baselineEntity=context.baselineEntity||{};
+  const actualMonth=formatBudgetPeriodLabel(context.actualPeriod||"",true)||"Actual month";
+  const baselineMonth=formatBudgetPeriodLabel(context.baselinePeriod||"",true)||"Baseline month";
+  const title=`${actualEntity.label||"Community"} vs ${baselineEntity.label||"Baseline"} - Regional Variance Brief`;
+  const favorableLines=(results.favorableRows||[]).slice(0,5);
+  const unfavorableLines=(results.unfavorableRows||[]).slice(0,5);
+  const sectionLines=(results.sectionSummary||[]).slice(0,8);
+  const netLabel=results.netFavorable>=0?"favorable":"unfavorable";
+  const body=[];
+  body.push('<div style="max-width:980px;margin:0 auto;padding:28px;font-family:Arial,Helvetica,sans-serif;color:#102a43;background:#f8fafc;">');
+  body.push('<div style="background:linear-gradient(135deg,'+D+',#0f5a73);color:white;border-radius:18px;padding:24px 26px;margin-bottom:16px;">');
+  body.push('<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.8;font-weight:700">RISE · ATLAS Internal Correspondence</div>');
+  body.push('<div style="font-size:28px;font-weight:800;margin-top:6px">'+title+'</div>');
+  body.push('<div style="margin-top:8px;font-size:13px;line-height:1.5;max-width:760px">Prepared for Regional review. This memo compares the selected actual month against the chosen baseline budget month and highlights the lines that are driving the variance.</div>');
+  body.push('</div>');
+  body.push('<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px;">');
+  [
+    {l:"Actual Community",v:actualEntity.label||""},
+    {l:"Actual Month",v:actualMonth},
+    {l:"Baseline Community",v:baselineEntity.label||""},
+    {l:"Baseline Month",v:baselineMonth}
+  ].forEach(card=>{
+    body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:12px;padding:12px 14px;">');
+    body.push('<div style="font-size:10px;font-weight:700;color:#829ab1;text-transform:uppercase;letter-spacing:.06em">'+card.l+'</div>');
+    body.push('<div style="font-size:14px;font-weight:700;color:'+D+';margin-top:4px">'+(card.v||"")+'</div>');
+    body.push('</div>');
+  });
+  body.push('</div>');
+  body.push('<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px;">');
+  [
+    {l:"Total Actual",v:f$(results.totalActual),c:D},
+    {l:"Total Baseline",v:f$(results.totalBudget),c:L},
+    {l:"Net Variance",v:f$(results.netFavorable),c:results.netFavorable>=0?G:R}
+  ].forEach(card=>{
+    body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:12px;padding:14px;">');
+    body.push('<div style="font-size:10px;font-weight:700;color:#829ab1;text-transform:uppercase;letter-spacing:.06em">'+card.l+'</div>');
+    body.push('<div style="font-size:24px;font-weight:800;color:'+card.c+';margin-top:4px">'+card.v+'</div>');
+    body.push('</div>');
+  });
+  body.push('</div>');
+  body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:14px;padding:18px;margin-bottom:14px;">');
+  body.push('<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">');
+  body.push('<div>');
+  body.push('<div style="font-size:12px;font-weight:800;color:#627d98;text-transform:uppercase;letter-spacing:.08em">Executive Note</div>');
+  body.push('<div style="font-size:20px;font-weight:800;color:'+D+';margin-top:3px">'+results.posture+'</div>');
+  body.push('</div>');
+  body.push('<div style="padding:8px 12px;border-radius:999px;background:'+(results.netFavorable>=0?"#ecfdf5":"#fef2f2")+';color:'+(results.netFavorable>=0?G:R)+';font-weight:700;font-size:12px;">'+f$(results.netFavorable)+' '+netLabel+'</div>');
+  body.push('</div>');
+  body.push('<div style="margin-top:8px;font-size:13px;line-height:1.55;color:#334155">'+results.postureDetail+' Top pressure is <strong>'+(results.topNegative&&results.topNegative.name||"none detected")+'</strong>.</div>');
+  body.push('</div>');
+  body.push('<div style="display:grid;grid-template-columns:1.05fr .95fr;gap:12px;margin-bottom:14px;">');
+  body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:14px;padding:16px;">');
+  body.push('<div style="font-size:13px;font-weight:800;color:'+D+';margin-bottom:10px">Top Unfavorable Lines</div>');
+  if(unfavorableLines.length){
+    body.push('<table style="width:100%;border-collapse:collapse;font-size:12px;">');
+    body.push('<thead><tr style="border-bottom:2px solid #e2e8f0"><th style="text-align:left;padding:6px">GL</th><th style="text-align:left;padding:6px">Account</th><th style="text-align:right;padding:6px">Variance</th></tr></thead><tbody>');
+    unfavorableLines.forEach(row=>{
+      body.push('<tr style="border-bottom:1px solid #eef2f7"><td style="padding:6px;font-family:monospace">'+row.gl+'</td><td style="padding:6px">'+row.name+'</td><td style="padding:6px;text-align:right;color:'+R+';font-weight:700">'+f$(Math.abs(row.variance))+'</td></tr>');
+    });
+    body.push('</tbody></table>');
+  } else {
+    body.push('<div style="font-size:12px;color:#829ab1">No unfavorable lines are standing out against the selected baseline month.</div>');
+  }
+  body.push('</div>');
+  body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:14px;padding:16px;">');
+  body.push('<div style="font-size:13px;font-weight:800;color:'+D+';margin-bottom:10px">Offsets / Favors</div>');
+  if(favorableLines.length){
+    body.push('<table style="width:100%;border-collapse:collapse;font-size:12px;">');
+    body.push('<thead><tr style="border-bottom:2px solid #e2e8f0"><th style="text-align:left;padding:6px">GL</th><th style="text-align:left;padding:6px">Account</th><th style="text-align:right;padding:6px">Benefit</th></tr></thead><tbody>');
+    favorableLines.forEach(row=>{
+      body.push('<tr style="border-bottom:1px solid #eef2f7"><td style="padding:6px;font-family:monospace">'+row.gl+'</td><td style="padding:6px">'+row.name+'</td><td style="padding:6px;text-align:right;color:'+G+';font-weight:700">'+f$(Math.abs(row.variance))+'</td></tr>');
+    });
+    body.push('</tbody></table>');
+  } else {
+    body.push('<div style="font-size:12px;color:#829ab1">No offsetting lines were identified.</div>');
+  }
+  body.push('</div></div>');
+  body.push('<div style="background:white;border:1px solid #d9e2ec;border-radius:14px;padding:16px;margin-bottom:14px;">');
+  body.push('<div style="font-size:13px;font-weight:800;color:'+D+';margin-bottom:10px">Section-Level Drilldown</div>');
+  body.push('<table style="width:100%;border-collapse:collapse;font-size:12px;">');
+  body.push('<thead><tr style="border-bottom:2px solid #e2e8f0"><th style="text-align:left;padding:6px">Section</th><th style="text-align:right;padding:6px">Actual</th><th style="text-align:right;padding:6px">Baseline</th><th style="text-align:right;padding:6px">Variance</th><th style="text-align:right;padding:6px">Mix</th></tr></thead><tbody>');
+  sectionLines.forEach(row=>{
+    body.push('<tr style="border-bottom:1px solid #eef2f7">');
+    body.push('<td style="padding:6px;font-weight:700;color:'+D+'">'+row.section+'</td>');
+    body.push('<td style="padding:6px;text-align:right">'+f$(row.actual)+'</td>');
+    body.push('<td style="padding:6px;text-align:right">'+f$(row.budget)+'</td>');
+    body.push('<td style="padding:6px;text-align:right;color:'+(row.variance>=0?R:G)+';font-weight:700">'+f$(Math.abs(row.variance))+'</td>');
+    body.push('<td style="padding:6px;text-align:right">'+row.favorableCount+' favorable / '+row.unfavorableCount+' unfavorable</td>');
+    body.push('</tr>');
+  });
+  body.push('</tbody></table></div>');
+  body.push('<div style="font-size:11px;color:#829ab1;text-align:center;margin-top:12px">Generated by ATLAS RISE Financial Accountability · Confidential internal use only</div>');
+  body.push('</div>');
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title></head><body style="margin:0;background:#f8fafc;">'+body.join('')+'</body></html>';
+}
+
+function generateRegionalBrief(){
+  const context=getCompareContext();
+  if(!context.actualDataset||!context.baselineBatch||!context.baselinePeriod){
+    window.alert("Select an actual report, baseline community, baseline budget, and baseline month first.");
+    return;
+  }
+  const results=buildActualVsBaselineResults(context);
+  if(!results||!results.rows.length){
+    window.alert("The selected comparison did not produce any comparable budget lines.");
+    return;
+  }
+  const html=buildRegionalCorrespondenceHtml(context,results);
+  const actualLabel=(context.actualEntity&&context.actualEntity.label||"Community").replace(/[^a-zA-Z0-9]/g,"_");
+  const baselineLabel=(context.baselineEntity&&context.baselineEntity.label||"Baseline").replace(/[^a-zA-Z0-9]/g,"_");
+  const periodLabel=(formatBudgetPeriodLabel(context.actualPeriod||"",false)||"Actual").replace(/[^a-zA-Z0-9]/g,"_");
+  downloadHtmlBlob(html,`${actualLabel}_vs_${baselineLabel}_${periodLabel}_Regional_Brief.html`);
+}
+
+function syncActualVsBaselineSelections(){
+  if(state.compareMode!=="actual_vs_baseline")return;
+  const communityEntities=getEntities().filter(e=>e.kind==="community");
+  if(!state.compareActualEntity||!communityEntities.some(e=>e.id===state.compareActualEntity)){
+    state.compareActualEntity=(state.entity&&getEntityById(state.entity).kind==="community"?state.entity:(communityEntities[0]&&communityEntities[0].id)||state.entity);
+  }
+  if(!state.compareBaselineEntity||!communityEntities.some(e=>e.id===state.compareBaselineEntity)){
+    state.compareBaselineEntity=state.baselineEntity||state.compareActualEntity||state.entity;
+  }
+  const actualCompareEntity=getEntityById(state.compareActualEntity);
+  const actualCompareList=getCompareDatasetList(actualCompareEntity.id);
+  if(!state.compareActualDs||!actualCompareList.some(d=>Number(d.id)===Number(state.compareActualDs))){
+    state.compareActualDs=getLatestDatasetIdForEntity(actualCompareEntity.id);
+  }
+  const baselineCompareEntity=getEntityById(state.compareBaselineEntity);
+  const baselineCompareBatches=getApprovedBudgetBatchOptions(baselineCompareEntity.label);
+  if(!state.compareBaselineBatchId||!baselineCompareBatches.some(batch=>String(batch.id)===String(state.compareBaselineBatchId))){
+    state.compareBaselineBatchId=baselineCompareBatches[0]&&baselineCompareBatches[0].id||null;
+  }
+  const baselineCompareBatch=baselineCompareBatches.find(batch=>String(batch.id)===String(state.compareBaselineBatchId))||baselineCompareBatches[0]||null;
+  const baselineComparePeriods=getApprovedBudgetPeriodsForBatch(baselineCompareBatch);
+  if(!state.compareBaselinePeriod||!baselineComparePeriods.includes(normalizeFinancialPeriodKey(state.compareBaselinePeriod))){
+    state.compareBaselinePeriod=baselineComparePeriods[baselineComparePeriods.length-1]||baselineComparePeriods[0]||null;
+  }
 }
 
 function summarizeApprovedBudgetRowsByGl(rows){
@@ -1085,7 +1378,7 @@ function buildPortfolioThresholdHighlights(){
     .filter(Boolean);
 }
 
-let state={store:{},entity:"rise_corp",tab:"dash",selDs:null,cmpA:null,cmpB:null,compareMode:"report_vs_budget",compareBudgetDs:null,compareArchivedBudgetId:null,compareUploadTarget:"a",search:"",filterSec:"all",filterSt:"all",sortCol:null,sortDir:"desc",uploadEntity:"rise_corp",baselineEntity:"rise_corp",loading:false,approvedBudgets:loadStoredApprovedBudgets()};
+let state={store:{},entity:"rise_corp",tab:"dash",selDs:null,cmpA:null,cmpB:null,compareMode:"report_vs_budget",compareBudgetDs:null,compareArchivedBudgetId:null,compareActualEntity:null,compareActualDs:null,compareBaselineEntity:null,compareBaselineBatchId:null,compareBaselinePeriod:null,compareUploadTarget:"a",search:"",filterSec:"all",filterSt:"all",sortCol:null,sortDir:"desc",uploadEntity:"rise_corp",baselineEntity:"rise_corp",loading:false,approvedBudgets:loadStoredApprovedBudgets()};
 {
   const storedState=loadStoredPageState();
   if(storedState&&typeof storedState==="object"){
@@ -1098,6 +1391,11 @@ let state={store:{},entity:"rise_corp",tab:"dash",selDs:null,cmpA:null,cmpB:null
     state.compareMode=storedState.compareMode||state.compareMode;
     state.compareBudgetDs=storedState.compareBudgetDs??state.compareBudgetDs;
     state.compareArchivedBudgetId=storedState.compareArchivedBudgetId??state.compareArchivedBudgetId;
+    state.compareActualEntity=storedState.compareActualEntity??state.compareActualEntity;
+    state.compareActualDs=storedState.compareActualDs??state.compareActualDs;
+    state.compareBaselineEntity=storedState.compareBaselineEntity??state.compareBaselineEntity;
+    state.compareBaselineBatchId=storedState.compareBaselineBatchId??state.compareBaselineBatchId;
+    state.compareBaselinePeriod=storedState.compareBaselinePeriod??state.compareBaselinePeriod;
     state.compareUploadTarget=storedState.compareUploadTarget||state.compareUploadTarget;
     state.search=storedState.search||state.search;
     state.filterSec=storedState.filterSec||state.filterSec;
@@ -1296,6 +1594,7 @@ const app=document.getElementById("app");
 const entities=getEntities();
 if(!entities.some(e=>e.id===state.entity))state.entity=entities[0]&&entities[0].id||"rise_corp";
 if(!entities.some(e=>e.id===state.uploadEntity))state.uploadEntity=state.entity;
+syncActualVsBaselineSelections();
 persistPageState();
 const active=getActive();
 const entityDS=getEntityDS();
@@ -1674,7 +1973,8 @@ html+='</div></div>';
 
 /* ===== COMPARE ===== */
 if(state.tab==="compare"){
-html+='<div style="font-size:14px;font-weight:700;color:'+D+';margin-bottom:10px">Period Comparison - '+curEntity.label+'</div>';
+const compareContextPreview=state.compareMode==="actual_vs_baseline"?getCompareContext():null;
+html+='<div style="font-size:14px;font-weight:700;color:'+D+';margin-bottom:10px">Period Comparison'+(state.compareMode==="actual_vs_baseline"&&compareContextPreview?' - '+compareContextPreview.actualEntity.label+' vs '+compareContextPreview.baselineEntity.label:' - '+curEntity.label)+'</div>';
 html+='<div style="display:grid;grid-template-columns:minmax(220px,260px) 1fr;gap:12px;align-items:end;margin-bottom:14px;">';
 html+='<div><label style="font-size:11px;font-weight:600;color:'+D+';display:block;margin-bottom:3px">Comparison Mode</label>';
 html+='<select id="compareModeSel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;">';
@@ -1693,11 +1993,48 @@ html+='</select></div>';
 if(state.compareMode==="actual_vs_baseline"&&!state.compareBudgetDs&&entityDS.length)state.compareBudgetDs=entityDS[entityDS.length-1].id;
 if(state.compareMode==="baseline_yoy"&&!state.compareArchivedBudgetId&&getApprovedBudgetArchivedBatches(curEntity.label).length)state.compareArchivedBudgetId=getApprovedBudgetArchivedBatches(curEntity.label)[0].id;
 if(state.compareMode==="actual_vs_baseline"){
-html+='<div><label style="font-size:11px;font-weight:600;color:'+L+';display:block;margin-bottom:3px">Actual Report / Month</label>';
-html+='<select id="compareBudgetSel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;"><option value="">Select...</option>';
-entityDS.forEach(d=>{html+='<option value="'+d.id+'"'+(state.compareBudgetDs===d.id?' selected':'')+'>'+d.name+' ('+d.period+')</option>';});
-html+='</select></div>';
-html+='<div style="font-size:11px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">Uses the active baseline workbook for '+curEntity.label+' and projects it to the selected month for true actual-vs-budget variance.</div>';
+const communityEntities=getEntities().filter(e=>e.kind==="community");
+if(!state.compareActualEntity||!communityEntities.some(e=>e.id===state.compareActualEntity))state.compareActualEntity=state.entity&&getEntityById(state.entity).kind==="community"?state.entity:(communityEntities[0]&&communityEntities[0].id)||state.entity;
+if(!state.compareBaselineEntity||!communityEntities.some(e=>e.id===state.compareBaselineEntity))state.compareBaselineEntity=state.baselineEntity||state.compareActualEntity||state.entity;
+const actualCompareEntity=getEntityById(state.compareActualEntity);
+const actualCompareList=getCompareDatasetList(actualCompareEntity.id);
+if(!state.compareActualDs||!actualCompareList.some(d=>Number(d.id)===Number(state.compareActualDs)))state.compareActualDs=getLatestDatasetIdForEntity(actualCompareEntity.id);
+const actualCompareDataset=actualCompareList.find(d=>Number(d.id)===Number(state.compareActualDs))||actualCompareList[actualCompareList.length-1]||null;
+const baselineCompareEntity=getEntityById(state.compareBaselineEntity);
+const baselineCompareBatches=getApprovedBudgetBatchOptions(baselineCompareEntity.label);
+if(!state.compareBaselineBatchId||!baselineCompareBatches.some(batch=>String(batch.id)===String(state.compareBaselineBatchId)))state.compareBaselineBatchId=baselineCompareBatches[0]&&baselineCompareBatches[0].id||null;
+const baselineCompareBatch=baselineCompareBatches.find(batch=>String(batch.id)===String(state.compareBaselineBatchId))||baselineCompareBatches[0]||null;
+const baselineComparePeriods=getApprovedBudgetPeriodsForBatch(baselineCompareBatch);
+if(!state.compareBaselinePeriod||!baselineComparePeriods.includes(normalizeFinancialPeriodKey(state.compareBaselinePeriod)))state.compareBaselinePeriod=baselineComparePeriods[baselineComparePeriods.length-1]||baselineComparePeriods[0]||null;
+html+='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">';
+html+='<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#f8fafc;">';
+html+='<div style="font-size:11px;font-weight:700;color:'+L+';margin-bottom:3px">Actual Community</div>';
+html+='<select id="compareActualEntitySel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;margin-bottom:8px;">';
+communityEntities.forEach(entity=>{html+='<option value="'+entity.id+'"'+(state.compareActualEntity===entity.id?' selected':'')+'>'+entity.label+'</option>';});
+html+='</select>';
+html+='<label style="font-size:10px;font-weight:700;color:#64748b;display:block;margin-bottom:3px">Actual Report / Month</label>';
+html+='<select id="compareActualSel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;"><option value="">Select...</option>';
+actualCompareList.forEach(d=>{html+='<option value="'+d.id+'"'+(state.compareActualDs===d.id?' selected':'')+'>'+d.name+' ('+d.period+')</option>';});
+html+='</select>';
+html+='<div style="font-size:10px;color:#64748b;margin-top:6px">'+(actualCompareDataset?actualCompareDataset.rowCount+' accounts loaded for this month.':'No uploaded actual report exists for this community yet.')+'</div>';
+html+='</div>';
+html+='<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#f8fafc;">';
+html+='<div style="font-size:11px;font-weight:700;color:'+P+';margin-bottom:3px">Baseline Community</div>';
+html+='<select id="compareBaselineEntitySel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;margin-bottom:8px;">';
+communityEntities.forEach(entity=>{html+='<option value="'+entity.id+'"'+(state.compareBaselineEntity===entity.id?' selected':'')+'>'+entity.label+'</option>';});
+html+='</select>';
+html+='<label style="font-size:10px;font-weight:700;color:#64748b;display:block;margin-bottom:3px">Baseline Budget Batch</label>';
+html+='<select id="compareBaselineBatchSel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;margin-bottom:8px;"><option value="">Select...</option>';
+baselineCompareBatches.forEach(batch=>{html+='<option value="'+batch.id+'"'+(String(state.compareBaselineBatchId)===String(batch.id)?' selected':'')+'>'+((batch.archivedAt?"Archived ":"Active ")+ (batch.yearLabel||"Baseline"))+' &middot; '+(batch.sourceFileName||"Budget workbook")+'</option>';});
+html+='</select>';
+html+='<label style="font-size:10px;font-weight:700;color:#64748b;display:block;margin-bottom:3px">Baseline Month</label>';
+html+='<select id="compareBaselinePeriodSel" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;"><option value="">Select...</option>';
+baselineComparePeriods.forEach(period=>{html+='<option value="'+period+'"'+(normalizeFinancialPeriodKey(state.compareBaselinePeriod)===period?' selected':'')+'>'+formatBudgetPeriodLabel(period,true)+'</option>';});
+html+='</select>';
+html+='<div style="font-size:10px;color:#64748b;margin-top:6px">'+(baselineCompareBatch?baselineCompareBatch.rowCount+' baseline rows available across '+baselineComparePeriods.length+' month(s).':'No baseline workbook has been saved for this community yet.')+'</div>';
+html+='</div>';
+html+='</div>';
+html+='<div style="margin-top:10px;font-size:11px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">Select any saved actual month from one community and compare it against any saved baseline month from another community. This compares exact baseline month values so the drilldown reflects the selected period only.</div>';
 } else if(state.compareMode==="baseline_yoy"){
 const archivedBudgetBatches=getApprovedBudgetArchivedBatches(curEntity.label);
 html+='<div><label style="font-size:11px;font-weight:600;color:'+P+';display:block;margin-bottom:3px">Archived Baseline</label>';
@@ -1750,18 +2087,27 @@ compareHeadingA=(cmpBudgetData.period||cmpBudgetData.name)+" Actual";
  compareHeadingB=approvedBudgetIndex.source==="approved"?(cmpBudgetData.period||cmpBudgetData.name)+" Approved Budget":(cmpBudgetData.period||cmpBudgetData.name)+" Budget";
 }
 } else if(state.compareMode==="actual_vs_baseline"){
-const cmpActualData=entityDS.find(d=>d.id===state.compareBudgetDs);
-const currentBudgetBatch=getApprovedBudgetCurrentBatch(curEntity.label);
-if(cmpActualData&&currentBudgetBatch){
-const budgetRows=currentBudgetBatch.rows||[];
-const budgetIndex=buildApprovedBudgetIndex(curEntity.label,cmpActualData.period,budgetRows);
-const mapA=_.keyBy(cmpActualData.rows,"gl");
-const allGLs=[...new Set([...Object.keys(mapA),...Object.keys(budgetIndex.map)])];
-compResults=allGLs.map(gl=>{const a=mapA[gl]||{yAct:0,yBud:0};const compareBudget=budgetIndex.map[gl]||0;const budgetBase=Math.abs(compareBudget||0);return{gl:gl,name:a.name||"",section:a.section||"",aYAct:a.yAct||0,bYAct:compareBudget||0,yoyChange:budgetBase?((a.yAct-compareBudget)/budgetBase)*100:0,worse:isInc(a)?(a.yAct<compareBudget):((a.yAct>compareBudget)&&budgetBase>0)};}).filter(r=>r.aYAct||r.bYAct);
-const bySec=_.groupBy(compResults,"section");
-compChartData=Object.entries(bySec).map(([sec,items])=>({section:sec,periodA:items.reduce((s,r)=>s+r.aYAct,0),periodB:items.reduce((s,r)=>s+r.bYAct,0)})).filter(r=>r.periodA||r.periodB);
-compareHeadingA=(cmpActualData.period||cmpActualData.name)+" Actual";
-compareHeadingB=(currentBudgetBatch.yearLabel||"Baseline")+" Budget";
+const compareContext=getCompareContext();
+const compareResults=buildActualVsBaselineResults(compareContext);
+if(compareResults){
+const actualRows=compareResults.rows||[];
+compResults=actualRows.map(row=>({
+  gl:row.gl,
+  name:row.name,
+  section:row.section,
+  aYAct:row.actual,
+  bYAct:row.budget,
+  yoyChange:row.budget?((row.actual-row.budget)/Math.abs(row.budget))*100:0,
+  worse:row.bad,
+  variance:row.variance,
+  variancePct:row.variancePct,
+  favorable:row.favorable
+}));
+const bySec=_.groupBy(actualRows,"section");
+compChartData=Object.entries(bySec).map(([sec,items])=>({section:sec,periodA:items.reduce((s,r)=>s+r.actual,0),periodB:items.reduce((s,r)=>s+r.budget,0)})).filter(r=>r.periodA||r.periodB);
+compareHeadingA=(compareContext.actualEntity.label||"Actual")+" · "+(formatBudgetPeriodLabel(compareContext.actualPeriod,true)||"Month");
+compareHeadingB=(compareContext.baselineEntity.label||"Baseline")+" · "+(formatBudgetPeriodLabel(compareContext.baselinePeriod,true)||"Budget");
+window._compareActualBaselineResults=compareResults;
 }
 } else if(state.compareMode==="baseline_yoy"){
 const currentBudgetBatch=getApprovedBudgetCurrentBatch(curEntity.label);
@@ -1794,6 +2140,31 @@ if(compChartData.length){
 html+='<div style="background:white;border-radius:8px;padding:12px;border:1px solid #e2e8f0;margin-bottom:12px;">';
 html+='<div style="font-size:12px;font-weight:700;color:'+D+';margin-bottom:6px">'+(state.compareMode==="report_vs_budget"?'Report vs Budget by Section':state.compareMode==="actual_vs_baseline"?'Actual vs Baseline by Section':state.compareMode==="baseline_yoy"?'Baseline Year Over Year by Section':'Section-Level YTD Comparison')+'</div>';
 html+='<canvas id="cmpChart" style="width:100%;height:220px;"></canvas></div>';
+if(state.compareMode==="actual_vs_baseline"&&window._compareActualBaselineResults){
+const brief=window._compareActualBaselineResults;
+const favorableCount=brief.rows.filter(row=>row.favorable).length;
+const unfavorableCount=brief.rows.filter(row=>row.bad).length;
+html+='<div style="background:linear-gradient(135deg,#ffffff,#f8fafc);border:1px solid #d9e2ec;border-radius:12px;padding:14px;margin-bottom:12px;">';
+html+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">';
+html+='<div><div style="font-size:12px;font-weight:800;color:'+D+';">Regional Variance Brief</div>';
+html+='<div style="font-size:11px;color:#64748b">Accountant-style snapshot for the selected actual month versus selected baseline month.</div></div>';
+html+='<button id="genRegionalBriefBtn" style="padding:8px 14px;background:'+D+';color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">&#128196; Generate Regional Brief</button>';
+html+='</div>';
+html+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;">';
+[
+  {l:"Net Variance",v:f$(brief.netFavorable),c:brief.netFavorable>=0?G:R},
+  {l:"Actual Total",v:f$(brief.totalActual),c:D},
+  {l:"Baseline Total",v:f$(brief.totalBudget),c:L},
+  {l:"Flags",v:favorableCount+' favor / '+unfavorableCount+' unfavor',c:A}
+].forEach(card=>{
+  html+='<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">';
+  html+='<div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase">'+card.l+'</div>';
+  html+='<div style="font-size:18px;font-weight:800;color:'+card.c+';margin-top:2px">'+card.v+'</div></div>';
+});
+html+='</div>';
+html+='<div style="font-size:11px;color:#475569;line-height:1.45">Top pressure: <strong>'+(brief.topNegative&&brief.topNegative.name||"none detected")+'</strong>. The summary below surfaces the biggest over-budget expense items and under-budget revenue items so you can speak to the regional team in plain accounting language.</div>';
+html+='</div>';
+}
 html+='<div style="background:white;border-radius:8px;border:1px solid #e2e8f0;overflow:auto;max-height:350px;">';
 html+='<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead style="position:sticky;top:0;background:white"><tr style="border-bottom:2px solid #e2e8f0">';
 html+='<th style="text-align:left;padding:5px">GL</th><th style="text-align:left;padding:5px">Account</th>';
@@ -1801,7 +2172,9 @@ html+='<th style="text-align:right;padding:5px">'+compareHeadingA+'</th>';
 html+='<th style="text-align:right;padding:5px">'+compareHeadingB+'</th>';
 html+='<th style="text-align:right;padding:5px">'+(state.compareMode==="report_vs_budget"||state.compareMode==="actual_vs_baseline"?'Var % to Budget':state.compareMode==="baseline_yoy"?'YoY Chg %':'MoM Chg %')+'</th></tr></thead><tbody>';
 compResults.sort((a,b)=>Math.abs(b.yoyChange)-Math.abs(a.yoyChange)).slice(0,60).forEach(r=>{
-const bad=(!r.section.toLowerCase().includes("income")&&r.yoyChange>10)||(r.section.toLowerCase().includes("income")&&r.yoyChange<-10);
+const bad=state.compareMode==="actual_vs_baseline"
+  ? !!r.worse
+  : ((!r.section.toLowerCase().includes("income")&&r.yoyChange>10)||(r.section.toLowerCase().includes("income")&&r.yoyChange<-10));
 html+='<tr style="border-bottom:1px solid #f1f5f9;background:'+(bad?"#fff5f5":"white")+'">';
 html+='<td style="padding:4px;font-family:monospace;font-size:9px">'+r.gl+'</td>';
 html+='<td style="padding:4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.name+'</td>';
@@ -1956,6 +2329,16 @@ if(existing){try{await removeDatasetFromAtlasStore(existing,getEntityById(entity
 }));
 const compareModeSel=document.getElementById("compareModeSel");
 if(compareModeSel)compareModeSel.addEventListener("change",()=>{state.compareMode=compareModeSel.value||"report_vs_budget";render();});
+const compareActualEntitySel=document.getElementById("compareActualEntitySel");
+if(compareActualEntitySel)compareActualEntitySel.addEventListener("change",()=>{state.compareActualEntity=compareActualEntitySel.value||null;state.compareActualDs=null;render();});
+const compareActualSel=document.getElementById("compareActualSel");
+if(compareActualSel)compareActualSel.addEventListener("change",()=>{state.compareActualDs=compareActualSel.value?parseInt(compareActualSel.value):null;render();});
+const compareBaselineEntitySel=document.getElementById("compareBaselineEntitySel");
+if(compareBaselineEntitySel)compareBaselineEntitySel.addEventListener("change",()=>{state.compareBaselineEntity=compareBaselineEntitySel.value||null;state.compareBaselineBatchId=null;state.compareBaselinePeriod=null;render();});
+const compareBaselineBatchSel=document.getElementById("compareBaselineBatchSel");
+if(compareBaselineBatchSel)compareBaselineBatchSel.addEventListener("change",()=>{state.compareBaselineBatchId=compareBaselineBatchSel.value||null;state.compareBaselinePeriod=null;render();});
+const compareBaselinePeriodSel=document.getElementById("compareBaselinePeriodSel");
+if(compareBaselinePeriodSel)compareBaselinePeriodSel.addEventListener("change",()=>{state.compareBaselinePeriod=compareBaselinePeriodSel.value||null;render();});
 const cmpASel=document.getElementById("cmpASel");
 if(cmpASel)cmpASel.addEventListener("change",()=>{state.cmpA=cmpASel.value?parseInt(cmpASel.value):null;render();});
 const cmpBSel=document.getElementById("cmpBSel");
@@ -1974,8 +2357,10 @@ if(baselineEntSel)baselineEntSel.addEventListener("change",()=>{state.baselineEn
 const archiveBudgetBtn=document.getElementById("archiveBudgetBtn");
 if(archiveBudgetBtn)archiveBudgetBtn.addEventListener("click",async()=>{const target=getApprovedBudgetCurrentBatch((getEntityById(state.baselineEntity||state.entity)||{}).label);if(target&&await archiveApprovedBudgetBatch(target.property,target.id)){render();}});
 const openBudgetCompareBtn=document.getElementById("openBudgetCompareBtn");
-if(openBudgetCompareBtn)openBudgetCompareBtn.addEventListener("click",()=>{state.compareMode="actual_vs_baseline";state.tab="compare";render();});
+if(openBudgetCompareBtn)openBudgetCompareBtn.addEventListener("click",()=>{state.compareMode="actual_vs_baseline";state.compareActualEntity=state.entity;state.compareBaselineEntity=state.baselineEntity||state.entity;state.compareActualDs=null;state.compareBaselineBatchId=null;state.compareBaselinePeriod=null;state.tab="compare";render();});
 document.querySelectorAll(".compareArchivedBudgetBtn").forEach(btn=>btn.addEventListener("click",()=>{state.compareMode="baseline_yoy";state.compareArchivedBudgetId=btn.dataset.id||null;state.tab="compare";render();}));
+const genRegionalBriefBtn=document.getElementById("genRegionalBriefBtn");
+if(genRegionalBriefBtn)genRegionalBriefBtn.addEventListener("click",generateRegionalBrief);
 const uploadEntSel=document.getElementById("uploadEntSel");
 if(uploadEntSel)uploadEntSel.addEventListener("change",()=>{if(state.tab==="upload")state.uploadEntity=uploadEntSel.value;else state.entity=uploadEntSel.value;render();});
 const dropZone=document.getElementById("dropZone");

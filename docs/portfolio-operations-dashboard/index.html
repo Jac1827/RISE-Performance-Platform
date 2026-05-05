@@ -5177,7 +5177,7 @@ function setFloorPlanSelectionIds(section, propName, ids = []) {
   const key = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const bucket = getFloorPlanSelectionSection(section);
   bucket[key] = [...new Set((Array.isArray(ids) ? ids : []).map(id => String(id || "").trim()).filter(Boolean))];
-  renderTab();
+  syncFloorPlanSelectionUi(section, propName);
 }
 
 function toggleFloorPlanSelection(section, propName, id) {
@@ -5188,7 +5188,7 @@ function toggleFloorPlanSelection(section, propName, id) {
   if (!lookup) return;
   const next = current.includes(lookup) ? current.filter(entry => entry !== lookup) : [...current, lookup];
   bucket[key] = next;
-  renderTab();
+  syncFloorPlanSelectionUi(section, propName);
 }
 
 function clearFloorPlanSelection(section, propName) {
@@ -5213,6 +5213,31 @@ function selectAllFloorPlans(section, propName, ids = []) {
   const currentIds = getFloorPlanSelectionIds(section, propName);
   const allSelected = availableIds.length > 0 && availableIds.every(id => currentIds.includes(id));
   setFloorPlanSelectionIds(section, propName, allSelected ? [] : availableIds);
+}
+
+function syncFloorPlanSelectionUi(section, propName) {
+  const scope = document.querySelector(`[data-floor-plan-selection-section="${section}"]`);
+  if (!scope) return;
+  const selectedIds = new Set(getFloorPlanSelectionIds(section, propName));
+  const checkboxes = Array.from(scope.querySelectorAll("[data-floor-plan-row-checkbox]"));
+  checkboxes.forEach(input => {
+    const rowId = String(input.getAttribute("data-floor-plan-id") || "").trim();
+    input.checked = rowId ? selectedIds.has(rowId) : false;
+  });
+  const totalRowCount = checkboxes.length;
+  const selectedCount = checkboxes.reduce((count, input) => count + (input.checked ? 1 : 0), 0);
+  const selectAllButton = scope.querySelector("[data-floor-plan-select-all-button]");
+  if (selectAllButton) {
+    selectAllButton.textContent = totalRowCount > 0 && selectedCount === totalRowCount ? "Clear All" : "Select All";
+  }
+  const clearButton = scope.querySelector("[data-floor-plan-clear-button]");
+  if (clearButton) {
+    clearButton.disabled = selectedCount === 0;
+  }
+  const deleteButton = scope.querySelector("[data-floor-plan-delete-button]");
+  if (deleteButton) {
+    deleteButton.disabled = selectedCount === 0;
+  }
 }
 
 function deleteSelectedCommunityFloorPlans(propName) {
@@ -7119,7 +7144,7 @@ function renderPortfolioScopedSetupTab() {
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
         return `<div style="display:grid;grid-template-columns:28px minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(selectedName)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(row.id || ""))}" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(selectedName)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
@@ -7182,7 +7207,7 @@ function renderPortfolioScopedSetupTab() {
         </div>
       </div>
     </div>
-    <div style="margin-bottom:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+    <div data-floor-plan-selection-section="community" style="margin-bottom:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
@@ -7214,9 +7239,9 @@ function renderPortfolioScopedSetupTab() {
             <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedCommunityFloorPlanField(${JSON.stringify(selectedName)})">Apply to Selected</button>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('community', ${JSON.stringify(selectedName)})">Select All</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('community', ${JSON.stringify(selectedName)})">Clear</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('community', ${JSON.stringify(selectedName)})">Select All</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('community', ${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           </div>
           <button class="btn btn-gray btn-sm" type="button" onclick='addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})'>＋ Add Floor Plan</button>
           <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${normalizeMarketSurveyFloorPlanRates(selectedRecord.marketSurveyData?.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
@@ -7572,7 +7597,7 @@ function renderSetupTab() {
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
         return `<div style="display:grid;grid-template-columns:28px minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(getProp().name)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(row.id || ""))}" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(getProp().name)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
@@ -7630,7 +7655,7 @@ function renderSetupTab() {
     ? marketSurveyFloorPlanData.map((rate, idx) => `
         <div style="display:grid;grid-template-columns:28px minmax(170px,1.15fr) repeat(5,minmax(90px,0.72fr)) minmax(130px,1fr) auto;gap:8px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid rgba(15,23,42,0.08)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(rate.id || ""))}" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Plan name</div>
@@ -7790,7 +7815,7 @@ function renderSetupTab() {
         <textarea placeholder="This feeds the fill-in pricing recommendation slide for this community." onchange="updateMarketSurveyField('pricingNotes',this.value)">${escapeHtml(marketSurveyData.pricingNotes)}</textarea>
       </div>
     </div>
-    <div style="margin-top:14px;padding:14px;border:1px solid rgba(68,147,248,0.18);border-radius:12px;background:rgba(68,147,248,0.04)">
+    <div data-floor-plan-selection-section="survey" style="margin-top:14px;padding:14px;border:1px solid rgba(68,147,248,0.18);border-radius:12px;background:rgba(68,147,248,0.04)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div style="font-size:0.78rem;font-weight:700;color:var(--text)">Floor Plan Marketed Rates</div>
@@ -7820,9 +7845,9 @@ function renderSetupTab() {
             </div>
             <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedMarketSurveyFloorPlanField(${JSON.stringify(currentCommunityName)})">Apply to Selected</button>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)})">${selectedMarketSurveyFloorPlanIds.length === marketSurveyFloorPlanData.length && marketSurveyFloorPlanData.length > 0 ? "Clear All" : "Select All"}</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})">Clear</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)})">${selectedMarketSurveyFloorPlanIds.length === marketSurveyFloorPlanData.length && marketSurveyFloorPlanData.length > 0 ? "Clear All" : "Select All"}</button>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="addMarketSurveyFloorPlanRate()">＋ Add Marketed Rate</button>
           <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(currentCommunityName)})' ${marketSurveyFloorPlanData.length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
@@ -7902,7 +7927,7 @@ function renderSetupTab() {
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">Use the direct floor-plan / pricing page when it differs from the main website.</div>
         </div>
       </div>
-      <div id="community-floor-plan-budget-setup" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+      <div id="community-floor-plan-budget-setup" data-floor-plan-selection-section="community" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
           <div>
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Investor Community Email Setup</div>
@@ -7964,9 +7989,9 @@ function renderSetupTab() {
             <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedCommunityFloorPlanField(${JSON.stringify(p.name)})">Apply to Selected</button>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('community', ${JSON.stringify(p.name)})">${selectedCommunityFloorPlanIds.length === floorPlanVarianceData.rows.length && floorPlanVarianceData.rows.length > 0 ? "Clear All" : "Select All"}</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('community', ${JSON.stringify(p.name)})">Clear</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('community', ${JSON.stringify(p.name)})">${selectedCommunityFloorPlanIds.length === floorPlanVarianceData.rows.length && floorPlanVarianceData.rows.length > 0 ? "Clear All" : "Select All"}</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('community', ${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           </div>
           <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
           <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
