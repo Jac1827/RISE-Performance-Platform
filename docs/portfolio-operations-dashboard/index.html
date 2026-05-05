@@ -1334,8 +1334,35 @@ function normalizeMarketSurveyFloorPlanRates(data) {
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
+      propertyName: String(row?.propertyName ?? row?.property ?? "").trim(),
       sourceSheet: String(row?.sourceSheet ?? "").trim()
     };
+  });
+}
+
+function getCommunityFloorPlanNameSet(record = {}) {
+  return new Set(
+    normalizeCommunityFloorPlans(record?.communityFloorPlans)
+      .map(plan => normalizeFloorPlanLookupName(plan?.name))
+      .filter(Boolean)
+  );
+}
+
+function filterMarketSurveyFloorPlanRatesForCommunity(rates = [], record = {}, communityName = "") {
+  const normalizedRates = normalizeMarketSurveyFloorPlanRates(rates);
+  if (normalizedRates.length === 0) return [];
+  const allowedNames = getCommunityFloorPlanNameSet(record);
+  const normalizedCommunity = normalizeCommunityLookupName(matchPropertyName(communityName || record?.propertyName || "", { fallbackToCurrent: false }) || communityName || record?.propertyName || "");
+  const hasPropertyNames = normalizedRates.some(rate => normalizeCommunityLookupName(rate.propertyName || ""));
+  return normalizedRates.filter(rate => {
+    const rateName = normalizeFloorPlanLookupName(rate.name);
+    if (!rateName) return false;
+    if (allowedNames.size > 0) return allowedNames.has(rateName);
+    if (hasPropertyNames && normalizedCommunity) {
+      const rateProperty = normalizeCommunityLookupName(matchPropertyName(rate.propertyName, { fallbackToCurrent: false }) || rate.propertyName);
+      return rateProperty === normalizedCommunity;
+    }
+    return true;
   });
 }
 
@@ -5195,7 +5222,7 @@ function getAllFloorPlanSelectionIds(section, propName) {
   }
   if (section === "survey") {
     const record = getPortfolioSetupCommunityRecord(key);
-    return normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => String(rate.id || "").trim()).filter(Boolean);
+    return filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, key).map(rate => String(rate.id || "").trim()).filter(Boolean);
   }
   return [];
 }
@@ -5227,7 +5254,7 @@ function deleteSelectedMarketSurveyFloorPlanRates(propName) {
   }
   record.marketSurveyData = normalizeMarketSurveyData({
     ...record.marketSurveyData,
-    floorPlanRates: normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).filter(rate => !selectedIds.has(String(rate.id || "").trim()))
+    floorPlanRates: filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, propName).filter(rate => !selectedIds.has(String(rate.id || "").trim()))
   });
   if (propName === getProp().name) {
     marketSurveyData = record.marketSurveyData;
@@ -5274,7 +5301,7 @@ function applySelectedCommunityFloorPlanField(propName) {
 
 function importPortfolioCommunityFloorPlansFromSurvey(propName) {
   const record = getPortfolioSetupCommunityRecord(propName);
-  const surveyRates = normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates);
+  const surveyRates = filterMarketSurveyFloorPlanRatesForCommunity(record.marketSurveyData?.floorPlanRates, record, propName);
   if (surveyRates.length === 0) {
     alert("No APTIQ floor-plan rates were found for this community yet. Upload the survey workbook first, then import the floor plans.");
     return false;
@@ -7166,7 +7193,7 @@ function renderPortfolioScopedSetupTab() {
             <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           </div>
           <button class="btn btn-gray btn-sm" type="button" onclick='addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})'>＋ Add Floor Plan</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${normalizeMarketSurveyFloorPlanRates(selectedRecord.marketSurveyData?.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${filterMarketSurveyFloorPlanRatesForCommunity(selectedRecord.marketSurveyData?.floorPlanRates, selectedRecord, selectedName).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
       </div>
       <div style="display:grid;gap:0">
@@ -7564,8 +7591,13 @@ function renderSetupTab() {
         <div style="display:flex;flex-wrap:wrap;gap:8px">${floorPlanVarianceData.unmatchedRates.map(rate => `<span style="display:inline-flex;gap:6px;align-items:center;padding:6px 8px;border-radius:999px;background:var(--bg2);border:1px solid rgba(217,153,34,0.35);font-size:0.66rem;color:var(--text)">${escapeHtml(rate.name || "Unnamed plan")}<strong style="color:#9d5d14">${rate.marketRent != null ? formatDlrCurrency(rate.marketRent) : "—"}</strong></span>`).join("")}</div>
       </div>`
     : "";
-  const marketSurveyFloorPlanData = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates);
   const currentCommunityName = getProp().name;
+  const currentCommunityRecord = getPortfolioSetupCommunityRecord(currentCommunityName);
+  const marketSurveyFloorPlanData = filterMarketSurveyFloorPlanRatesForCommunity(
+    marketSurveyData.floorPlanRates,
+    currentCommunityRecord,
+    currentCommunityName
+  );
   const selectedMarketSurveyFloorPlanIds = getFloorPlanSelectionIds("survey", currentCommunityName);
   const selectedMarketSurveyFloorPlanIdSet = new Set(selectedMarketSurveyFloorPlanIds);
   const marketSurveyFloorPlanRows = marketSurveyFloorPlanData.length
@@ -7867,7 +7899,7 @@ function renderSetupTab() {
               <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
             </div>
             <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
+            <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${filterMarketSurveyFloorPlanRatesForCommunity(marketSurveyData.floorPlanRates, getPortfolioSetupCommunityRecord(p.name), p.name).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
           </div>
         </div>
         <div style="display:grid;gap:0">${communityFloorPlanRows}</div>
@@ -8032,7 +8064,7 @@ function addMarketSurveyFloorPlanRate() {
     ...marketSurveyData,
     floorPlanRates: [
       ...normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates),
-      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" }
+      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, propertyName: "", sourceSheet: "" }
     ]
   });
   renderTab();
@@ -8041,7 +8073,7 @@ function addMarketSurveyFloorPlanRate() {
 function updateMarketSurveyFloorPlanField(index, field, value) {
   const nextRates = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).map(entry => ({ ...entry }));
   while (nextRates.length <= index) {
-    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" });
+    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, propertyName: "", sourceSheet: "" });
   }
   const target = nextRates[index];
   if (!target) return;
@@ -8098,7 +8130,7 @@ function getFloorPlanMatchScore(plan, marketRate) {
 
 function buildCommunityFloorPlanVarianceRows(floorPlans = communityFloorPlans, surveyData = marketSurveyData) {
   const normalizedPlans = normalizeCommunityFloorPlans(floorPlans);
-  const normalizedRates = normalizeMarketSurveyFloorPlanRates(surveyData?.floorPlanRates);
+  const normalizedRates = filterMarketSurveyFloorPlanRatesForCommunity(surveyData?.floorPlanRates, { communityFloorPlans: normalizedPlans }, surveyData?.propertyName || "");
   const usedRateIds = new Set();
   const rows = normalizedPlans.map(plan => {
     const match = normalizedRates.reduce((best, candidate) => {
@@ -10341,6 +10373,7 @@ function extractFloorPlanRatesFromFloorPlanDataSheet(rows = [], targetCommunity 
       sqft: sqft || null,
       beds: beds || null,
       baths: baths || null,
+      propertyName,
       sourceSheet: "Floor Plan Data"
     });
   }
@@ -10401,6 +10434,7 @@ function extractMarketSurveyFloorPlanRates(workbook, targetCommunity = "") {
         sqft: sqft || null,
         beds: beds || null,
         baths: baths || null,
+        propertyName: "",
         sourceSheet: sheetName
       });
     }
@@ -10818,6 +10852,14 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     ? getCurrentCommunityRecord()
     : normalizeSavedCommunityRecord(matchedName, savedData[matchedName]);
   const existingSurvey = normalizeMarketSurveyData(record.marketSurveyData);
+  const subjectFloorPlanRates = filterMarketSurveyFloorPlanRatesForCommunity(
+    surveyInput.floorPlanRates ?? existingSurvey.floorPlanRates,
+    record,
+    matchedName
+  );
+  const nextFloorPlanRates = subjectFloorPlanRates.length > 0
+    ? subjectFloorPlanRates
+    : normalizeMarketSurveyFloorPlanRates(existingSurvey.floorPlanRates);
   const nextSurvey = normalizeMarketSurveyData({
     ...existingSurvey,
     sourceFileName: surveyInput.sourceFileName || existingSurvey.sourceFileName,
@@ -10851,8 +10893,8 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     surveyComps: Array.isArray(surveyInput.surveyComps) && surveyInput.surveyComps.length > 0
       ? surveyInput.surveyComps
       : existingSurvey.surveyComps,
-    floorPlanRates: Array.isArray(surveyInput.floorPlanRates) && surveyInput.floorPlanRates.length > 0
-      ? surveyInput.floorPlanRates
+    floorPlanRates: nextFloorPlanRates.length > 0
+      ? nextFloorPlanRates
       : existingSurvey.floorPlanRates
   });
   const periodKey = getSelectedDashboardPeriodKey();
@@ -13346,7 +13388,7 @@ function compLowMonthly(playbook, market) {
 
 function buildCompCalculatorFloorPlanRows(detail, market) {
   const subjectPlans = normalizeCommunityFloorPlans(detail?.record?.communityFloorPlans);
-  const surveyRates = normalizeMarketSurveyFloorPlanRates(market?.floorPlanRates);
+  const surveyRates = filterMarketSurveyFloorPlanRatesForCommunity(market?.floorPlanRates, detail?.record ?? {}, detail?.name ?? "");
   const usedRateIds = new Set();
   const rows = subjectPlans.map(plan => {
     const match = surveyRates.reduce((best, candidate) => {
@@ -13442,12 +13484,12 @@ function buildCompCalculatorSnapshotData(detail, market, monthIdx = getSelectedD
   const floorPlanRows = buildCompCalculatorFloorPlanRows(detail, market);
   const floorPlanSummary = buildCompCalculatorFloorPlanSummary(floorPlanRows);
   const subjectSqft = compCalcAverage(floorPlanRows.map(row => row.marketedRent ? Number(row.sqft ?? 0) : 0).filter(Boolean));
-  const compSqft = compCalcAverage((market.floorPlanRates ?? []).map(rate => Number(rate.sqft ?? 0)).filter(Boolean));
+  const compSqft = compCalcAverage(filterMarketSurveyFloorPlanRatesForCommunity(market.floorPlanRates, detail?.record ?? {}, detail?.name ?? "").map(rate => Number(rate.sqft ?? 0)).filter(Boolean));
   const floorPlanContext = {
     subjectAvgSqft: subjectSqft,
     compAvgSqft: compSqft,
     subjectPlanCount: floorPlanRows.filter(row => Number(row.marketedRent ?? 0) > 0).length,
-    compPlanCount: Array.isArray(market.floorPlanRates) ? market.floorPlanRates.length : 0
+    compPlanCount: filterMarketSurveyFloorPlanRatesForCommunity(market.floorPlanRates, detail?.record ?? {}, detail?.name ?? "").length
   };
   const recommendation = buildCompCalculatorRecommendation(market, activity, floorPlanContext);
   const playbook = buildCompCalculatorConcessionPlaybook(market, activity);
