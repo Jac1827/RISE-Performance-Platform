@@ -3457,6 +3457,12 @@ function normalizeCorporateLeaseUnits(value, totalUnits = null) {
   return maxUnits == null ? numeric : Math.min(numeric, maxUnits);
 }
 
+function getComparableOccupancyUnits(rawUnits, corporateUnits = 0) {
+  const total = Math.max(0, Number(rawUnits) || 0);
+  const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
+  return Math.max(total - corporate, 0);
+}
+
 function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
   const total = Math.max(0, Number(totalUnits) || 0);
   const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
@@ -3465,7 +3471,8 @@ function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
 
 function getOccupancyPctFromUnits(occupiedUnits, totalUnits, corporateUnits = 0) {
   const baseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  return baseUnits > 0 ? (Math.max(0, Number(occupiedUnits) || 0) / baseUnits) * 100 : 0;
+  const comparableUnits = getComparableOccupancyUnits(occupiedUnits, corporateUnits);
+  return baseUnits > 0 ? (comparableUnits / baseUnits) * 100 : 0;
 }
 
 function currentOccPct() { return getOccupancyPctFromUnits(currentOccupied, getTotalUnits(), corporateLeaseUnits); }
@@ -3649,22 +3656,22 @@ function getLeasedTrendPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  let reverseRunning = currentLeased;
-  series[currentMonth] = (currentLeased / occupancyBaseUnits) * 100;
+  let reverseRunning = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
+  series[currentMonth] = (reverseRunning / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.leasedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = snapshotUnits;
+      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, totalUnits);
+      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningLeased = currentLeased;
+  let runningLeased = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
   for (let i = currentMonth + 1; i < 12; i++) {
     runningLeased = Math.max(runningLeased - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningLeased = Math.min(runningLeased, totalUnits);
+    runningLeased = Math.min(runningLeased, occupancyBaseUnits);
     series[i] = (runningLeased / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3675,22 +3682,22 @@ function getEndingOccPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  let reverseRunning = currentOccupied;
-  series[currentMonth] = (currentOccupied / occupancyBaseUnits) * 100;
+  let reverseRunning = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
+  series[currentMonth] = (reverseRunning / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.occupiedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = snapshotUnits;
+      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, totalUnits);
+      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningOcc = currentOccupied;
+  let runningOcc = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
   for (let i = currentMonth + 1; i < 12; i++) {
     runningOcc = Math.max(runningOcc - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningOcc = Math.min(runningOcc, totalUnits);
+    runningOcc = Math.min(runningOcc, occupancyBaseUnits);
     series[i] = (runningOcc / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3705,15 +3712,16 @@ function formatGoalGapLabel(gapUnits, onTrack) {
 
 function getUpcomingOccupancyGoalNeed() {
   const totalUnits = getTotalUnits();
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const nextMonth = Math.min(currentMonth + 1, 11);
   const targetPct = (savedBudgetTargets[nextMonth] > 0
     ? Number(savedBudgetTargets[nextMonth]) || 0
     : Number(monthlyData[nextMonth]?.budgetOcc) || 0);
-  const targetUnits = totalUnits > 0 && targetPct > 0 ? Math.ceil(totalUnits * targetPct / 100) : 0;
+  const targetUnits = occupancyBaseUnits > 0 && targetPct > 0 ? Math.ceil(occupancyBaseUnits * targetPct / 100) : 0;
   const moveOutMeta = getEffectiveMoveOutsForMonth(nextMonth);
   const scheduledMoveOuts = moveOutMeta.effective;
   const scheduledMoveIns = Number(monthlyData[nextMonth]?.moveIns) || 0;
-  const projectedOccupied = Math.max(currentOccupied - scheduledMoveOuts + scheduledMoveIns, 0);
+  const projectedOccupied = Math.max(getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits) - scheduledMoveOuts + scheduledMoveIns, 0);
   const unitsNeeded = targetUnits > 0 ? Math.max(targetUnits - projectedOccupied, 0) : 0;
   return {
     nextMonth,
@@ -3776,8 +3784,8 @@ function getAllCurves() {
 function computeScheduleFromContext(ctx) {
   const totalUnits = Number(ctx.totalUnits) || 0;
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, ctx.corporateLeaseUnits);
-  const scopeCurrentOccupied = Number(ctx.currentOccupied) || 0;
-  const scopeCurrentLeased = Number(ctx.currentLeased) || 0;
+  const scopeCurrentOccupied = getComparableOccupancyUnits(ctx.currentOccupied, ctx.corporateLeaseUnits);
+  const scopeCurrentLeased = getComparableOccupancyUnits(ctx.currentLeased, ctx.corporateLeaseUnits);
   const scopeOccupancyGoal = Number(ctx.occupancyGoal) || 0;
   const scopeLeasedGoal = Number(ctx.leasedGoal) || 0;
   const scopeCurrentMonth = Number.isInteger(ctx.currentMonth) ? ctx.currentMonth : 0;
@@ -3829,16 +3837,16 @@ function computeScheduleFromContext(ctx) {
     const budgetLeasedPct = Math.min(occTarget + leasedGap, scopeLeasedGoal);
     const leasedTarget    = baseLeasedPct >= budgetLeasedPct ? baseLeasedPct : budgetLeasedPct;
 
-    const netOccNeeded    = Math.max(Math.ceil(totalUnits * occTarget    / 100) - baseOcc,    0);
-    const netLeasedNeeded = Math.max(Math.ceil(totalUnits * leasedTarget / 100) - baseLeased, 0);
+    const netOccNeeded    = Math.max(Math.ceil(occupancyBaseUnits * occTarget    / 100) - baseOcc,    0);
+    const netLeasedNeeded = Math.max(Math.ceil(occupancyBaseUnits * leasedTarget / 100) - baseLeased, 0);
     const netNeeded       = netOccNeeded;
 
     // Gross leases = net needed + replacement for move-outs
     const moveOutsToReplace = moveOuts;
     const recommendedGrossLeases = moveOutsToReplace + netNeeded;
 
-    const newOccupied = Math.min(baseOcc    + netOccNeeded, totalUnits);
-    const newLeased   = Math.min(baseLeased + netNeeded,    totalUnits);
+    const newOccupied = Math.min(baseOcc    + netOccNeeded, occupancyBaseUnits);
+    const newLeased   = Math.min(baseLeased + netNeeded,    occupancyBaseUnits);
 
     simOcc    = newOccupied;
     simLeased = newLeased;
@@ -4014,8 +4022,11 @@ function renderPropGrid() {
     const selectedMonth = getSelectedDashboardMonthIndex();
     const occupiedPct = isPortfolioWorkspaceSelected() ? getSummaryOccPct(aggregate) : (summary ? getSummaryOccPct(summary) : 0);
     const leasedPct = isPortfolioWorkspaceSelected() ? getSummaryLeasedPct(aggregate) : (summary ? getSummaryLeasedPct(summary) : 0);
-    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0));
-    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? (Number(currentRecord.currentLeased) || 0));
+    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? getComparableOccupancyUnits(currentRecord.currentOccupied, currentRecord.corporateLeaseUnits));
+    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? getComparableOccupancyUnits(currentRecord.currentLeased, currentRecord.corporateLeaseUnits));
+    const occupancyBaseUnits = isPortfolioWorkspaceSelected()
+      ? (aggregate.occupancyBaseUnits ?? aggregate.totalUnits ?? 0)
+      : (summary?.occupancyBaseUnits ?? getOccupancyBaseUnits(totalUnitsForCurrent, currentRecord.corporateLeaseUnits));
     const applicationsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applications ?? 0) : Math.round(appMetrics.applications || 0);
     const approvalsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applicationsApproved ?? 0) : Math.round(appMetrics.approvals || 0);
     const pendingMtd = isPortfolioWorkspaceSelected()
@@ -4035,7 +4046,7 @@ function renderPropGrid() {
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
         <div class="workspace-snapshot-label">Physical Occupancy</div>
         <div class="workspace-snapshot-value">${occupiedPct.toFixed(1)}%</div>
-        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${totalUnitsForCurrent || 0} units</div>
+        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${occupancyBaseUnits || 0} eligible units</div>
         <div class="workspace-snapshot-link">Open Overview</div>
       </button>
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
@@ -4185,8 +4196,10 @@ function getCommunitySummary(propName, sourceData) {
   const totalUnits = getTotalUnitsFor(prop, sourceData.customUnits);
   const corporateUnits = getCorporateLeaseUnitsForRecord(sourceData, totalUnits);
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  const occupied = Number(sourceData.currentOccupied) || 0;
-  const leased = Number(sourceData.currentLeased) || 0;
+  const occupiedRaw = Number(sourceData.currentOccupied) || 0;
+  const leasedRaw = Number(sourceData.currentLeased) || 0;
+  const occupied = getComparableOccupancyUnits(occupiedRaw, corporateUnits);
+  const leased = getComparableOccupancyUnits(leasedRaw, corporateUnits);
   const schedule = computeScheduleFromContext({
     totalUnits,
     corporateLeaseUnits: corporateUnits,
@@ -4228,8 +4241,8 @@ function getCommunitySummary(propName, sourceData) {
   const moveIns = Number(curMonthData.moveIns) || 0;
   const previousMoveOuts = getEffectiveMoveOutsForMonth(Math.max(scopeCurrentMonth - 1, 0), scopeMonthlyData).effective;
   const previousMoveIns = Number(prevMonthData.moveIns) || 0;
-  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
-  const budgetLeasedUnits = totalUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(totalUnits * budgetLeasedPct / 100) : 0;
+  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
+  const budgetLeasedUnits = occupancyBaseUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(occupancyBaseUnits * budgetLeasedPct / 100) : 0;
   const moveInGoal = budgetOccUnits > 0 ? Math.max(budgetOccUnits - occupied + moveOuts, 0) : 0;
   const currentNer = (Number(curMonthData.rentRollTotal) || 0) > 0 && occupied > 0
     ? Number(curMonthData.rentRollTotal) / occupied
@@ -4240,6 +4253,8 @@ function getCommunitySummary(propName, sourceData) {
     totalUnits,
     corporateLeaseUnits: corporateUnits,
     occupancyBaseUnits,
+    occupiedRaw,
+    leasedRaw,
     occupied,
     leased,
     currentMonth: scopeCurrentMonth,
@@ -4583,8 +4598,8 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const budgetOccPct = (record.savedBudgetTargets?.[scopeCurrentMonth] ?? 0) > 0
     ? Number(record.savedBudgetTargets[scopeCurrentMonth]) || 0
     : Number(currentMonthData.budgetOcc ?? 0);
-  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
-  const occupancyGapUnits = Math.max(budgetOccUnits - (Number(record.currentOccupied) || 0), 0);
+  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
+  const occupancyGapUnits = Math.max(budgetOccUnits - getComparableOccupancyUnits(Number(record.currentOccupied) || 0, record.corporateLeaseUnits), 0);
   const quarterTotals = getQuarterMonths(bonusQuarter).reduce((acc, idx) => {
     const row = schedule[idx] ?? {};
     const renewal = getRenewalSummaryForMonth(scopeMonthlyData[idx] ?? {});
@@ -8074,7 +8089,7 @@ function renderSetupTab() {
         <div>
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Corporate Lease Units</div>
           <input type="number" min="0" max="${Math.max(totalUnits, 0)}" value="${corporateLeaseUnits || ""}" placeholder="0" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCorporateLeaseUnits(this.value)">
-          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">These units are excluded from physical and leased occupancy percentage denominators only.</div>
+          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">These units are removed from comparable occupied and leased counts and from the eligible occupancy base.</div>
         </div>
         <div>
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Community Address</div>
@@ -19036,20 +19051,21 @@ function getCommunityRecordForScope(propName) {
 
 function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  const corporateUnits = normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
   let runningUnits = snapshotKey === "leasedSnapshot"
     ? Math.max(0, Number(record?.currentLeased) || 0)
     : Math.max(0, Number(record?.currentOccupied) || 0);
-  if (!Number.isInteger(targetMonth)) return runningUnits;
-  if (targetMonth === anchorMonth) return runningUnits;
+  if (!Number.isInteger(targetMonth)) return getComparableOccupancyUnits(runningUnits, corporateUnits);
+  if (targetMonth === anchorMonth) return getComparableOccupancyUnits(runningUnits, corporateUnits);
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   if (targetMonth < anchorMonth) {
     for (let month = anchorMonth; month > targetMonth; month -= 1) {
       const priorSnapshot = Number(monthEntries[month - 1]?.[snapshotKey] ?? 0);
-      if (priorSnapshot > 0) return priorSnapshot;
+      if (priorSnapshot > 0) return getComparableOccupancyUnits(priorSnapshot, corporateUnits);
       runningUnits = Math.max(runningUnits + getEffectiveMoveOutsForMonth(month, monthEntries).effective - (monthEntries[month]?.moveIns ?? 0), 0);
       runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
     }
-    return runningUnits;
+    return getComparableOccupancyUnits(runningUnits, corporateUnits);
   }
   for (let month = anchorMonth + 1; month <= targetMonth; month += 1) {
     const explicitSnapshot = Number(monthEntries[month]?.[snapshotKey] ?? 0);
@@ -19060,7 +19076,7 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
     runningUnits = Math.max(runningUnits - getEffectiveMoveOutsForMonth(month, monthEntries).effective + (monthEntries[month]?.moveIns ?? 0), 0);
     runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
   }
-  return runningUnits;
+  return getComparableOccupancyUnits(runningUnits, corporateUnits);
 }
 
 function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
@@ -19068,7 +19084,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record?.corporateLeaseUnits);
   let occupiedUnits = startMonth === anchorMonth
-    ? Math.max(0, Number(record?.currentOccupied) || 0)
+    ? getComparableOccupancyUnits(record?.currentOccupied, record?.corporateLeaseUnits)
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
   if (!Number.isInteger(startMonth) || occupancyBaseUnits <= 0) {
     return {

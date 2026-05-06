@@ -1284,6 +1284,31 @@ function makeFloorPlanId() {
   return `floorplan_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function hashFloorPlanSeed(seed = "") {
+  let hash = 2166136261;
+  const text = String(seed ?? "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function buildSurveyFloorPlanRowId(row, index = 0) {
+  return `floorplan_survey_${hashFloorPlanSeed(String(index ?? 0))}`;
+}
+
+function getOrCreateFloorPlanRowId(row) {
+  if (row && typeof row === "object") {
+    const existingId = String(row.id ?? "").trim();
+    if (existingId) return existingId;
+    const nextId = makeFloorPlanId();
+    row.id = nextId;
+    return nextId;
+  }
+  return makeFloorPlanId();
+}
+
 function defaultCommunityFloorPlans() {
   return [];
 }
@@ -1295,6 +1320,17 @@ function normalizeFloorPlanLookupName(value) {
     .trim();
 }
 
+function resolveRonaldoFloorPlanName(propertyName = "", unitType = "", row = {}) {
+  const communityName = normalizeCommunityLookupName(matchPropertyName(propertyName, { fallbackToCurrent: false }) || propertyName);
+  const planCode = normalizeFloorPlanLookupName(unitType);
+  // Doro's box score reports split the 694-sf plan across code variants.
+  if (communityName === normalizeCommunityLookupName("Doro")) {
+    if (planCode === "a4" || planCode === "a4 l") return "The Armstrong";
+    if (planCode === "a5") return "The Bennett";
+  }
+  return String(unitType ?? row.floor_plan ?? row.name ?? "").trim();
+}
+
 function normalizeCommunityFloorPlans(data) {
   const rows = Array.isArray(data) ? data : [];
   return rows.map(row => {
@@ -1304,8 +1340,9 @@ function normalizeCommunityFloorPlans(data) {
     const leasedPct = Number(row?.leasedPct);
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
+    const units = Number(row?.units);
     return {
-      id: String(row?.id || makeFloorPlanId()),
+      id: getOrCreateFloorPlanRowId(row),
       name: String(row?.name ?? "").trim(),
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
@@ -1313,30 +1350,130 @@ function normalizeCommunityFloorPlans(data) {
       leasedPct: Number.isFinite(leasedPct) && leasedPct >= 0 ? Math.min(leasedPct, 100) : null,
       marketedRentSource: String(row?.marketedRentSource ?? "").trim(),
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
-      baths: Number.isFinite(baths) && baths >= 0 ? baths : null
+      baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
+      units: Number.isFinite(units) && units > 0 ? units : null
     };
   });
 }
 
 function normalizeMarketSurveyFloorPlanRates(data) {
   const rows = Array.isArray(data) ? data : [];
-  return rows.map(row => {
+  return rows.map((row, index) => {
     const marketRent = Number(row?.marketRent);
     const budgetRent = Number(row?.budgetRent);
     const sqft = Number(row?.sqft);
     const beds = Number(row?.beds);
     const baths = Number(row?.baths);
+    const units = Number(row?.units);
     return {
-      id: String(row?.id || makeFloorPlanId()),
+      id: buildSurveyFloorPlanRowId(row, index),
       name: String(row?.name ?? row?.planName ?? "").trim(),
       marketRent: Number.isFinite(marketRent) && marketRent > 0 ? marketRent : null,
       budgetRent: Number.isFinite(budgetRent) && budgetRent > 0 ? budgetRent : null,
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
       beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
       baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
+      units: Number.isFinite(units) && units > 0 ? units : null,
       sourceSheet: String(row?.sourceSheet ?? "").trim()
     };
   });
+}
+
+function getCommunityFloorPlanAverageRent(floorPlans = [], field = "budgetRent") {
+  const rates = normalizeCommunityFloorPlans(floorPlans);
+  return compCalcAverage(rates.map(plan => Number(plan?.[field] ?? 0)));
+}
+
+function getFloorPlanUnitWeight(row = {}) {
+  const units = Number(row?.units);
+  return Number.isFinite(units) && units > 0 ? units : 1;
+}
+
+function calculateWeightedFloorPlanAverage(rows = [], valueAccessor = row => row.marketRent) {
+  let weightedTotal = 0;
+  let weightTotal = 0;
+  (Array.isArray(rows) ? rows : []).forEach(row => {
+    const value = Number(typeof valueAccessor === "function" ? valueAccessor(row) : row?.[valueAccessor]);
+    const weight = getFloorPlanUnitWeight(row);
+    if (!Number.isFinite(value) || value <= 0 || weight <= 0) return;
+    weightedTotal += value * weight;
+    weightTotal += weight;
+  });
+  return weightTotal > 0 ? weightedTotal / weightTotal : 0;
+}
+
+function getCommunityFloorPlanRentMetrics(record = {}, surveyData = null) {
+  const varianceData = buildCommunityFloorPlanVarianceRows(record?.communityFloorPlans, surveyData ?? record?.marketSurveyData);
+  return {
+    rows: varianceData.rows,
+    marketRent: calculateWeightedFloorPlanAverage(varianceData.rows, row => row.marketRent),
+    budgetRent: calculateWeightedFloorPlanAverage(varianceData.rows, row => row.budgetRent)
+  };
+}
+
+function syncCommunityFloorPlanRentMetrics(record = {}, monthIdx = null) {
+  const targetMonth = Number.isInteger(monthIdx)
+    ? Math.max(0, Math.min(11, monthIdx))
+    : Math.max(0, Math.min(11, Number(record?.currentMonth) || getSelectedDashboardMonthIndex()));
+  const metrics = getCommunityFloorPlanRentMetrics(record, record?.marketSurveyData);
+  if (!Array.isArray(record.monthlyData)) record.monthlyData = defaultMonthly();
+  if (!record.monthlyData[targetMonth]) record.monthlyData[targetMonth] = defaultMonthly()[targetMonth];
+  if (metrics.marketRent > 0) {
+    record.monthlyData[targetMonth].marketRent = metrics.marketRent;
+  }
+  if (metrics.budgetRent > 0) {
+    record.monthlyData[targetMonth].proformaRent = metrics.budgetRent;
+  }
+  return metrics;
+}
+
+function getAptiqFloorPlanSourceLabel(record = {}, fallback = "") {
+  const floorPlanUrl = String(record?.floorPlanRatesPageUrl ?? "").trim();
+  const communityUrl = String(record?.communityWebsiteUrl ?? "").trim();
+  return floorPlanUrl || communityUrl || String(fallback ?? "").trim();
+}
+
+function seedAptiqFloorPlanRatesFromCommunity(record = {}, floorPlanRates = []) {
+  const merged = normalizeMarketSurveyFloorPlanRates(floorPlanRates);
+  const indexByName = new Map(merged.map(rate => [normalizeFloorPlanLookupName(rate.name), rate]));
+  normalizeCommunityFloorPlans(record?.communityFloorPlans).forEach(plan => {
+    const key = normalizeFloorPlanLookupName(plan.name);
+    const existing = indexByName.get(key);
+    const sourceLabel = String(plan.marketedRentSource ?? "").trim() || getAptiqFloorPlanSourceLabel(record, "Community Setup");
+    if (existing) {
+      if (!String(existing.name ?? "").trim()) existing.name = String(plan.name ?? "").trim();
+      if ((existing.marketRent == null || existing.marketRent <= 0) && Number.isFinite(Number(plan.marketedRent)) && Number(plan.marketedRent) > 0) {
+        existing.marketRent = Number(plan.marketedRent);
+      }
+      if ((existing.budgetRent == null || existing.budgetRent <= 0) && Number.isFinite(Number(plan.budgetRent)) && Number(plan.budgetRent) > 0) {
+        existing.budgetRent = Number(plan.budgetRent);
+      }
+      if ((existing.sqft == null || existing.sqft <= 0) && Number.isFinite(Number(plan.sqft)) && Number(plan.sqft) > 0) {
+        existing.sqft = Number(plan.sqft);
+      }
+      if ((existing.beds == null || existing.beds < 0) && Number.isFinite(Number(plan.beds)) && Number(plan.beds) >= 0) {
+        existing.beds = Number(plan.beds);
+      }
+      if ((existing.baths == null || existing.baths < 0) && Number.isFinite(Number(plan.baths)) && Number(plan.baths) >= 0) {
+        existing.baths = Number(plan.baths);
+      }
+      existing.sourceSheet = String(existing.sourceSheet || sourceLabel || "").trim();
+      return;
+    }
+    const nextRow = {
+      id: plan.id || makeFloorPlanId(),
+      name: String(plan.name ?? "").trim(),
+      marketRent: Number.isFinite(Number(plan.marketedRent)) && Number(plan.marketedRent) > 0 ? Number(plan.marketedRent) : null,
+      budgetRent: Number.isFinite(Number(plan.budgetRent)) && Number(plan.budgetRent) > 0 ? Number(plan.budgetRent) : null,
+      sqft: Number.isFinite(Number(plan.sqft)) && Number(plan.sqft) > 0 ? Number(plan.sqft) : null,
+      beds: Number.isFinite(Number(plan.beds)) && Number(plan.beds) >= 0 ? Number(plan.beds) : null,
+      baths: Number.isFinite(Number(plan.baths)) && Number(plan.baths) >= 0 ? Number(plan.baths) : null,
+      sourceSheet: String(sourceLabel || "Community Setup").trim()
+    };
+    merged.push(nextRow);
+    indexByName.set(key, nextRow);
+  });
+  return merged;
 }
 
 function createEmptyCommunityFloorPlanRow() {
@@ -1349,11 +1486,25 @@ function createEmptyCommunityFloorPlanRow() {
     leasedPct: null,
     marketedRentSource: "",
     beds: null,
-    baths: null
+    baths: null,
+    units: null
   };
 }
 
 function persistCurrentCommunityFloorPlans() {
+  marketSurveyData = normalizeMarketSurveyData({
+    ...marketSurveyData,
+    floorPlanRates: seedAptiqFloorPlanRatesFromCommunity({
+      communityFloorPlans,
+      communityWebsiteUrl,
+      floorPlanRatesPageUrl
+    }, marketSurveyData.floorPlanRates)
+  });
+  const currentRecord = getCurrentCommunityRecord();
+  syncCommunityFloorPlanRentMetrics(currentRecord, currentRecord.currentMonth);
+  communityFloorPlans = normalizeCommunityFloorPlans(currentRecord.communityFloorPlans);
+  monthlyData = currentRecord.monthlyData;
+  marketSurveyData = normalizeMarketSurveyData(currentRecord.marketSurveyData);
   savedData[getProp().name] = getCurrentCommunityRecord();
   const savedResult = persistSaved();
   if (savedResult?.ok === false) {
@@ -1960,7 +2111,8 @@ function defaultImportTracking() {
   return {
     marketSurvey: {},
     renewals: {},
-    dlrExports: {}
+    dlrExports: {},
+    financialBudget: {}
   };
 }
 
@@ -1969,7 +2121,8 @@ function normalizeImportTracking(data) {
   return {
     marketSurvey: normalizePeriodImportMap(input.marketSurvey),
     renewals: normalizePeriodImportMap(input.renewals),
-    dlrExports: normalizePeriodImportMap(input.dlrExports)
+    dlrExports: normalizePeriodImportMap(input.dlrExports),
+    financialBudget: normalizePeriodImportMap(input.financialBudget)
   };
 }
 
@@ -3304,6 +3457,12 @@ function normalizeCorporateLeaseUnits(value, totalUnits = null) {
   return maxUnits == null ? numeric : Math.min(numeric, maxUnits);
 }
 
+function getComparableOccupancyUnits(rawUnits, corporateUnits = 0) {
+  const total = Math.max(0, Number(rawUnits) || 0);
+  const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
+  return Math.max(total - corporate, 0);
+}
+
 function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
   const total = Math.max(0, Number(totalUnits) || 0);
   const corporate = normalizeCorporateLeaseUnits(corporateUnits, total);
@@ -3312,7 +3471,8 @@ function getOccupancyBaseUnits(totalUnits, corporateUnits = 0) {
 
 function getOccupancyPctFromUnits(occupiedUnits, totalUnits, corporateUnits = 0) {
   const baseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  return baseUnits > 0 ? (Math.max(0, Number(occupiedUnits) || 0) / baseUnits) * 100 : 0;
+  const comparableUnits = getComparableOccupancyUnits(occupiedUnits, corporateUnits);
+  return baseUnits > 0 ? (comparableUnits / baseUnits) * 100 : 0;
 }
 
 function currentOccPct() { return getOccupancyPctFromUnits(currentOccupied, getTotalUnits(), corporateLeaseUnits); }
@@ -3496,22 +3656,22 @@ function getLeasedTrendPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  let reverseRunning = currentLeased;
-  series[currentMonth] = (currentLeased / occupancyBaseUnits) * 100;
+  let reverseRunning = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
+  series[currentMonth] = (reverseRunning / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.leasedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = snapshotUnits;
+      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, totalUnits);
+      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningLeased = currentLeased;
+  let runningLeased = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
   for (let i = currentMonth + 1; i < 12; i++) {
     runningLeased = Math.max(runningLeased - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningLeased = Math.min(runningLeased, totalUnits);
+    runningLeased = Math.min(runningLeased, occupancyBaseUnits);
     series[i] = (runningLeased / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3522,22 +3682,22 @@ function getEndingOccPctSeries() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   if (occupancyBaseUnits === 0) return Array(12).fill(null);
   const series = Array(12).fill(null);
-  let reverseRunning = currentOccupied;
-  series[currentMonth] = (currentOccupied / occupancyBaseUnits) * 100;
+  let reverseRunning = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
+  series[currentMonth] = (reverseRunning / occupancyBaseUnits) * 100;
   for (let i = currentMonth - 1; i >= 0; i--) {
     const snapshotUnits = Number(monthlyData[i]?.occupiedSnapshot ?? 0);
     if (snapshotUnits > 0) {
-      reverseRunning = snapshotUnits;
+      reverseRunning = getComparableOccupancyUnits(snapshotUnits, corporateLeaseUnits);
     } else {
       reverseRunning = Math.max(reverseRunning + getEffectiveMoveOutsForMonth(i + 1).effective - (monthlyData[i + 1]?.moveIns ?? 0), 0);
-      reverseRunning = Math.min(reverseRunning, totalUnits);
+      reverseRunning = Math.min(reverseRunning, occupancyBaseUnits);
     }
     series[i] = (reverseRunning / occupancyBaseUnits) * 100;
   }
-  let runningOcc = currentOccupied;
+  let runningOcc = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
   for (let i = currentMonth + 1; i < 12; i++) {
     runningOcc = Math.max(runningOcc - getEffectiveMoveOutsForMonth(i).effective + (monthlyData[i]?.moveIns ?? 0), 0);
-    runningOcc = Math.min(runningOcc, totalUnits);
+    runningOcc = Math.min(runningOcc, occupancyBaseUnits);
     series[i] = (runningOcc / occupancyBaseUnits) * 100;
   }
   return series;
@@ -3552,15 +3712,16 @@ function formatGoalGapLabel(gapUnits, onTrack) {
 
 function getUpcomingOccupancyGoalNeed() {
   const totalUnits = getTotalUnits();
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const nextMonth = Math.min(currentMonth + 1, 11);
   const targetPct = (savedBudgetTargets[nextMonth] > 0
     ? Number(savedBudgetTargets[nextMonth]) || 0
     : Number(monthlyData[nextMonth]?.budgetOcc) || 0);
-  const targetUnits = totalUnits > 0 && targetPct > 0 ? Math.ceil(totalUnits * targetPct / 100) : 0;
+  const targetUnits = occupancyBaseUnits > 0 && targetPct > 0 ? Math.ceil(occupancyBaseUnits * targetPct / 100) : 0;
   const moveOutMeta = getEffectiveMoveOutsForMonth(nextMonth);
   const scheduledMoveOuts = moveOutMeta.effective;
   const scheduledMoveIns = Number(monthlyData[nextMonth]?.moveIns) || 0;
-  const projectedOccupied = Math.max(currentOccupied - scheduledMoveOuts + scheduledMoveIns, 0);
+  const projectedOccupied = Math.max(getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits) - scheduledMoveOuts + scheduledMoveIns, 0);
   const unitsNeeded = targetUnits > 0 ? Math.max(targetUnits - projectedOccupied, 0) : 0;
   return {
     nextMonth,
@@ -3623,8 +3784,8 @@ function getAllCurves() {
 function computeScheduleFromContext(ctx) {
   const totalUnits = Number(ctx.totalUnits) || 0;
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, ctx.corporateLeaseUnits);
-  const scopeCurrentOccupied = Number(ctx.currentOccupied) || 0;
-  const scopeCurrentLeased = Number(ctx.currentLeased) || 0;
+  const scopeCurrentOccupied = getComparableOccupancyUnits(ctx.currentOccupied, ctx.corporateLeaseUnits);
+  const scopeCurrentLeased = getComparableOccupancyUnits(ctx.currentLeased, ctx.corporateLeaseUnits);
   const scopeOccupancyGoal = Number(ctx.occupancyGoal) || 0;
   const scopeLeasedGoal = Number(ctx.leasedGoal) || 0;
   const scopeCurrentMonth = Number.isInteger(ctx.currentMonth) ? ctx.currentMonth : 0;
@@ -3676,16 +3837,16 @@ function computeScheduleFromContext(ctx) {
     const budgetLeasedPct = Math.min(occTarget + leasedGap, scopeLeasedGoal);
     const leasedTarget    = baseLeasedPct >= budgetLeasedPct ? baseLeasedPct : budgetLeasedPct;
 
-    const netOccNeeded    = Math.max(Math.ceil(totalUnits * occTarget    / 100) - baseOcc,    0);
-    const netLeasedNeeded = Math.max(Math.ceil(totalUnits * leasedTarget / 100) - baseLeased, 0);
+    const netOccNeeded    = Math.max(Math.ceil(occupancyBaseUnits * occTarget    / 100) - baseOcc,    0);
+    const netLeasedNeeded = Math.max(Math.ceil(occupancyBaseUnits * leasedTarget / 100) - baseLeased, 0);
     const netNeeded       = netOccNeeded;
 
     // Gross leases = net needed + replacement for move-outs
     const moveOutsToReplace = moveOuts;
     const recommendedGrossLeases = moveOutsToReplace + netNeeded;
 
-    const newOccupied = Math.min(baseOcc    + netOccNeeded, totalUnits);
-    const newLeased   = Math.min(baseLeased + netNeeded,    totalUnits);
+    const newOccupied = Math.min(baseOcc    + netOccNeeded, occupancyBaseUnits);
+    const newLeased   = Math.min(baseLeased + netNeeded,    occupancyBaseUnits);
 
     simOcc    = newOccupied;
     simLeased = newLeased;
@@ -3805,7 +3966,10 @@ function loadPropertyData(propName) {
   propertyTurnoverByQuarter = normalizePropertyTurnoverByQuarter(d.propertyTurnoverByQuarter, propertyTurnoverConfig);
   msoeByQuarter = normalizeMsoeByQuarter(d.msoeByQuarter);
   reputationData = normalizeReputationData(d.reputationData);
-  marketSurveyData = normalizeMarketSurveyData(d.marketSurveyData);
+  marketSurveyData = normalizeMarketSurveyData({
+    ...d.marketSurveyData,
+    floorPlanRates: seedAptiqFloorPlanRatesFromCommunity(d, d.marketSurveyData?.floorPlanRates)
+  });
   latestDlrSummary = normalizeDlrSummary(d.latestDlrSummary);
   marketSurveyHistory = normalizeMarketSurveyHistory(d.marketSurveyHistory);
   importTracking = normalizeImportTracking(d.importTracking);
@@ -3857,8 +4021,11 @@ function renderPropGrid() {
     const selectedMonth = getSelectedDashboardMonthIndex();
     const occupiedPct = isPortfolioWorkspaceSelected() ? getSummaryOccPct(aggregate) : (summary ? getSummaryOccPct(summary) : 0);
     const leasedPct = isPortfolioWorkspaceSelected() ? getSummaryLeasedPct(aggregate) : (summary ? getSummaryLeasedPct(summary) : 0);
-    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? (Number(currentRecord.currentOccupied) || 0));
-    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? (Number(currentRecord.currentLeased) || 0));
+    const occupiedUnits = isPortfolioWorkspaceSelected() ? (aggregate.occupied ?? 0) : (summary?.occupied ?? getComparableOccupancyUnits(currentRecord.currentOccupied, currentRecord.corporateLeaseUnits));
+    const leasedUnits = isPortfolioWorkspaceSelected() ? (aggregate.leased ?? 0) : (summary?.leased ?? getComparableOccupancyUnits(currentRecord.currentLeased, currentRecord.corporateLeaseUnits));
+    const occupancyBaseUnits = isPortfolioWorkspaceSelected()
+      ? (aggregate.occupancyBaseUnits ?? aggregate.totalUnits ?? 0)
+      : (summary?.occupancyBaseUnits ?? getOccupancyBaseUnits(totalUnitsForCurrent, currentRecord.corporateLeaseUnits));
     const applicationsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applications ?? 0) : Math.round(appMetrics.applications || 0);
     const approvalsMtd = isPortfolioWorkspaceSelected() ? Math.round(aggregate.applicationsApproved ?? 0) : Math.round(appMetrics.approvals || 0);
     const pendingMtd = isPortfolioWorkspaceSelected()
@@ -3878,7 +4045,7 @@ function renderPropGrid() {
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
         <div class="workspace-snapshot-label">Physical Occupancy</div>
         <div class="workspace-snapshot-value">${occupiedPct.toFixed(1)}%</div>
-        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${totalUnitsForCurrent || 0} units</div>
+        <div class="workspace-snapshot-sub">${occupiedUnits} occupied of ${occupancyBaseUnits || 0} eligible units</div>
         <div class="workspace-snapshot-link">Open Overview</div>
       </button>
       <button type="button" class="workspace-snapshot-tile" onmousedown="return queueCurrentWorkspaceTab(2)">
@@ -4028,8 +4195,10 @@ function getCommunitySummary(propName, sourceData) {
   const totalUnits = getTotalUnitsFor(prop, sourceData.customUnits);
   const corporateUnits = getCorporateLeaseUnitsForRecord(sourceData, totalUnits);
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
-  const occupied = Number(sourceData.currentOccupied) || 0;
-  const leased = Number(sourceData.currentLeased) || 0;
+  const occupiedRaw = Number(sourceData.currentOccupied) || 0;
+  const leasedRaw = Number(sourceData.currentLeased) || 0;
+  const occupied = getComparableOccupancyUnits(occupiedRaw, corporateUnits);
+  const leased = getComparableOccupancyUnits(leasedRaw, corporateUnits);
   const schedule = computeScheduleFromContext({
     totalUnits,
     corporateLeaseUnits: corporateUnits,
@@ -4071,8 +4240,8 @@ function getCommunitySummary(propName, sourceData) {
   const moveIns = Number(curMonthData.moveIns) || 0;
   const previousMoveOuts = getEffectiveMoveOutsForMonth(Math.max(scopeCurrentMonth - 1, 0), scopeMonthlyData).effective;
   const previousMoveIns = Number(prevMonthData.moveIns) || 0;
-  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
-  const budgetLeasedUnits = totalUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(totalUnits * budgetLeasedPct / 100) : 0;
+  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
+  const budgetLeasedUnits = occupancyBaseUnits > 0 && budgetLeasedPct > 0 ? Math.ceil(occupancyBaseUnits * budgetLeasedPct / 100) : 0;
   const moveInGoal = budgetOccUnits > 0 ? Math.max(budgetOccUnits - occupied + moveOuts, 0) : 0;
   const currentNer = (Number(curMonthData.rentRollTotal) || 0) > 0 && occupied > 0
     ? Number(curMonthData.rentRollTotal) / occupied
@@ -4083,6 +4252,8 @@ function getCommunitySummary(propName, sourceData) {
     totalUnits,
     corporateLeaseUnits: corporateUnits,
     occupancyBaseUnits,
+    occupiedRaw,
+    leasedRaw,
     occupied,
     leased,
     currentMonth: scopeCurrentMonth,
@@ -4426,8 +4597,8 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const budgetOccPct = (record.savedBudgetTargets?.[scopeCurrentMonth] ?? 0) > 0
     ? Number(record.savedBudgetTargets[scopeCurrentMonth]) || 0
     : Number(currentMonthData.budgetOcc ?? 0);
-  const budgetOccUnits = totalUnits > 0 && budgetOccPct > 0 ? Math.ceil(totalUnits * budgetOccPct / 100) : 0;
-  const occupancyGapUnits = Math.max(budgetOccUnits - (Number(record.currentOccupied) || 0), 0);
+  const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
+  const occupancyGapUnits = Math.max(budgetOccUnits - getComparableOccupancyUnits(Number(record.currentOccupied) || 0, record.corporateLeaseUnits), 0);
   const quarterTotals = getQuarterMonths(bonusQuarter).reduce((acc, idx) => {
     const row = schedule[idx] ?? {};
     const renewal = getRenewalSummaryForMonth(scopeMonthlyData[idx] ?? {});
@@ -5012,7 +5183,7 @@ function addCommunityFloorPlanRow() {
 function updateCommunityFloorPlanField(index, field, value) {
   const nextPlans = normalizeCommunityFloorPlans(communityFloorPlans).map(entry => ({ ...entry }));
   while (nextPlans.length <= index) {
-    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null });
+    nextPlans.push({ id: makeFloorPlanId(), name: "", sqft: null, budgetRent: null, marketedRent: null, leasedPct: null, marketedRentSource: "", beds: null, baths: null, units: null });
   }
   const target = nextPlans[index];
   if (!target) return;
@@ -5020,15 +5191,20 @@ function updateCommunityFloorPlanField(index, field, value) {
     target.name = String(value ?? "").trim();
   } else if (field === "marketedRentSource") {
     target.marketedRentSource = String(value ?? "").trim();
-  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths", "leasedPct"].includes(field)) {
+  } else if (["sqft", "budgetRent", "marketedRent", "beds", "baths", "leasedPct", "units"].includes(field)) {
     const numeric = Number(value);
     if (field === "leasedPct") {
       target[field] = Number.isFinite(numeric) && numeric >= 0 ? Math.min(numeric, 100) : null;
+    } else if (field === "units") {
+      target[field] = Number.isFinite(numeric) && numeric > 0 ? numeric : null;
     } else {
       target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
     }
   }
   communityFloorPlans = nextPlans;
+  const currentRecord = getCurrentCommunityRecord();
+  syncCommunityFloorPlanRentMetrics(currentRecord, currentRecord.currentMonth);
+  monthlyData = currentRecord.monthlyData;
   persistCurrentCommunityFloorPlans();
 }
 
@@ -5040,6 +5216,9 @@ function removeCommunityFloorPlanRow(index) {
     const selected = getFloorPlanSelectionIds("community", getProp().name).filter(id => String(id) !== String(removed.id));
     floorPlanSelectionState.community[getProp().name] = selected;
   }
+  const currentRecord = getCurrentCommunityRecord();
+  syncCommunityFloorPlanRentMetrics(currentRecord, currentRecord.currentMonth);
+  monthlyData = currentRecord.monthlyData;
   persistCurrentCommunityFloorPlans();
 }
 
@@ -5136,11 +5315,37 @@ function getFloorPlanSelectionIds(section, propName) {
   return Array.isArray(selection) ? [...selection] : [];
 }
 
+function resolveFloorPlanSelectionIds(section, propName, availableIds = []) {
+  const normalizedAvailableIds = [...new Set((Array.isArray(availableIds) ? availableIds : []).map(id => String(id || "").trim()).filter(Boolean))];
+  const availableSet = new Set(normalizedAvailableIds);
+  const bucket = getFloorPlanSelectionSection(section);
+  const candidateKeys = [
+    matchPropertyName(propName, { fallbackToCurrent: false }),
+    getProp().name,
+    typeof portfolioSetupCommunityName === "string" ? matchPropertyName(portfolioSetupCommunityName, { fallbackToCurrent: false }) : ""
+  ].map(key => String(key || "").trim()).filter(Boolean);
+  const uniqueCandidateKeys = [...new Set(candidateKeys)];
+  const pickIds = ids => {
+    const normalized = [...new Set((Array.isArray(ids) ? ids : []).map(id => String(id || "").trim()).filter(Boolean))];
+    if (availableSet.size === 0) return normalized;
+    return normalized.filter(id => availableSet.has(id));
+  };
+  for (const key of uniqueCandidateKeys) {
+    const matched = pickIds(bucket[key]);
+    if (matched.length > 0) return matched;
+  }
+  for (const value of Object.values(bucket)) {
+    const matched = pickIds(value);
+    if (matched.length > 0) return matched;
+  }
+  return [];
+}
+
 function setFloorPlanSelectionIds(section, propName, ids = []) {
   const key = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const bucket = getFloorPlanSelectionSection(section);
   bucket[key] = [...new Set((Array.isArray(ids) ? ids : []).map(id => String(id || "").trim()).filter(Boolean))];
-  renderTab();
+  syncFloorPlanSelectionUi(section, propName);
 }
 
 function toggleFloorPlanSelection(section, propName, id) {
@@ -5151,7 +5356,7 @@ function toggleFloorPlanSelection(section, propName, id) {
   if (!lookup) return;
   const next = current.includes(lookup) ? current.filter(entry => entry !== lookup) : [...current, lookup];
   bucket[key] = next;
-  renderTab();
+  syncFloorPlanSelectionUi(section, propName);
 }
 
 function clearFloorPlanSelection(section, propName) {
@@ -5172,8 +5377,35 @@ function getAllFloorPlanSelectionIds(section, propName) {
 }
 
 function selectAllFloorPlans(section, propName, ids = []) {
-  const nextIds = Array.isArray(ids) && ids.length > 0 ? ids : getAllFloorPlanSelectionIds(section, propName);
-  setFloorPlanSelectionIds(section, propName, nextIds);
+  const availableIds = Array.isArray(ids) && ids.length > 0 ? ids : getAllFloorPlanSelectionIds(section, propName);
+  const currentIds = getFloorPlanSelectionIds(section, propName);
+  const allSelected = availableIds.length > 0 && availableIds.every(id => currentIds.includes(id));
+  setFloorPlanSelectionIds(section, propName, allSelected ? [] : availableIds);
+}
+
+function syncFloorPlanSelectionUi(section, propName) {
+  const scope = document.querySelector(`[data-floor-plan-selection-section="${section}"]`);
+  if (!scope) return;
+  const selectedIds = new Set(getFloorPlanSelectionIds(section, propName));
+  const checkboxes = Array.from(scope.querySelectorAll("[data-floor-plan-row-checkbox]"));
+  checkboxes.forEach(input => {
+    const rowId = String(input.getAttribute("data-floor-plan-id") || "").trim();
+    input.checked = rowId ? selectedIds.has(rowId) : false;
+  });
+  const totalRowCount = checkboxes.length;
+  const selectedCount = checkboxes.reduce((count, input) => count + (input.checked ? 1 : 0), 0);
+  const selectAllButton = scope.querySelector("[data-floor-plan-select-all-button]");
+  if (selectAllButton) {
+    selectAllButton.textContent = totalRowCount > 0 && selectedCount === totalRowCount ? "Clear All" : "Select All";
+  }
+  const clearButton = scope.querySelector("[data-floor-plan-clear-button]");
+  if (clearButton) {
+    clearButton.disabled = selectedCount === 0;
+  }
+  const deleteButton = scope.querySelector("[data-floor-plan-delete-button]");
+  if (deleteButton) {
+    deleteButton.disabled = selectedCount === 0;
+  }
 }
 
 function deleteSelectedCommunityFloorPlans(propName) {
@@ -5184,6 +5416,7 @@ function deleteSelectedCommunityFloorPlans(propName) {
     return false;
   }
   record.communityFloorPlans = normalizeCommunityFloorPlans(record.communityFloorPlans).filter(plan => !selectedIds.has(String(plan.id || "").trim()));
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
   clearFloorPlanSelection("community", propName);
   persistPortfolioSetupCommunityRecord(propName, record);
   return true;
@@ -5191,7 +5424,11 @@ function deleteSelectedCommunityFloorPlans(propName) {
 
 function deleteSelectedMarketSurveyFloorPlanRates(propName) {
   const record = getPortfolioSetupCommunityRecord(propName);
-  const selectedIds = new Set(getFloorPlanSelectionIds("survey", propName));
+  const selectedIds = new Set(resolveFloorPlanSelectionIds(
+    "survey",
+    propName,
+    normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => rate.id)
+  ));
   if (selectedIds.size === 0) {
     alert("Select one or more APTIQ floor-plan rows first, then use Delete Selected.");
     return false;
@@ -5203,6 +5440,7 @@ function deleteSelectedMarketSurveyFloorPlanRates(propName) {
   if (propName === getProp().name) {
     marketSurveyData = record.marketSurveyData;
   }
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
   clearFloorPlanSelection("survey", propName);
   persistPortfolioSetupCommunityRecord(propName, record);
   return true;
@@ -5239,6 +5477,51 @@ function applySelectedCommunityFloorPlanField(propName) {
     return nextPlan;
   });
   record.communityFloorPlans = nextPlans;
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
+  persistPortfolioSetupCommunityRecord(propName, record);
+  return true;
+}
+
+function applySelectedMarketSurveyFloorPlanField(propName) {
+  const record = getPortfolioSetupCommunityRecord(propName);
+  const selectedIds = new Set(resolveFloorPlanSelectionIds(
+    "survey",
+    propName,
+    normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => rate.id)
+  ));
+  if (selectedIds.size === 0) {
+    alert("Select one or more APTIQ floor-plan rows first, then apply the bulk edit.");
+    return false;
+  }
+  const field = String(document.getElementById("market-survey-floor-plan-bulk-field")?.value ?? "").trim();
+  const rawValue = document.getElementById("market-survey-floor-plan-bulk-value")?.value ?? "";
+  if (!field) {
+    alert("Choose an APTIQ floor-plan field to update first.");
+    return false;
+  }
+  const nextRates = normalizeMarketSurveyFloorPlanRates(record.marketSurveyData?.floorPlanRates).map(rate => {
+    if (!selectedIds.has(String(rate.id || "").trim())) return rate;
+    const nextRate = { ...rate };
+    if (field === "name" || field === "sourceSheet") {
+      nextRate[field] = String(rawValue ?? "").trim();
+    } else if (["marketRent", "budgetRent", "sqft", "beds", "baths", "units"].includes(field)) {
+      const numeric = Number(rawValue);
+      if (field === "units") {
+        nextRate[field] = rawValue.toString().trim() && Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+      } else {
+        nextRate[field] = rawValue.toString().trim() && Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+      }
+    }
+    return nextRate;
+  });
+  record.marketSurveyData = normalizeMarketSurveyData({
+    ...record.marketSurveyData,
+    floorPlanRates: nextRates
+  });
+  if (propName === getProp().name) {
+    marketSurveyData = record.marketSurveyData;
+  }
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
   persistPortfolioSetupCommunityRecord(propName, record);
   return true;
 }
@@ -5250,7 +5533,7 @@ function importPortfolioCommunityFloorPlansFromSurvey(propName) {
     alert("No APTIQ floor-plan rates were found for this community yet. Upload the survey workbook first, then import the floor plans.");
     return false;
   }
-  const selectedIds = new Set(getFloorPlanSelectionIds("survey", propName));
+  const selectedIds = new Set(resolveFloorPlanSelectionIds("survey", propName, surveyRates.map(rate => rate.id)));
   const selectedRates = selectedIds.size > 0
     ? surveyRates.filter(rate => selectedIds.has(String(rate.id || "").trim()))
     : [];
@@ -5278,7 +5561,8 @@ function importPortfolioCommunityFloorPlansFromSurvey(propName) {
         leasedPct: existing.plan.leasedPct ?? null,
         marketedRentSource: existing.plan.marketedRentSource || String(rate.sourceSheet || "APTIQ survey").trim(),
         beds: existing.plan.beds ?? rate.beds ?? null,
-        baths: existing.plan.baths ?? rate.baths ?? null
+        baths: existing.plan.baths ?? rate.baths ?? null,
+        units: existing.plan.units ?? rate.units ?? null
       };
       return;
     }
@@ -5291,10 +5575,12 @@ function importPortfolioCommunityFloorPlansFromSurvey(propName) {
       leasedPct: null,
       marketedRentSource: String(rate.sourceSheet || "APTIQ survey").trim(),
       beds: rate.beds ?? null,
-      baths: rate.baths ?? null
+      baths: rate.baths ?? null,
+      units: rate.units ?? null
     });
   });
   record.communityFloorPlans = normalizeCommunityFloorPlans(nextPlans);
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
   clearFloorPlanSelection("survey", propName);
   persistPortfolioSetupCommunityRecord(propName, record);
   alert(`✅ Imported ${selectedRates.length} selected APTIQ floor plan${selectedRates.length === 1 ? "" : "s"} into the budget setup for ${matchPropertyName(propName, { fallbackToCurrent: false }) || propName}.`);
@@ -7037,7 +7323,7 @@ function renderPortfolioScopedSetupTab() {
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
         return `<div style="display:grid;grid-template-columns:28px minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(selectedName)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(row.id || ""))}" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(selectedName)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
@@ -7100,7 +7386,7 @@ function renderPortfolioScopedSetupTab() {
         </div>
       </div>
     </div>
-    <div style="margin-bottom:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+    <div data-floor-plan-selection-section="community" style="margin-bottom:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
@@ -7132,9 +7418,9 @@ function renderPortfolioScopedSetupTab() {
             <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedCommunityFloorPlanField(${JSON.stringify(selectedName)})">Apply to Selected</button>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('community', ${JSON.stringify(selectedName)})">Select All</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('community', ${JSON.stringify(selectedName)})">Clear</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('community', ${JSON.stringify(selectedName)})">Select All</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('community', ${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(selectedName)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           </div>
           <button class="btn btn-gray btn-sm" type="button" onclick='addPortfolioCommunityFloorPlanRow(${JSON.stringify(selectedName)})'>＋ Add Floor Plan</button>
           <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(selectedName)})' ${normalizeMarketSurveyFloorPlanRates(selectedRecord.marketSurveyData?.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
@@ -7481,12 +7767,17 @@ function renderSetupTab() {
     ? `${marketSurveyData.rentAdjustmentDirection === "down" ? "-" : "+"}$${Number(marketSurveyData.rentAdjustmentAmount).toLocaleString(undefined,{maximumFractionDigits:0})}`
     : "No adjustment set";
   const floorPlanVarianceData = buildCommunityFloorPlanVarianceRows(communityFloorPlans, marketSurveyData);
+  const selectedCommunityFloorPlanIds = getFloorPlanSelectionIds("community", getProp().name);
+  const selectedCommunityFloorPlanIdSet = new Set(selectedCommunityFloorPlanIds);
   const communityFloorPlanRows = floorPlanVarianceData.rows.length > 0
     ? floorPlanVarianceData.rows.map((row, idx) => {
         const varianceColor = row.variance == null ? "var(--muted)" : row.variance >= 0 ? "#3fb950" : "#f97316";
         const displayedMarketedRent = row.marketedRent ?? row.marketRent;
         const displayedMarketSource = row.marketedRentSource || row.marketSource || "";
-        return `<div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+        return `<div style="display:grid;grid-template-columns:28px minmax(150px,1.2fr) 72px 72px 88px 108px 108px 96px minmax(150px,1fr) 98px auto;gap:10px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid var(--border2)"}">
+          <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(row.id || ""))}" aria-label="Select ${escapeHtml(row.name || "floor plan")}" ${selectedCommunityFloorPlanIdSet.has(String(row.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('community', ${JSON.stringify(getProp().name)}, ${JSON.stringify(row.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+          </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Floor plan</div>
             <input type="text" value="${escapeHtml(row.name)}" placeholder="e.g. B1" onchange="updateCommunityFloorPlanField(${idx},'name',this.value)">
@@ -7543,7 +7834,7 @@ function renderSetupTab() {
     ? marketSurveyFloorPlanData.map((rate, idx) => `
         <div style="display:grid;grid-template-columns:28px minmax(170px,1.15fr) repeat(5,minmax(90px,0.72fr)) minmax(130px,1fr) auto;gap:8px;align-items:end;padding:10px 0;border-top:${idx === 0 ? "0" : "1px solid rgba(15,23,42,0.08)"}">
           <div style="display:flex;align-items:center;justify-content:center;padding-bottom:6px">
-            <input type="checkbox" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
+            <input type="checkbox" data-floor-plan-row-checkbox="true" data-floor-plan-id="${escapeHtml(String(rate.id || ""))}" aria-label="Select ${escapeHtml(rate.name || "floor plan")}" ${selectedMarketSurveyFloorPlanIdSet.has(String(rate.id || "")) ? "checked" : ""} onchange="toggleFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(rate.id)})" style="width:16px;height:16px;accent-color:#4493f8">
           </div>
           <div>
             <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Plan name</div>
@@ -7576,7 +7867,7 @@ function renderSetupTab() {
           <button class="btn btn-gray btn-sm" type="button" onclick="removeMarketSurveyFloorPlanRate(${idx})">Remove</button>
         </div>
       `).join("")
-    : `<div style="font-size:0.72rem;color:var(--muted);padding:4px 0">No marketed floor-plan rates are saved yet for this community. Upload an APTIQ survey or add rows manually here.</div>`;
+    : `<div style="font-size:0.72rem;color:var(--muted);padding:4px 0">No marketed floor-plan rates are saved yet for this community. Upload an APTIQ survey, import the budget workbook, or add rows manually here.</div>`;
   const msoeInputs = ["Q1", "Q2", "Q3", "Q4"].map(q => {
     const value = normalizedMsoeByQuarter[q];
     return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
@@ -7703,20 +7994,39 @@ function renderSetupTab() {
         <textarea placeholder="This feeds the fill-in pricing recommendation slide for this community." onchange="updateMarketSurveyField('pricingNotes',this.value)">${escapeHtml(marketSurveyData.pricingNotes)}</textarea>
       </div>
     </div>
-    <div style="margin-top:14px;padding:14px;border:1px solid rgba(68,147,248,0.18);border-radius:12px;background:rgba(68,147,248,0.04)">
+    <div data-floor-plan-selection-section="survey" style="margin-top:14px;padding:14px;border:1px solid rgba(68,147,248,0.18);border-radius:12px;background:rgba(68,147,248,0.04)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div style="font-size:0.78rem;font-weight:700;color:var(--text)">Floor Plan Marketed Rates</div>
-          <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">These APTIQ recommendations are tied to the subject property only. Use the checkboxes to select the floor plans you want to import into Community Setup, or leave the comp rows in the survey as reference only.</div>
+          <div style="font-size:0.68rem;color:var(--muted);margin-top:4px">These APTIQ suggestions are tied to the subject property floor plans in Community Setup. Use the checkboxes to select the floor plans you want to import or update, or leave the comp rows in the survey as reference only.</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <div style="text-align:right">
             <div style="font-size:1.15rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${marketSurveyFloorPlanData.length}</div>
-            <div style="font-size:0.64rem;color:var(--muted)">survey floor plans</div>
+            <div style="font-size:0.64rem;color:var(--muted)">suggested floor plans</div>
           </div>
-          <button class="btn btn-gray btn-sm" type="button" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)})">Select All</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})">Clear</button>
-          <button class="btn btn-gray btn-sm" type="button" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+          <div style="display:grid;grid-template-columns:150px 140px auto;gap:8px;align-items:end">
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk field</div>
+              <select id="market-survey-floor-plan-bulk-field">
+                <option value="marketRent">Market rent</option>
+                <option value="budgetRent">Budget rent</option>
+                <option value="sqft">Sqft</option>
+                <option value="beds">Beds</option>
+                <option value="baths">Baths</option>
+                <option value="sourceSheet">Source</option>
+                <option value="name">Plan name</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk value</div>
+              <input id="market-survey-floor-plan-bulk-value" type="text" placeholder="Value to apply">
+            </div>
+            <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedMarketSurveyFloorPlanField(${JSON.stringify(currentCommunityName)})">Apply to Selected</button>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('survey', ${JSON.stringify(currentCommunityName)}, ${JSON.stringify(marketSurveyFloorPlanData.map(rate => rate.id))})">${selectedMarketSurveyFloorPlanIds.length === marketSurveyFloorPlanData.length && marketSurveyFloorPlanData.length > 0 ? "Clear All" : "Select All"}</button>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('survey', ${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+          <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedMarketSurveyFloorPlanRates(${JSON.stringify(currentCommunityName)})" ${selectedMarketSurveyFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
           <button class="btn btn-gray btn-sm" type="button" onclick="addMarketSurveyFloorPlanRate()">＋ Add Marketed Rate</button>
           <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(currentCommunityName)})' ${marketSurveyFloorPlanData.length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
@@ -7778,7 +8088,7 @@ function renderSetupTab() {
         <div>
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Corporate Lease Units</div>
           <input type="number" min="0" max="${Math.max(totalUnits, 0)}" value="${corporateLeaseUnits || ""}" placeholder="0" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:0.82rem" onchange="updateCorporateLeaseUnits(this.value)">
-          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">These units are excluded from physical and leased occupancy percentage denominators only.</div>
+          <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">These units are removed from comparable occupied and leased counts and from the eligible occupancy base.</div>
         </div>
         <div>
           <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px">Community Address</div>
@@ -7796,7 +8106,7 @@ function renderSetupTab() {
           <div style="font-size:0.63rem;color:var(--muted);margin-top:3px">Use the direct floor-plan / pricing page when it differs from the main website.</div>
         </div>
       </div>
-      <div id="community-floor-plan-budget-setup" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
+      <div id="community-floor-plan-budget-setup" data-floor-plan-selection-section="community" style="margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(68,147,248,0.18);background:rgba(255,255,255,0.65)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
           <div>
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Investor Community Email Setup</div>
@@ -7832,15 +8142,40 @@ function renderSetupTab() {
             <div style="font-size:0.76rem;font-weight:700;color:var(--text)">Floor Plan Budget Setup</div>
             <div style="font-size:0.66rem;color:var(--muted);margin-top:4px">Add the budgeted floor plans for this community here. The DLR export compares these saved budget rents against the current marketed rents by floor plan, using the value saved here first and imported survey matches as the fallback.</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <div style="text-align:right">
-              <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${floorPlanVarianceData.rows.length}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
-            </div>
-            <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
-            <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import APTIQ Plans</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="text-align:right">
+            <div style="font-size:1.35rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4493f8">${floorPlanVarianceData.rows.length}</div>
+            <div style="font-size:0.64rem;color:var(--muted)">saved floor plan${floorPlanVarianceData.rows.length === 1 ? "" : "s"}</div>
           </div>
+          <div style="display:grid;grid-template-columns:150px 140px auto;gap:8px;align-items:end">
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk field</div>
+              <select id="community-floor-plan-bulk-field">
+                <option value="marketedRent">Marketed rent</option>
+                <option value="budgetRent">Budget rent</option>
+                <option value="leasedPct">Leased %</option>
+                <option value="sqft">Sqft</option>
+                <option value="beds">Beds</option>
+                <option value="baths">Baths</option>
+                <option value="marketedRentSource">Market source</option>
+                <option value="name">Plan name</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.66rem;color:var(--muted);margin-bottom:4px">Bulk value</div>
+              <input id="community-floor-plan-bulk-value" type="text" placeholder="Value to apply">
+            </div>
+            <button class="btn btn-gray btn-sm" type="button" onclick="applySelectedCommunityFloorPlanField(${JSON.stringify(p.name)})">Apply to Selected</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-select-all-button="true" onclick="selectAllFloorPlans('community', ${JSON.stringify(p.name)})">${selectedCommunityFloorPlanIds.length === floorPlanVarianceData.rows.length && floorPlanVarianceData.rows.length > 0 ? "Clear All" : "Select All"}</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-clear-button="true" onclick="clearFloorPlanSelection('community', ${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Clear</button>
+            <button class="btn btn-gray btn-sm" type="button" data-floor-plan-delete-button="true" onclick="deleteSelectedCommunityFloorPlans(${JSON.stringify(p.name)})" ${selectedCommunityFloorPlanIds.length === 0 ? "disabled" : ""}>Delete Selected</button>
+          </div>
+          <button class="btn btn-gray btn-sm" type="button" onclick="addCommunityFloorPlanRow()">＋ Add Floor Plan</button>
+          <button class="btn btn-gray btn-sm" type="button" onclick='importPortfolioCommunityFloorPlansFromSurvey(${JSON.stringify(p.name)})' ${normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).length === 0 ? "disabled" : ""}>Import Selected APTIQ Plans</button>
         </div>
+      </div>
         <div style="display:grid;gap:0">${communityFloorPlanRows}</div>
         ${unmatchedFloorPlanRatesHtml}
       </div>
@@ -8003,7 +8338,7 @@ function addMarketSurveyFloorPlanRate() {
     ...marketSurveyData,
     floorPlanRates: [
       ...normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates),
-      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" }
+      { id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, units: null, sourceSheet: "" }
     ]
   });
   renderTab();
@@ -8012,20 +8347,27 @@ function addMarketSurveyFloorPlanRate() {
 function updateMarketSurveyFloorPlanField(index, field, value) {
   const nextRates = normalizeMarketSurveyFloorPlanRates(marketSurveyData.floorPlanRates).map(entry => ({ ...entry }));
   while (nextRates.length <= index) {
-    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, sourceSheet: "" });
+    nextRates.push({ id: makeFloorPlanId(), name: "", marketRent: null, budgetRent: null, sqft: null, beds: null, baths: null, units: null, sourceSheet: "" });
   }
   const target = nextRates[index];
   if (!target) return;
   if (field === "name" || field === "sourceSheet") {
     target[field] = String(value ?? "").trim();
-  } else if (["marketRent", "budgetRent", "sqft", "beds", "baths"].includes(field)) {
+  } else if (["marketRent", "budgetRent", "sqft", "beds", "baths", "units"].includes(field)) {
     const numeric = Number(value);
-    target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    if (field === "units") {
+      target[field] = Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+    } else {
+      target[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+    }
   }
   marketSurveyData = normalizeMarketSurveyData({
     ...marketSurveyData,
     floorPlanRates: nextRates
   });
+  const currentRecord = getCurrentCommunityRecord();
+  syncCommunityFloorPlanRentMetrics(currentRecord, currentRecord.currentMonth);
+  monthlyData = currentRecord.monthlyData;
   renderTab();
 }
 
@@ -8040,6 +8382,9 @@ function removeMarketSurveyFloorPlanRate(index) {
     const selected = getFloorPlanSelectionIds("survey", getProp().name).filter(id => String(id) !== String(removed.id));
     floorPlanSelectionState.survey[getProp().name] = selected;
   }
+  const currentRecord = getCurrentCommunityRecord();
+  syncCommunityFloorPlanRentMetrics(currentRecord, currentRecord.currentMonth);
+  monthlyData = currentRecord.monthlyData;
   renderTab();
 }
 
@@ -8091,6 +8436,9 @@ function buildCommunityFloorPlanVarianceRows(floorPlans = communityFloorPlans, s
     return {
       ...plan,
       marketRate: match?.rate || null,
+      units: Number.isFinite(Number(plan.units)) && Number(plan.units) > 0
+        ? Number(plan.units)
+        : (Number.isFinite(Number(match?.rate?.units)) && Number(match.rate.units) > 0 ? Number(match.rate.units) : null),
       marketRent: resolvedMarketRent,
       marketSource: resolvedMarketSource,
       variance: Number.isFinite(budgetRent) && budgetRent > 0 && Number.isFinite(resolvedMarketRent) && resolvedMarketRent > 0
@@ -8455,8 +8803,11 @@ function renderOverviewTab() {
   }
 
   // ── NER / Rent roll section ─────────────────────────────────────────────────
-  const cmMR       = cm.marketRent    ?? 0;
-  const cmPFRent   = cm.proformaRent  ?? 0;
+  const floorPlanRentMetrics = getCommunityFloorPlanRentMetrics(getCurrentCommunityRecord(), marketSurveyData);
+  const floorPlanMarketAverageRent = floorPlanRentMetrics.marketRent;
+  const floorPlanBudgetAverageRent = floorPlanRentMetrics.budgetRent;
+  const cmMR       = Number(cm.marketRent) || floorPlanRentMetrics.marketRent || 0;
+  const cmPFRent   = Number(cm.proformaRent) || floorPlanRentMetrics.budgetRent || 0;
   const cmRRTotal  = cm.rentRollTotal ?? 0;
   // nerActual: if a total rent roll $ is entered, derive per-unit NER from it;
   // otherwise fall back to the manually entered per-unit value
@@ -8481,10 +8832,11 @@ function renderOverviewTab() {
     <div class="ner-grid">
       <div style="background:var(--bg3);border:1px solid rgba(68,147,248,0.3);border-radius:8px;padding:12px">
         <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:#4493f8;font-weight:700;margin-bottom:8px">📊 Market vs Budget Rent</div>
-        <div class="label">Avg Market Rent ($)</div>
+        <div class="label">Avg Market Rent ($) <span style="font-size:0.62rem;color:var(--muted);font-weight:400">${floorPlanMarketAverageRent > 0 ? "from floor-plan market average" : "manual month value"}</span></div>
         ${numInp("marketRent", cmMR, `data-idx="${currentMonth}"`, 0, 9999999)}
-        <div class="label">Budget Rent ($)</div>
+        <div class="label">Budget Rent ($) <span style="font-size:0.62rem;color:var(--muted);font-weight:400">${floorPlanBudgetAverageRent > 0 ? "from saved floor-plan budget average" : "manual month value"}</span></div>
         ${numInp("proformaRent", cmPFRent, `data-idx="${currentMonth}"`, 0, 9999999)}
+        ${floorPlanBudgetAverageRent > 0 ? `<div style="margin-top:6px;font-size:0.66rem;color:var(--muted)">Auto-pulled from ${communityFloorPlans.filter(plan => Number(plan.budgetRent ?? 0) > 0).length} saved floor-plan budget${communityFloorPlans.filter(plan => Number(plan.budgetRent ?? 0) > 0).length === 1 ? "" : "s"} in Community Setup.</div>` : ""}
         <div style="margin-top:8px;font-size:0.7rem;color:var(--muted)">
           Market vs Budget Rent: ${varSpan(marketVsBudgetRent)}
         </div>
@@ -10015,14 +10367,7 @@ function buildDailyBoxScoreSnapshotFromRows(rows = [], fileName = "", rawText = 
     dailySnapshot.tours = leadActivityTotals.firstVisitsTours;
   }
   if (leadConversionTotals) {
-    dailySnapshot.applications = (
-      (leadConversionTotals.completed || 0)
-      + (leadConversionTotals.partiallyCompleted || 0)
-      + (leadConversionTotals.completedCancelled || 0)
-      + (leadConversionTotals.denied || 0)
-      + (leadConversionTotals.approved || 0)
-      + (leadConversionTotals.approvedCancelled || 0)
-    );
+    dailySnapshot.applications = leadConversionTotals.completed || 0;
     dailySnapshot.pendingDecision = leadConversionTotals.partiallyCompleted;
     dailySnapshot.applicationsApproved = leadConversionTotals.approved;
     dailySnapshot.denied = leadConversionTotals.denied;
@@ -10228,7 +10573,7 @@ function findMarketSurveyFloorPlanHeader(rows) {
     beds: ["beds", "bed", "bedrooms", "bedroom"],
     baths: ["baths", "bath", "bathrooms", "bathroom"]
   };
-  const normalizeHeader = value => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizeHeader = value => String(value ?? "").toLowerCase().replace(/[_\s]+/g, " ").trim();
   for (let rowIdx = 0; rowIdx < Math.min(rows.length, 80); rowIdx += 1) {
     const row = Array.isArray(rows[rowIdx]) ? rows[rowIdx] : [];
     const headerMap = {};
@@ -10257,6 +10602,7 @@ function findFloorPlanDataHeader(rows = []) {
     const bedsIdx = row.findIndex(cell => cell === "bed count");
     const bathsIdx = row.findIndex(cell => cell === "bath count");
     const sqftIdx = row.findIndex(cell => cell === "sq ft" || cell === "sqft");
+    const unitsIdx = row.findIndex(cell => cell === "total units" || cell === "units" || cell === "rentable units");
     const availableRentIdx = row.findIndex(cell => cell.includes("available asking rent"));
     const leasedRentIdx = row.findIndex(cell => cell.includes("leased asking rent"));
     if (propertyIdx !== -1 && planIdx !== -1 && (availableRentIdx !== -1 || leasedRentIdx !== -1)) {
@@ -10268,6 +10614,7 @@ function findFloorPlanDataHeader(rows = []) {
           beds: bedsIdx !== -1 ? bedsIdx : null,
           baths: bathsIdx !== -1 ? bathsIdx : null,
           sqft: sqftIdx !== -1 ? sqftIdx : null,
+          units: unitsIdx !== -1 ? unitsIdx : null,
           availableMarketRent: availableRentIdx !== -1 ? availableRentIdx : null,
           leasedMarketRent: leasedRentIdx !== -1 ? leasedRentIdx : null
         }
@@ -10296,8 +10643,9 @@ function extractFloorPlanRatesFromFloorPlanDataSheet(rows = [], targetCommunity 
     const sqft = headerInfo.headerMap.sqft != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.sqft]) : null;
     const beds = headerInfo.headerMap.beds != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.beds]) : null;
     const baths = headerInfo.headerMap.baths != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.baths]) : null;
+    const units = headerInfo.headerMap.units != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.units]) : null;
     const marketRent = availableMarketRent || leasedMarketRent || null;
-    const isBlank = !propertyName && !planName && !marketRent && !sqft && !beds && !baths;
+    const isBlank = !propertyName && !planName && !marketRent && !sqft && !beds && !baths && !units;
     if (isBlank) {
       blankRun += 1;
       if (blankRun >= 4 && extracted.length > 0) break;
@@ -10316,10 +10664,178 @@ function extractFloorPlanRatesFromFloorPlanDataSheet(rows = [], targetCommunity 
       sqft: sqft || null,
       beds: beds || null,
       baths: baths || null,
+      units: units || null,
       sourceSheet: "Floor Plan Data"
     });
   }
   return extracted;
+}
+
+function findBudgetWorkbookSetUpHeader(rows = []) {
+  const normalizeHeader = value => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  for (let rowIdx = 0; rowIdx < Math.min(rows.length, 40); rowIdx += 1) {
+    const row = Array.isArray(rows[rowIdx]) ? rows[rowIdx] : [];
+    const headerMap = {};
+    row.forEach((cell, colIdx) => {
+      const text = normalizeHeader(cell);
+      if (!text) return;
+      if (headerMap.unitDescription == null && (text === "unit description" || text === "unit type" || text.includes("unit description"))) {
+        headerMap.unitDescription = colIdx;
+      }
+      if (headerMap.proformaRent == null && (text.includes("proforma rental rates") || text === "proforma rent" || text === "budget rent")) {
+        headerMap.proformaRent = colIdx;
+      }
+      if (headerMap.currentRent == null && (text.includes("current rental rates") || text === "current rent" || text === "marketed rent" || text === "market rent")) {
+        headerMap.currentRent = colIdx;
+      }
+      if (headerMap.sqft == null && (text === "sq. ft" || text === "sq ft" || text === "sqft" || text.includes("square feet"))) {
+        headerMap.sqft = colIdx;
+      }
+      if (headerMap.beds == null && (text.includes("beds per unit") || text === "# of beds per unit" || text === "beds")) {
+        headerMap.beds = colIdx;
+      }
+      if (headerMap.baths == null && (text.includes("baths per unit") || text === "# of baths per unit" || text === "baths")) {
+        headerMap.baths = colIdx;
+      }
+      if (headerMap.displayName == null && (text === "name" || text === "plan name")) {
+        headerMap.displayName = colIdx;
+      }
+      if (headerMap.units == null && (text === "# of units" || text === "number of units" || text === "total units" || text === "units")) {
+        headerMap.units = colIdx;
+      }
+    });
+    if (headerMap.unitDescription != null && headerMap.proformaRent != null && headerMap.currentRent != null) {
+      return { rowIdx, headerMap };
+    }
+  }
+  return null;
+}
+
+function findBudgetWorkbookRateScheduleHeader(rows = []) {
+  const normalizeHeader = value => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  for (let rowIdx = 0; rowIdx < Math.min(rows.length, 20); rowIdx += 1) {
+    const row = Array.isArray(rows[rowIdx]) ? rows[rowIdx] : [];
+    const headerMap = {};
+    row.forEach((cell, colIdx) => {
+      const text = normalizeHeader(cell);
+      if (!text) return;
+      if (headerMap.unitType == null && (text === "unit type" || text === "floor plan" || text === "unit description")) {
+        headerMap.unitType = colIdx;
+      }
+      if (headerMap.baseRent == null && (text === "base rent" || text.includes("base rent"))) {
+        headerMap.baseRent = colIdx;
+      }
+      if (headerMap.totalUnits == null && (text.includes("total design units") || text === "total units")) {
+        headerMap.totalUnits = colIdx;
+      }
+    });
+    if (headerMap.unitType != null && headerMap.baseRent != null) {
+      return { rowIdx, headerMap };
+    }
+  }
+  return null;
+}
+
+function extractBudgetWorkbookFloorPlanRates(workbook, fileName = "") {
+  if (!workbook || typeof XLSX === "undefined") return null;
+  const setupRows = getWorkbookSheetRows(workbook, [/^Set-Up$/i]);
+  const rateRows = getWorkbookSheetRows(workbook, [/^Rate Schedule$/i]);
+  if (!setupRows.length && !rateRows.length) return null;
+  const propertyRow = findWorksheetRow(setupRows, /^Property Name/i) || findWorksheetRow(rateRows, /^RISE/i);
+  const propertyName = matchPropertyName(String(propertyRow?.[1] ?? propertyRow?.[0] ?? fileName ?? "").trim(), { fallbackToCurrent: false })
+    || guessCommunityNameFromMarketFileName(fileName);
+  const nextByKey = new Map();
+  if (setupRows.length) {
+    const headerInfo = findBudgetWorkbookSetUpHeader(setupRows);
+    if (headerInfo) {
+      let blankRun = 0;
+      for (let idx = headerInfo.rowIdx + 1; idx < setupRows.length; idx += 1) {
+        const row = setupRows[idx] ?? [];
+        const rowLabel = String(row[0] ?? "").trim();
+        const unitDescription = String(row[headerInfo.headerMap.unitDescription] ?? "").trim();
+        const displayName = String(row[headerInfo.headerMap.displayName] ?? "").trim();
+        const proformaRent = headerInfo.headerMap.proformaRent != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.proformaRent]) : null;
+        const currentRent = headerInfo.headerMap.currentRent != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.currentRent]) : null;
+        const sqft = headerInfo.headerMap.sqft != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.sqft]) : null;
+        const beds = headerInfo.headerMap.beds != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.beds]) : null;
+        const baths = headerInfo.headerMap.baths != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.baths]) : null;
+        const units = headerInfo.headerMap.units != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.units]) : null;
+        const isBlank = !unitDescription && !displayName && !proformaRent && !currentRent && !sqft && !beds && !baths && !units;
+        if (isBlank) {
+          blankRun += 1;
+          if (blankRun >= 4 && nextByKey.size > 0) break;
+          continue;
+        }
+        blankRun = 0;
+        if (/^example$/i.test(rowLabel) || /^example$/i.test(unitDescription) || /^example$/i.test(displayName)) continue;
+        if (!unitDescription && !displayName) continue;
+        const resolvedName = displayName ? `${unitDescription} • ${displayName}` : unitDescription;
+        const key = normalizeFloorPlanLookupName(unitDescription || displayName);
+        nextByKey.set(key, {
+          id: makeFloorPlanId(),
+          name: resolvedName,
+          marketRent: Number.isFinite(currentRent) && currentRent > 0 ? currentRent : null,
+          budgetRent: Number.isFinite(proformaRent) && proformaRent > 0 ? proformaRent : null,
+          sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : null,
+          beds: Number.isFinite(beds) && beds >= 0 ? beds : null,
+          baths: Number.isFinite(baths) && baths >= 0 ? baths : null,
+          units: Number.isFinite(units) && units > 0 ? units : null,
+          sourceSheet: `Set-Up${propertyName ? ` · ${propertyName}` : ""}`
+        });
+      }
+    }
+  }
+  if (rateRows.length) {
+    const headerInfo = findBudgetWorkbookRateScheduleHeader(rateRows);
+    if (headerInfo) {
+      let blankRun = 0;
+      for (let idx = headerInfo.rowIdx + 1; idx < rateRows.length; idx += 1) {
+        const row = rateRows[idx] ?? [];
+        const unitType = String(row[headerInfo.headerMap.unitType] ?? "").trim();
+        const baseRent = headerInfo.headerMap.baseRent != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.baseRent]) : null;
+        const units = headerInfo.headerMap.units != null ? normalizeWorkbookNumber(row[headerInfo.headerMap.units]) : null;
+        const isBlank = !unitType && !baseRent && !units;
+        if (isBlank) {
+          blankRun += 1;
+          if (blankRun >= 4 && nextByKey.size > 0) break;
+          continue;
+        }
+        blankRun = 0;
+        if (!unitType) continue;
+        const key = normalizeFloorPlanLookupName(unitType);
+        const existing = nextByKey.get(key);
+        if (existing) {
+          if ((existing.budgetRent == null || existing.budgetRent <= 0) && Number.isFinite(baseRent) && baseRent > 0) {
+            existing.budgetRent = baseRent;
+          }
+          if ((existing.units == null || existing.units <= 0) && Number.isFinite(units) && units > 0) {
+            existing.units = units;
+          }
+          if (!String(existing.sourceSheet || "").includes("Rate Schedule")) {
+            existing.sourceSheet = `${existing.sourceSheet || "Set-Up"} / Rate Schedule`;
+          }
+          continue;
+        }
+        nextByKey.set(key, {
+          id: makeFloorPlanId(),
+          name: unitType,
+          marketRent: null,
+          budgetRent: Number.isFinite(baseRent) && baseRent > 0 ? baseRent : null,
+          sqft: null,
+          beds: null,
+          baths: null,
+          units: Number.isFinite(units) && units > 0 ? units : null,
+          sourceSheet: `Rate Schedule${propertyName ? ` · ${propertyName}` : ""}`
+        });
+      }
+    }
+  }
+  const floorPlanRates = Array.from(nextByKey.values()).filter(row => row.name);
+  if (floorPlanRates.length === 0 || !propertyName) return null;
+  return {
+    communityName: propertyName,
+    floorPlanRates
+  };
 }
 
 function sheetReferencesTargetCommunity(rows = [], targetCommunity = "", sheetName = "") {
@@ -10356,12 +10872,13 @@ function extractMarketSurveyFloorPlanRates(workbook, targetCommunity = "") {
     let blankRun = 0;
     for (let idx = rowIdx + 1; idx < sheetRows.length; idx += 1) {
       const row = sheetRows[idx] ?? [];
-      const name = String(row[headerMap.name] ?? "").trim();
-      const marketRent = normalizeWorkbookNumber(row[headerMap.marketRent]);
-      const sqft = headerMap.sqft != null ? normalizeWorkbookNumber(row[headerMap.sqft]) : 0;
-      const beds = headerMap.beds != null ? normalizeWorkbookNumber(row[headerMap.beds]) : 0;
-      const baths = headerMap.baths != null ? normalizeWorkbookNumber(row[headerMap.baths]) : 0;
-      const isBlank = !name && !marketRent && !sqft && !beds && !baths;
+    const name = String(row[headerMap.name] ?? "").trim();
+    const marketRent = normalizeWorkbookNumber(row[headerMap.marketRent]);
+    const sqft = headerMap.sqft != null ? normalizeWorkbookNumber(row[headerMap.sqft]) : 0;
+    const beds = headerMap.beds != null ? normalizeWorkbookNumber(row[headerMap.beds]) : 0;
+    const baths = headerMap.baths != null ? normalizeWorkbookNumber(row[headerMap.baths]) : 0;
+    const units = headerMap.units != null ? normalizeWorkbookNumber(row[headerMap.units]) : 0;
+    const isBlank = !name && !marketRent && !sqft && !beds && !baths && !units;
       if (isBlank) {
         blankRun += 1;
         if (blankRun >= 4 && rows.length > 0) break;
@@ -10376,6 +10893,7 @@ function extractMarketSurveyFloorPlanRates(workbook, targetCommunity = "") {
         sqft: sqft || null,
         beds: beds || null,
         baths: baths || null,
+        units: units || null,
         sourceSheet: sheetName
       });
     }
@@ -10830,6 +11348,9 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
       ? surveyInput.floorPlanRates
       : existingSurvey.floorPlanRates
   });
+  nextSurvey.floorPlanRates = seedAptiqFloorPlanRatesFromCommunity(record, nextSurvey.floorPlanRates);
+  record.marketSurveyData = nextSurvey;
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
   const periodKey = getSelectedDashboardPeriodKey();
   const nextHistory = normalizeMarketSurveyHistory({
     ...record.marketSurveyHistory,
@@ -10858,6 +11379,104 @@ function applyMarketSurveyDataToProperty(propName, surveyInput) {
     importTracking = nextTracking;
   }
   return { matchedName, survey: nextSurvey };
+}
+
+function applyBudgetWorkbookFloorPlanRatesToProperty(propName, budgetInput, fileName = "") {
+  const matchedName = matchPropertyName(propName);
+  const known = getAllCommunityNames();
+  if (!known.includes(matchedName)) return null;
+  const record = matchedName === getProp().name
+    ? getCurrentCommunityRecord()
+    : normalizeSavedCommunityRecord(matchedName, savedData[matchedName]);
+  const existingPlans = normalizeCommunityFloorPlans(record.communityFloorPlans);
+  const existingByName = new Map(existingPlans.map(plan => [normalizeFloorPlanLookupName(plan.name), plan]));
+  const nextPlans = existingPlans.map(plan => ({ ...plan }));
+  const rows = Array.isArray(budgetInput?.floorPlanRates) ? budgetInput.floorPlanRates : [];
+  rows.forEach(rate => {
+    const normalizedName = normalizeFloorPlanLookupName(rate.name);
+    if (!normalizedName) return;
+    const existing = existingByName.get(normalizedName);
+    const nextPlan = existing
+      ? { ...existing }
+      : {
+          id: makeFloorPlanId(),
+          name: String(rate.name ?? "").trim(),
+          sqft: null,
+          budgetRent: null,
+          marketedRent: null,
+          leasedPct: null,
+          marketedRentSource: "",
+          beds: null,
+          baths: null
+        };
+    if (!String(nextPlan.name ?? "").trim()) nextPlan.name = String(rate.name ?? "").trim();
+    if ((nextPlan.budgetRent == null || nextPlan.budgetRent <= 0) && Number.isFinite(Number(rate.budgetRent)) && Number(rate.budgetRent) > 0) {
+      nextPlan.budgetRent = Number(rate.budgetRent);
+    }
+    if ((nextPlan.marketedRent == null || nextPlan.marketedRent <= 0) && Number.isFinite(Number(rate.marketRent)) && Number(rate.marketRent) > 0) {
+      nextPlan.marketedRent = Number(rate.marketRent);
+    }
+    if ((nextPlan.sqft == null || nextPlan.sqft <= 0) && Number.isFinite(Number(rate.sqft)) && Number(rate.sqft) > 0) {
+      nextPlan.sqft = Number(rate.sqft);
+    }
+    if ((nextPlan.beds == null || nextPlan.beds < 0) && Number.isFinite(Number(rate.beds)) && Number(rate.beds) >= 0) {
+      nextPlan.beds = Number(rate.beds);
+    }
+    if ((nextPlan.baths == null || nextPlan.baths < 0) && Number.isFinite(Number(rate.baths)) && Number(rate.baths) >= 0) {
+      nextPlan.baths = Number(rate.baths);
+    }
+    nextPlan.marketedRentSource = String(nextPlan.marketedRentSource || rate.sourceSheet || fileName || "Budget workbook").trim();
+    if (existing) {
+      const existingIndex = nextPlans.findIndex(plan => String(plan.id) === String(existing.id));
+      if (existingIndex >= 0) nextPlans[existingIndex] = nextPlan;
+    } else {
+      nextPlans.push(nextPlan);
+      existingByName.set(normalizedName, nextPlan);
+    }
+  });
+  const existingSurvey = normalizeMarketSurveyData(record.marketSurveyData);
+  const nextSurvey = normalizeMarketSurveyData({
+    ...existingSurvey,
+    floorPlanRates: seedAptiqFloorPlanRatesFromCommunity({
+      communityFloorPlans: nextPlans,
+      communityWebsiteUrl: record.communityWebsiteUrl,
+      floorPlanRatesPageUrl: record.floorPlanRatesPageUrl
+    }, existingSurvey.floorPlanRates)
+  });
+  const timestamp = new Date().toISOString();
+  record.communityFloorPlans = normalizeCommunityFloorPlans(nextPlans);
+  record.marketSurveyData = nextSurvey;
+  syncCommunityFloorPlanRentMetrics(record, record.currentMonth);
+  record.financialBudgetLedger = {
+    ...(record.financialBudgetLedger && typeof record.financialBudgetLedger === "object" ? record.financialBudgetLedger : {}),
+    sourceFileName: String(fileName ?? "").trim(),
+    sourceKind: "budget_rate_schedule",
+    updatedAt: timestamp,
+    floorPlanRates: record.communityFloorPlans
+  };
+  record.financialBudgetUpdatedAt = timestamp;
+  record.marketSurveyHistory = normalizeMarketSurveyHistory({
+    ...record.marketSurveyHistory,
+    [getSelectedDashboardPeriodKey()]: nextSurvey
+  });
+  record.importTracking = normalizeImportTracking({
+    ...record.importTracking,
+    financialBudget: {
+      ...(record.importTracking?.financialBudget || {}),
+      [getSelectedDashboardPeriodKey()]: {
+        importedAt: timestamp,
+        sourceFileName: String(fileName ?? "").trim()
+      }
+    }
+  });
+  savedData[matchedName] = normalizeSavedCommunityRecord(matchedName, record);
+  if (matchedName === getProp().name) {
+    communityFloorPlans = normalizeCommunityFloorPlans(record.communityFloorPlans);
+    marketSurveyData = nextSurvey;
+    financialBudgetLedger = record.financialBudgetLedger;
+    financialBudgetUpdatedAt = timestamp;
+  }
+  return { matchedName, floorPlans: record.communityFloorPlans, survey: nextSurvey };
 }
 
 async function handleMarketSurveyWorkbook(file) {
@@ -18431,20 +19050,21 @@ function getCommunityRecordForScope(propName) {
 
 function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
+  const corporateUnits = normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
   let runningUnits = snapshotKey === "leasedSnapshot"
     ? Math.max(0, Number(record?.currentLeased) || 0)
     : Math.max(0, Number(record?.currentOccupied) || 0);
-  if (!Number.isInteger(targetMonth)) return runningUnits;
-  if (targetMonth === anchorMonth) return runningUnits;
+  if (!Number.isInteger(targetMonth)) return getComparableOccupancyUnits(runningUnits, corporateUnits);
+  if (targetMonth === anchorMonth) return getComparableOccupancyUnits(runningUnits, corporateUnits);
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   if (targetMonth < anchorMonth) {
     for (let month = anchorMonth; month > targetMonth; month -= 1) {
       const priorSnapshot = Number(monthEntries[month - 1]?.[snapshotKey] ?? 0);
-      if (priorSnapshot > 0) return priorSnapshot;
+      if (priorSnapshot > 0) return getComparableOccupancyUnits(priorSnapshot, corporateUnits);
       runningUnits = Math.max(runningUnits + getEffectiveMoveOutsForMonth(month, monthEntries).effective - (monthEntries[month]?.moveIns ?? 0), 0);
       runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
     }
-    return runningUnits;
+    return getComparableOccupancyUnits(runningUnits, corporateUnits);
   }
   for (let month = anchorMonth + 1; month <= targetMonth; month += 1) {
     const explicitSnapshot = Number(monthEntries[month]?.[snapshotKey] ?? 0);
@@ -18455,7 +19075,7 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
     runningUnits = Math.max(runningUnits - getEffectiveMoveOutsForMonth(month, monthEntries).effective + (monthEntries[month]?.moveIns ?? 0), 0);
     runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
   }
-  return runningUnits;
+  return getComparableOccupancyUnits(runningUnits, corporateUnits);
 }
 
 function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
@@ -18463,7 +19083,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record?.corporateLeaseUnits);
   let occupiedUnits = startMonth === anchorMonth
-    ? Math.max(0, Number(record?.currentOccupied) || 0)
+    ? getComparableOccupancyUnits(record?.currentOccupied, record?.corporateLeaseUnits)
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
   if (!Number.isInteger(startMonth) || occupancyBaseUnits <= 0) {
     return {
@@ -19153,8 +19773,9 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   const currentNer = (Number(monthEntry.rentRollTotal) || 0) > 0 && occupiedUnits > 0
     ? Number(monthEntry.rentRollTotal) / occupiedUnits
     : (Number(monthEntry.nerActual) || 0);
-  const resolvedAvgInPlaceRent = Number(monthEntry.marketRent) || Number(dlrSummary.pricing?.avgInPlaceRent) || 0;
-  const resolvedAvgBudgetRent = Number(monthEntry.proformaRent) || Number(dlrSummary.pricing?.avgBudgetRent) || 0;
+  const floorPlanRentMetrics = getCommunityFloorPlanRentMetrics(record, surveyData);
+  const resolvedAvgInPlaceRent = Number(monthEntry.marketRent) || floorPlanRentMetrics.marketRent || Number(dlrSummary.pricing?.avgInPlaceRent) || 0;
+  const resolvedAvgBudgetRent = Number(monthEntry.proformaRent) || floorPlanRentMetrics.budgetRent || Number(dlrSummary.pricing?.avgBudgetRent) || 0;
   const status = occupancyPct + 0.5 >= budgetOccPct
     ? "On Track"
     : occupancyPct + 2 >= budgetOccPct
@@ -20712,9 +21333,7 @@ function parseRonaldoLeadConversionRows(rows = [], target = {}) {
   const leaseCompleted = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["lease_completed"]));
   const leaseApproved = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["lease_approved"]));
   return makeRonaldoBackfillRow(target, {
-    applications: [completed, partial, completedCancelled, denied, approved, approvedCancelled].some(value => Number.isFinite(value))
-      ? [completed, partial, completedCancelled, denied, approved, approvedCancelled].filter(value => Number.isFinite(value)).reduce((sum, value) => sum + value, 0)
-      : "",
+    applications: Number.isFinite(completed) ? completed : "",
     applications_approved: approved ?? "",
     denied: denied ?? "",
     cancelled: [completedCancelled, approvedCancelled].some(value => Number.isFinite(value))
@@ -20918,33 +21537,91 @@ async function processRonaldoFloorPlanSnapshotRows(workbook, fileName = "", opti
   const rowsByCommunity = new Map();
   for (let r = 1; r < sheetRows.length; r += 1) {
     const row = sheetRows[r] || [];
+    const reportMonthValue = getCell(row, "report_month");
+    const detectedMonthIdx = parseAtlasMonthIndex(reportMonthValue);
+    const detectedYear = reportMonthValue ? new Date(reportMonthValue).getFullYear() : null;
+    const targetMonthIdx = forcedTarget.monthIdx ?? detectedMonthIdx ?? getImportTargetMonth();
+    const targetYear = forcedTarget.year ?? (Number.isFinite(detectedYear) ? detectedYear : new Date().getFullYear());
+    if (targetMonthIdx < 0 || targetMonthIdx > 11) continue;
     const mappedName = resolveRonaldoCommunityFromRow({
       community_id: getCell(row, "community_id"),
-      community_name: getCell(row, "source_property_name") || getCell(row, "community_name")
+      community_name: getCell(row, "source_property_name") || getCell(row, "community_name") || getCell(row, "source_property") || getCell(row, "property_name")
     }, communityMap, forcedTarget);
     if (!mappedName) continue;
-    const detectedMonthIdx = parseAtlasMonthIndex(getCell(row, "report_month"));
-    const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override" ? getImportTargetMonth() : (detectedMonthIdx ?? getImportTargetMonth()));
-    if (targetMonthIdx < 0 || targetMonthIdx > 11) continue;
-    const key = `${mappedName}::${targetMonthIdx}`;
+    const key = `${mappedName}::${targetMonthIdx}::${targetYear}`;
     const current = rowsByCommunity.get(key) || {
       property: mappedName,
-      month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : MONTHS[targetMonthIdx],
-      floorPlanRates: []
+      month: buildHistoricalMonthLabel(targetMonthIdx, targetYear),
+      monthIdx: targetMonthIdx,
+      year: targetYear,
+      floorPlanRates: new Map()
     };
     const floorPlanName = String(getCell(row, "unit_type") || getCell(row, "floor_plan") || "").trim();
     if (!floorPlanName) continue;
-    current.floorPlanRates.push({
-      name: floorPlanName,
-      marketRent: normalizeRonaldoBackfillNumber(getCell(row, "avg_market_rent")),
-      sqft: normalizeRonaldoBackfillNumber(getCell(row, "avg_sqft")),
-      beds: normalizeRonaldoBackfillNumber(getCell(row, "bed_count")),
-      baths: normalizeRonaldoBackfillNumber(getCell(row, "bath_count")),
+    const resolvedFloorPlanName = resolveRonaldoFloorPlanName(mappedName, floorPlanName, row);
+    const marketRent = normalizeRonaldoBackfillNumber(getCell(row, "avg_market_rent"));
+    const scheduledRent = normalizeRonaldoBackfillNumber(getCell(row, "avg_scheduled_rent"));
+    const sqft = normalizeRonaldoBackfillNumber(getCell(row, "avg_sqft"));
+    const beds = normalizeRonaldoBackfillNumber(getCell(row, "bed_count"));
+    const baths = normalizeRonaldoBackfillNumber(getCell(row, "bath_count"));
+    const leasedPct = normalizeAtlasPercentValue(getCell(row, "leased_pct") || getCell(row, "occupancy_pct"));
+    const units = normalizeRonaldoBackfillNumber(getCell(row, "units")) ?? normalizeRonaldoBackfillNumber(getCell(row, "rentable_units")) ?? 1;
+    const weight = Number.isFinite(units) && units > 0 ? units : 1;
+    const rateKey = normalizeFloorPlanLookupName(resolvedFloorPlanName);
+    const existingRate = current.floorPlanRates.get(rateKey) || {
+      id: makeFloorPlanId(),
+      name: resolvedFloorPlanName,
+      marketRentTotal: 0,
+      marketRentWeight: 0,
+      budgetRentTotal: 0,
+      budgetRentWeight: 0,
+      sqftTotal: 0,
+      sqftWeight: 0,
+      leasedPctTotal: 0,
+      leasedPctWeight: 0,
+      beds: null,
+      baths: null,
       sourceSheet: fileName
-    });
+    };
+    if (Number.isFinite(marketRent)) {
+      existingRate.marketRentTotal += marketRent * weight;
+      existingRate.marketRentWeight += weight;
+    }
+    if (Number.isFinite(scheduledRent)) {
+      existingRate.budgetRentTotal += scheduledRent * weight;
+      existingRate.budgetRentWeight += weight;
+    }
+    if (Number.isFinite(sqft)) {
+      existingRate.sqftTotal += sqft * weight;
+      existingRate.sqftWeight += weight;
+    }
+    if (Number.isFinite(leasedPct)) {
+      existingRate.leasedPctTotal += leasedPct * weight;
+      existingRate.leasedPctWeight += weight;
+    }
+    if (Number.isFinite(beds) && existingRate.beds == null) existingRate.beds = beds;
+    if (Number.isFinite(baths) && existingRate.baths == null) existingRate.baths = baths;
+    existingRate.sourceSheet = fileName;
+    current.floorPlanRates.set(rateKey, existingRate);
     rowsByCommunity.set(key, current);
   }
-  const rows = Array.from(rowsByCommunity.values());
+  const rows = Array.from(rowsByCommunity.values()).map(row => ({
+    property: row.property,
+    month: row.month,
+    monthIdx: row.monthIdx,
+    year: row.year,
+    floorPlanRates: Array.from(row.floorPlanRates.values()).map(rate => ({
+      id: rate.id,
+      name: rate.name,
+      marketRent: rate.marketRentWeight > 0 ? rate.marketRentTotal / rate.marketRentWeight : null,
+      budgetRent: rate.budgetRentWeight > 0 ? rate.budgetRentTotal / rate.budgetRentWeight : null,
+      sqft: rate.sqftWeight > 0 ? rate.sqftTotal / rate.sqftWeight : null,
+      leasedPct: rate.leasedPctWeight > 0 ? rate.leasedPctTotal / rate.leasedPctWeight : null,
+      beds: rate.beds ?? null,
+      baths: rate.baths ?? null,
+      sourceSheet: rate.sourceSheet
+    }))
+  }));
   if (rows.length === 0) return { rows: [], notes: [] };
   rows.forEach(row => {
     const record = getPropertyRecordForApply(row.property);
@@ -20958,7 +21635,7 @@ async function processRonaldoFloorPlanSnapshotRows(workbook, fileName = "", opti
       updatedOn: new Date().toISOString(),
       floorPlanRates: row.floorPlanRates
     });
-    const periodKey = buildPeriodKey(targetMonthIdx, forcedTarget.year || new Date().getFullYear());
+    const periodKey = buildPeriodKey(row.monthIdx ?? forcedTarget.monthIdx ?? getImportTargetMonth(), row.year ?? forcedTarget.year ?? new Date().getFullYear());
     const nextHistory = normalizeMarketSurveyHistory({
       ...record.marketSurveyHistory,
       [periodKey]: nextSurvey
@@ -20977,19 +21654,20 @@ async function processRonaldoFloorPlanSnapshotRows(workbook, fileName = "", opti
     const existingByName = new Map(existingPlans.map(plan => [normalizeFloorPlanLookupName(plan.name), plan]));
     const nextPlans = [];
     row.floorPlanRates.forEach(rate => {
-      const existing = existingByName.get(normalizeFloorPlanLookupName(rate.name));
+      const normalizedRateName = normalizeFloorPlanLookupName(rate.name);
+      const existing = existingByName.get(normalizedRateName);
       nextPlans.push({
         id: existing?.id || makeFloorPlanId(),
         name: String(existing?.name || rate.name || "").trim(),
         sqft: existing?.sqft ?? rate.sqft ?? null,
-        budgetRent: existing?.budgetRent ?? null,
+        budgetRent: existing?.budgetRent ?? rate.budgetRent ?? null,
         marketedRent: existing?.marketedRent ?? rate.marketRent ?? null,
-        leasedPct: existing?.leasedPct ?? null,
+        leasedPct: existing?.leasedPct ?? rate.leasedPct ?? null,
         marketedRentSource: existing?.marketedRentSource || fileName,
         beds: existing?.beds ?? rate.beds ?? null,
         baths: existing?.baths ?? rate.baths ?? null
       });
-      existingByName.delete(normalizeFloorPlanLookupName(rate.name));
+      existingByName.delete(normalizedRateName);
     });
     existingByName.forEach(plan => nextPlans.push({ ...plan }));
     record.marketSurveyData = nextSurvey;
@@ -21679,7 +22357,22 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
   try {
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
     const monthlySheet = workbook.SheetNames.find(name => normalizeAtlasColumnKey(name) === "monthly_upload");
+    const budgetWorkbook = extractBudgetWorkbookFloorPlanRates(workbook, file.name);
     if (!monthlySheet) {
+      if (budgetWorkbook?.communityName && budgetWorkbook.floorPlanRates.length > 0) {
+        const applied = applyBudgetWorkbookFloorPlanRatesToProperty(budgetWorkbook.communityName, budgetWorkbook, file.name);
+        if (!applied) {
+          csvError = `The budget workbook mapped to "${budgetWorkbook.communityName}", but that community does not exist in this dashboard yet.`;
+          renderTab();
+          return;
+        }
+        csvLog = [
+          `✅ Imported ${budgetWorkbook.floorPlanRates.length} floor plan rate${budgetWorkbook.floorPlanRates.length === 1 ? "" : "s"} from ${file.name} into ${applied.matchedName} budget setup.`,
+          "ℹ Subject floor plans now seed the APTIQ suggestion list, while budget rent stays tied to the budget workbook or manual edits."
+        ];
+        renderTab();
+        return;
+      }
       csvError = "This workbook is missing the required Monthly_Upload tab.";
       renderTab();
       return;
