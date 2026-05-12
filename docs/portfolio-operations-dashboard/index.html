@@ -7011,6 +7011,15 @@ function getScoutConversationalReply(question = "") {
   return null;
 }
 
+function getScoutShortcutIntent(question = "") {
+  const lower = String(question ?? "").trim().toLowerCase();
+  if (!lower) return "";
+  if (/\bwhat changed\b|\bwhat changed this month\b/.test(lower)) return "what_changed";
+  if (/\btop risks\b|\bmost attention\b|\bneed the most attention\b/.test(lower)) return "top_risks";
+  if (/\bgoal guidance\b|\bwhat lease and app goals should i set this month\b/.test(lower)) return "goal_guidance";
+  return "";
+}
+
 function getScoutMetricIntent(question = "") {
   const lower = String(question ?? "").toLowerCase();
   if (/\bphysical occupancy\b|\boccupancy\b|\bocc\b/.test(lower)) return "physical_occupancy";
@@ -7045,8 +7054,104 @@ function formatScoutMetricAnswer(label = "", value = "", context = "", source = 
   );
 }
 
+function buildScoutWhatChangedAnswer(scope = null) {
+  if (!scope) return "";
+  const monthLabel = formatScoutDateLabel(scope.monthIdx);
+  if (scope.type === "portfolio") {
+    const aggregate = scope.aggregate || {};
+    const details = Array.isArray(scope.details) ? scope.details : [];
+    const topPressure = [...details].sort((left, right) =>
+      Math.max(Number(right.summary?.occGapUnits ?? 0) || 0, Number(right.summary?.leasedGapUnits ?? 0) || 0)
+      - Math.max(Number(left.summary?.occGapUnits ?? 0) || 0, Number(left.summary?.leasedGapUnits ?? 0) || 0)
+    )[0];
+    return buildScoutNarrative(
+      `For ${monthLabel}, the portfolio is sitting at ${getSummaryOccPct(aggregate).toFixed(1)}% physical occupancy and ${getSummaryLeasedPct(aggregate).toFixed(1)}% leased occupancy.`,
+      `${Math.round(aggregate.guestCards ?? 0)} guest cards, ${Math.round(aggregate.tours ?? 0)} tours, ${Math.round(aggregate.applications ?? 0)} applications, and ${Math.round(aggregate.applicationsApproved ?? 0)} approved applications are saved month to date.`,
+      topPressure ? `${topPressure.name} is showing the most visible strain with ${Math.max(topPressure.summary?.occGapUnits ?? 0, 0)} budget-gap units and ${(topPressure.summary?.tourToLeasePct ?? 0).toFixed(1)}% tour-to-lease conversion.` : "No single community is standing out as the top risk from the saved ATLAS view.",
+      "Use this as a portfolio brief, then open the highest-pressure communities for the decision detail behind the numbers."
+    );
+  }
+  const detail = scope.detail;
+  if (!detail) return "";
+  const summary = detail.summary || {};
+  return buildScoutNarrative(
+    `${detail.name} is at ${getSummaryOccPct(summary).toFixed(1)}% physical occupancy and ${getSummaryLeasedPct(summary).toFixed(1)}% leased occupancy for ${monthLabel}.`,
+    `${Math.round(summary.guestCards ?? 0)} guest cards, ${Math.round(summary.tours ?? 0)} tours, ${Math.round(summary.applications ?? 0)} applications, and ${Math.round(summary.applicationsApproved ?? 0)} approved applications are saved month to date.`,
+    `${Math.max(summary.occGapUnits ?? 0, 0)} budget-gap units and ${(summary.tourToLeasePct ?? 0).toFixed(1)}% tour-to-lease conversion are shaping the current leasing pressure.`,
+    buildScoutRecommendationSummary(detail)
+  );
+}
+
+function buildScoutTopRisksAnswer(scope = null) {
+  if (!scope) return "";
+  const monthLabel = formatScoutDateLabel(scope.monthIdx);
+  if (scope.type === "portfolio") {
+    const details = [...(scope.details || [])].sort((left, right) =>
+      Math.max(Number(right.summary?.occGapUnits ?? 0) || 0, Number(right.summary?.leasedGapUnits ?? 0) || 0)
+      - Math.max(Number(left.summary?.occGapUnits ?? 0) || 0, Number(left.summary?.leasedGapUnits ?? 0) || 0)
+    ).slice(0, 3);
+    const ranked = details.map((detail, idx) => {
+      const summary = detail.summary || {};
+      return `${idx + 1}. ${detail.name}: ${Math.max(summary.occGapUnits ?? 0, 0)} gap units, ${(summary.tourToLeasePct ?? 0).toFixed(1)}% tour-to-lease, ${Math.round(summary.applicationsApproved ?? 0)} approved apps.`;
+    }).join(" ");
+    return buildScoutNarrative(
+      `For ${monthLabel}, Scout’s highest-risk communities are ranked by budget-gap pressure first and current funnel strength second.`,
+      ranked || "No ranked risk set is available from the current ATLAS scope.",
+      "The strongest next move is to review the first one or two communities where gap units are high and approved application depth is still thin."
+    );
+  }
+  const detail = scope.detail;
+  if (!detail) return "";
+  const summary = detail.summary || {};
+  return buildScoutNarrative(
+    `${detail.name}'s main risks for ${monthLabel} are occupancy pressure, close-rate strength, and approved application depth.`,
+    `The asset is carrying ${Math.max(summary.occGapUnits ?? 0, 0)} budget-gap units, ${(summary.tourToLeasePct ?? 0).toFixed(1)}% tour-to-lease conversion, and ${Math.round(summary.applicationsApproved ?? 0)} approved applications.`,
+    buildScoutRecommendationSummary(detail),
+    "If the approved pipeline does not convert quickly enough, the occupancy gap is the first number likely to stay under pressure."
+  );
+}
+
+function buildScoutGoalGuidanceAnswer(scope = null) {
+  if (!scope) return "";
+  const monthLabel = formatScoutDateLabel(scope.monthIdx);
+  if (scope.type === "portfolio") {
+    const details = (scope.details || []).slice(0, 5);
+    const lines = details.map(detail => {
+      const plan = getCommunityPerformancePlan(detail.name, detail.record) || {};
+      const summary = detail.summary || {};
+      return `${detail.name}: ${Math.round(plan.currentGrossLeaseNeed ?? 0)} lease goal, ${Math.round(plan.currentAppNeed ?? 0)} app goal, ${Math.max(summary.occGapUnits ?? 0, 0)} gap units, ${(summary.tourToLeasePct ?? 0).toFixed(1)}% close rate.`;
+    }).join(" ");
+    return buildScoutNarrative(
+      `For ${monthLabel}, the monthly goal editor should be anchored to budget-gap units first, then filtered through each community’s current close rate and approved pipeline depth.`,
+      lines || "Open the portfolio goal editor to see the current community recommendations.",
+      "Communities with higher gap units and weaker close rates should carry the heavier app goals because they need more funnel volume to hit the same lease outcome."
+    );
+  }
+  const detail = scope.detail;
+  if (!detail) return "";
+  const plan = getCommunityPerformancePlan(detail.name, detail.record) || {};
+  const summary = detail.summary || {};
+  return buildScoutNarrative(
+    `For ${detail.name} in ${monthLabel}, Scout would start with ${Math.round(plan.currentGrossLeaseNeed ?? 0)} leases and ${Math.round(plan.currentAppNeed ?? 0)} applications as the working monthly goal.`,
+    `That recommendation is based on ${Math.max(summary.occGapUnits ?? 0, 0)} budget-gap units, ${(summary.tourToLeasePct ?? 0).toFixed(1)}% current close rate, and ${Math.round(summary.applicationsApproved ?? 0)} approved applications already in the funnel.`,
+    `The needed close rate is ${(plan.currentTourToLeaseNeededPct ?? 0).toFixed(1)}%, so if the current team is closing below that pace the app goal should stay heavier than the lease goal.`,
+    "Save the target in the portfolio goal editor once you decide whether this community should stay at recommendation or stretch above it."
+  );
+}
+
+function getScoutShortcutAnswer(question = "", scope = null) {
+  const shortcutIntent = getScoutShortcutIntent(question);
+  if (!shortcutIntent) return "";
+  if (shortcutIntent === "what_changed") return buildScoutWhatChangedAnswer(scope);
+  if (shortcutIntent === "top_risks") return buildScoutTopRisksAnswer(scope);
+  if (shortcutIntent === "goal_guidance") return buildScoutGoalGuidanceAnswer(scope);
+  return "";
+}
+
 function answerScoutPortfolioQuestion(question = "", scope = null) {
   const resolvedScope = scope || getScoutQuestionScope(question);
+  const shortcutAnswer = getScoutShortcutAnswer(question, resolvedScope);
+  if (shortcutAnswer) return shortcutAnswer;
   const aggregate = resolvedScope.aggregate;
   const details = resolvedScope.details || [];
   const monthLabel = formatScoutDateLabel(resolvedScope.monthIdx);
@@ -7103,6 +7208,8 @@ function answerScoutPortfolioQuestion(question = "", scope = null) {
 
 function answerScoutCommunityQuestion(question = "", scope = null) {
   const resolvedScope = scope || getScoutQuestionScope(question);
+  const shortcutAnswer = getScoutShortcutAnswer(question, resolvedScope);
+  if (shortcutAnswer) return shortcutAnswer;
   const detail = resolvedScope.detail;
   if (!detail) {
     return "Here’s what I can’t confirm from the current data: I could not resolve a community in the saved ATLAS scope for that question.";
