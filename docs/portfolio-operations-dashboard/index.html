@@ -22224,16 +22224,16 @@ function parseRonaldoAvailabilityRows(rows = [], target = {}) {
 
 function parseRonaldoLeadActivityRows(rows = [], target = {}) {
   const { indices } = getRonaldoGeneratorRowHeaders(rows);
-  const newLeads = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["new_leads"]));
-  const walkIn = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_walk_in", "walk_in"]));
-  const offSiteEvent = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_off_site_event", "off_site_event"]));
-  const call = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_call", "phone_calls", "phone_call"]));
-  const email = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_email", "email"]));
-  const online = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_online", "online"]));
-  const chat = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_chat", "chat"]));
-  const text = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_text", "text"]));
-  const other = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_other", "other"]));
-  const tours = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["tours_first_visits_tours", "tours"]));
+  const newLeads = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["new_leads", "leads", "traffic"]));
+  const walkIn = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_walk_in", "walk_in", "walk_in_leads", "lead_walk_ins"]));
+  const offSiteEvent = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_off_site_event", "off_site_event", "off_site_event_leads"]));
+  const call = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_call", "phone_calls", "phone_call", "call_leads", "lead_calls"]));
+  const email = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_email", "email", "email_leads"]));
+  const online = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_online", "online", "online_leads"]));
+  const chat = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_chat", "chat", "chat_leads"]));
+  const text = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_text", "text", "text_leads"]));
+  const other = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["original_contact_method_other", "other", "other_leads"]));
+  const tours = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["tours_first_visits_tours", "first_visits_tours", "tours"]));
   const activityEmails = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["activity_emails"]));
   const activityCalls = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["activity_calls"]));
   const activityChats = sumRonaldoColumn(rows, findRonaldoHeaderIndex(indices, ["activity_chats"]));
@@ -22733,7 +22733,7 @@ async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
   if (rows.length > 0) {
     mergeExtractedDashboardRows(rows, "Ronaldo Monthly Backfill");
     applyExtractedDashboardRows({
-      forcedProperty: targetCommunity,
+      ...(forcedTarget.community ? { forcedProperty: targetCommunity } : {}),
       forcedMonthIdx: forcedTarget.monthIdx,
       forcedYear: forcedTarget.year
     });
@@ -23420,18 +23420,25 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         : (detectedMonthIdx ?? getImportTargetMonth()));
       if (targetMonthIdx == null || targetMonthIdx < 0 || targetMonthIdx > 11) { skipped += 1; continue; }
 
-      const leadWalkInsValue = getFirstNumericCell(row, ["lead_walk_ins", "walk_in", "walk_in_leads", "original_contact_method_walk_in"]);
-      const offSiteEventValue = getFirstNumericCell(row, ["lead_off_site_event", "off_site_event", "off_site_event_leads", "original_contact_method_off_site_event"]);
+      const leadWalkInsValue = getFirstNumericCell(row, ["lead_walk_ins", "lead_walkins", "walk_in", "walk_in_leads", "original_contact_method_walk_in"]);
+      const offSiteEventValue = getFirstNumericCell(row, ["lead_off_site_event", "lead_offsiteevent", "off_site_event", "off_site_event_leads", "original_contact_method_off_site_event"]);
       const leadCallsValue = getFirstNumericCell(row, ["lead_calls", "phone_calls", "call_leads", "original_contact_method_call"]);
       const leadEmailsOnlineValue = getFirstNumericCell(row, ["lead_emails_online", "emails_online"])
         ?? sumNumericCells(row, ["email_leads", "online_leads", "original_contact_method_email", "original_contact_method_online"]);
-      const leadChatTextOtherValue = getFirstNumericCell(row, ["lead_chat_text_other", "text_chat_other"])
+      const leadChatTextOtherValue = getFirstNumericCell(row, ["lead_chat_text_other", "lead_chat_other", "text_chat_other"])
         ?? sumNumericCells(row, ["chat_leads", "text_leads", "other_leads", "original_contact_method_chat", "original_contact_method_text", "original_contact_method_other"]);
       const leadSourceValues = [leadWalkInsValue, offSiteEventValue, leadCallsValue, leadEmailsOnlineValue, leadChatTextOtherValue];
       const leadSourceTotal = leadSourceValues.some(value => value !== null)
         ? leadSourceValues.reduce((sum, value) => sum + (value ?? 0), 0)
         : null;
-      const guestCardsValue = getFirstNumericCell(row, ["leads", "traffic", "new_leads"]);
+      const guestCardsValue = getFirstNumericCell(row, ["leads", "traffic", "new_leads", "guest_cards"]);
+      const toursValue = getFirstNumericCell(row, ["tours", "first_visits_tours", "tours_first_visits_tours"]);
+      const applicationsValue = getFirstNumericCell(row, ["applications", "application_completed", "completed_applications"]);
+      const approvedApplicationsValue = getFirstNumericCell(row, ["approved_applications", "applications_approved", "application_approved"]);
+      const deniedValue = getFirstNumericCell(row, ["denied", "denied_applications", "application_denied"]);
+      const cancelledValue = getFirstNumericCell(row, ["cancelled", "canceled", "applications_cancelled", "cancelled_applications", "canceled_applications", "application_completed_cancelled", "application_approved_cancelled"]);
+      const pendingDecisionValue = getFirstNumericCell(row, ["pending_decision", "pending_applications", "application_partially_completed"]);
+      const leasesSignedValue = getFirstNumericCell(row, ["leases_signed", "lease_completed", "lease_approved", "move_ins"]);
 
       included += 1;
       const mappedRow = {
@@ -23447,13 +23454,13 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         phone_calls: leadCallsValue ?? "",
         emails_online: leadEmailsOnlineValue ?? "",
         text_chat_other: leadChatTextOtherValue ?? "",
-        tours: getCell(row, "tours") ?? "",
-        applications: getCell(row, "applications") ?? "",
-        applications_approved: getCell(row, "approved_applications") ?? "",
-        denied: getCell(row, "denied") || getCell(row, "denied_applications") || "",
-        cancelled: getCell(row, "cancelled") || getCell(row, "canceled") || getCell(row, "applications_cancelled") || getCell(row, "cancelled_applications") || getCell(row, "canceled_applications") || "",
-        pending_decision: getCell(row, "pending_decision") || getCell(row, "pending_applications") || "",
-        leases_signed: getCell(row, "move_ins") ?? "",
+        tours: toursValue ?? "",
+        applications: applicationsValue ?? "",
+        applications_approved: approvedApplicationsValue ?? "",
+        denied: deniedValue ?? "",
+        cancelled: cancelledValue ?? "",
+        pending_decision: pendingDecisionValue ?? "",
+        leases_signed: leasesSignedValue ?? "",
         budget_occ: normalizeAtlasPercentValue(getCell(row, "budget_occ") || getCell(row, "budget_occupancy") || getCell(row, "budgeted_occupancy")),
         market_rent: getCell(row, "avg_market_rent") ?? "",
         budget_rent: "",
