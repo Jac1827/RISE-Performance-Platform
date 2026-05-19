@@ -17287,6 +17287,59 @@ function clearMonthlyRecordFields(record, monthIdx, targetKeys = []) {
   });
 }
 
+function getRecordLeadSourceBreakdown(record, monthIdx) {
+  if (!record.monthlyData[monthIdx]) record.monthlyData[monthIdx] = defaultMonthly()[monthIdx];
+  const md = record.monthlyData[monthIdx];
+  return {
+    walk_in: Math.max(0, Number(md.walkIn) || 0),
+    off_site_event: Math.max(0, Number(md.offSiteEvent) || 0),
+    phone_calls: Math.max(0, Number(md.phoneCalls) || 0),
+    emails_online: Math.max(0, Number(md.emailsOnline) || 0),
+    text_chat_other: Math.max(0, Number(md.textChatOther) || 0)
+  };
+}
+
+function rebalanceLeadSourceBreakdown(record, monthIdx, totalLeads) {
+  const numericTotal = Number(totalLeads);
+  if (!Number.isFinite(numericTotal) || numericTotal < 0) return null;
+  const total = Math.round(numericTotal);
+  const current = getRecordLeadSourceBreakdown(record, monthIdx);
+  const keys = Object.keys(current);
+  const currentTotal = keys.reduce((sum, key) => sum + (Number(current[key]) || 0), 0);
+  if (currentTotal <= 0) {
+    return {
+      strategy: "catch_all",
+      values: {
+        walk_in: 0,
+        off_site_event: 0,
+        phone_calls: 0,
+        emails_online: 0,
+        text_chat_other: total
+      }
+    };
+  }
+  if (currentTotal === total) {
+    return { strategy: "preserved_existing", values: current };
+  }
+  const scaled = keys.map(key => {
+    const raw = (Number(current[key]) || 0) / currentTotal * total;
+    const floor = Math.floor(raw);
+    return { key, floor, remainder: raw - floor };
+  });
+  let remaining = total - scaled.reduce((sum, item) => sum + item.floor, 0);
+  scaled
+    .sort((left, right) => right.remainder - left.remainder)
+    .forEach(item => {
+      if (remaining <= 0) return;
+      item.floor += 1;
+      remaining -= 1;
+    });
+  return {
+    strategy: "rescaled_existing",
+    values: Object.fromEntries(scaled.map(item => [item.key, item.floor]))
+  };
+}
+
 function resetImportWorkspace() {
   csvError = "";
   csvLog = ["🧹 Reset the import workspace. Start with a normalized CSV or stage new files below."];
@@ -24634,6 +24687,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
     };
     const masterSheet = workbook.SheetNames.find(name => normalizeAtlasColumnKey(name) === "community_master");
     const communityMap = {};
+    const activeMasterCommunities = [];
     if (masterSheet) {
       const masterRows = XLSX.utils.sheet_to_json(workbook.Sheets[masterSheet], { header: 1, defval: "", raw: true });
       const masterHeaders = (masterRows[0] || []).map(normalizeAtlasColumnKey);
@@ -24642,15 +24696,23 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         const row = masterRows[r] || [];
         const id = String(row[mIdx.community_id] ?? "").trim();
         if (!id) continue;
+        const name = String(row[mIdx.community_name] ?? "").trim();
+        const shortName = String(row[mIdx.short_name] ?? "").trim();
+        const activeFlag = String(row[mIdx.active_flag] ?? "").trim().toLowerCase();
         communityMap[id.toUpperCase()] = {
-          name: String(row[mIdx.community_name] ?? "").trim(),
-          shortName: String(row[mIdx.short_name] ?? "").trim()
+          name,
+          shortName
         };
+        if (activeFlag === "yes" || activeFlag === "true" || activeFlag === "1") {
+          activeMasterCommunities.push({ id: id.toUpperCase(), name: name || shortName || id });
+        }
       }
     }
 
     const normalizedRows = [];
     const touchedCommunities = new Set();
+    const seenWorkbookCommunityIds = new Set();
+    const unresolvedWorkbookRows = [];
     const log = [];
     let matched = 0;
     let included = 0;
@@ -24663,18 +24725,43 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       const rowStatus = String(getCell(row, "row_status") ?? "").trim().toUpperCase();
       const hasContent = communityId || communityNameRaw || reportMonthRaw || Number(getCell(row, "occupied_units")) > 0 || Number(getCell(row, "leased_units")) > 0;
       if (!hasContent) continue;
-      if (rowStatus === "ERROR") { skipped += 1; continue; }
+      if (communityId) seenWorkbookCommunityIds.add(communityId.toUpperCase());
+      if (rowStatus === "ERROR") {
+        skipped += 1;
+        unresolvedWorkbookRows.push({
+          communityId,
+          communityName: communityNameRaw,
+          reason: "Row_Status=ERROR"
+        });
+        continue;
+      }
 
       const mappedFromId = communityMap[communityId.toUpperCase()] || {};
       const mappedName = forcedTarget.community
         || resolveAtlasWorkbookCommunityName(communityId, communityNameRaw, mappedFromId, file.name, row, getCell);
-      if (!mappedName) { skipped += 1; continue; }
+      if (!mappedName) {
+        skipped += 1;
+        unresolvedWorkbookRows.push({
+          communityId,
+          communityName: communityNameRaw || mappedFromId.name || mappedFromId.shortName,
+          reason: "Missing dashboard community mapping"
+        });
+        continue;
+      }
 
       const detectedMonthIdx = parseAtlasMonthIndex(reportMonthRaw);
       const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override"
         ? getImportTargetMonth()
         : (detectedMonthIdx ?? getImportTargetMonth()));
-      if (targetMonthIdx == null || targetMonthIdx < 0 || targetMonthIdx > 11) { skipped += 1; continue; }
+      if (targetMonthIdx == null || targetMonthIdx < 0 || targetMonthIdx > 11) {
+        skipped += 1;
+        unresolvedWorkbookRows.push({
+          communityId,
+          communityName: mappedName,
+          reason: `Invalid or missing report month (${String(reportMonthRaw ?? "").trim() || "blank"})`
+        });
+        continue;
+      }
 
       const leadWalkInsValue = getFirstNumericCell(row, ["lead_walk_ins", "lead_walkins", "walk_in", "walk_in_leads", "original_contact_method_walk_in"]);
       const offSiteEventValue = getFirstNumericCell(row, ["lead_off_site_event", "lead_offsiteevent", "off_site_event", "off_site_event_leads", "original_contact_method_off_site_event"]);
@@ -24687,8 +24774,8 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       const leadSourceTotal = leadSourceValues.some(value => value !== null)
         ? leadSourceValues.reduce((sum, value) => sum + (value ?? 0), 0)
         : null;
-      const guestCardsValue = getFirstNumericCell(row, ["leads", "traffic", "new_leads", "guest_cards"]);
-      const toursValue = getFirstNumericCell(row, ["tours", "first_visits_tours", "tours_first_visits_tours"]);
+      const guestCardsValue = getFirstNumericCell(row, ["leads", "new_leads", "guest_cards"]);
+      const toursValue = getFirstNumericCell(row, ["tours", "traffic", "first_visits_tours", "tours_first_visits_tours"]);
       const applicationsValue = getFirstNumericCell(row, ["applications", "application_completed", "completed_applications"]);
       const approvedApplicationsValue = getFirstNumericCell(row, ["approved_applications", "applications_approved", "application_approved"]);
       const deniedValue = getFirstNumericCell(row, ["denied", "denied_applications", "application_denied"]);
@@ -24763,9 +24850,12 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
           text_chat_other: "text_chat_other"
         };
         const hasLeadSourceBreakdown = leadSourceValues.some(value => value !== null);
+        const rebalancedLeadSourceResult = !hasLeadSourceBreakdown && guestCardsValue !== null
+          ? rebalanceLeadSourceBreakdown(targetRecord, targetMonthIdx, guestCardsValue)
+          : null;
         const fieldsToClear = [
           ...Object.values(monthlyFieldMap),
-          ...(hasLeadSourceBreakdown ? Object.values(leadSourceFieldMap) : [])
+          ...((hasLeadSourceBreakdown || rebalancedLeadSourceResult) ? Object.values(leadSourceFieldMap) : [])
         ];
         clearMonthlyRecordFields(targetRecord, targetMonthIdx, fieldsToClear);
         const applyFieldMap = {
@@ -24779,6 +24869,13 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
           if (!Number.isFinite(numeric)) return;
           applyValueToRecord(targetRecord, targetMonthIdx, targetKey, numeric);
         });
+        if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult) {
+          Object.entries(leadSourceFieldMap).forEach(([sourceKey, targetKey]) => {
+            const numeric = Number(rebalancedLeadSourceResult.values?.[sourceKey]);
+            if (!Number.isFinite(numeric)) return;
+            applyValueToRecord(targetRecord, targetMonthIdx, targetKey, numeric);
+          });
+        }
         const totalUnitsVal = Number(String(getCell(row, "total_units") ?? "").replace(/[,]/g, ""));
         if (Number.isFinite(totalUnitsVal) && totalUnitsVal > 0) {
           targetRecord.customUnits = Math.round(totalUnitsVal);
@@ -24802,8 +24899,12 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         log.push(`${mappedName} · ${monthLabel}: occupied ${mappedRow.occupied || "—"}, leased ${mappedRow.leased || "—"}, leads ${mappedRow.guest_cards || "—"}`);
         if ([leadWalkInsValue, leadCallsValue, leadEmailsOnlineValue, leadChatTextOtherValue].some(value => value !== null)) {
           log.push(`↳ lead mix: walk ${leadWalkInsValue ?? 0}, calls ${leadCallsValue ?? 0}, email/online ${leadEmailsOnlineValue ?? 0}, text/chat/other ${leadChatTextOtherValue ?? 0}`);
+        } else if (rebalancedLeadSourceResult?.strategy === "rescaled_existing") {
+          log.push(`↳ lead mix not supplied in Monthly_Upload; rescaled the saved source mix to ${mappedRow.guest_cards || 0} total leads.`);
+        } else if (rebalancedLeadSourceResult?.strategy === "catch_all") {
+          log.push(`↳ lead mix not supplied in Monthly_Upload; routed ${mappedRow.guest_cards || 0} unattributed leads into text/chat/other so the funnel stays in sync.`);
         } else {
-          log.push("↳ lead mix not supplied in Monthly_Upload; preserved existing source breakdown and updated aggregate leads only.");
+          log.push("↳ lead mix not supplied in Monthly_Upload; no source buckets were changed.");
         }
       }
     }
@@ -24829,6 +24930,23 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       : "file month routing";
     csvLog = [`✅ Imported ${included} ATLAS Monthly_Upload row(s) from ${file.name} using ${modeLabel}.`, ...log];
     if (skipped > 0) csvLog.push(`ℹ Skipped ${skipped} row(s) marked ERROR or missing community/month mapping.`);
+    if (!forcedTarget.community && activeMasterCommunities.length > 0) {
+      const missingMasterCommunities = activeMasterCommunities.filter(item => !seenWorkbookCommunityIds.has(item.id));
+      if (missingMasterCommunities.length > 0) {
+        csvLog.push(`⚠ Mapping verification: ${missingMasterCommunities.length} active communit${missingMasterCommunities.length === 1 ? "y was" : "ies were"} missing from Monthly_Upload: ${missingMasterCommunities.map(item => `${item.id} / ${item.name}`).join(", ")}.`);
+      } else {
+        csvLog.push(`✅ Mapping verification: all ${activeMasterCommunities.length} active Community_Master IDs were present in Monthly_Upload.`);
+      }
+    }
+    if (unresolvedWorkbookRows.length > 0) {
+      unresolvedWorkbookRows.slice(0, 6).forEach(item => {
+        const label = [item.communityId, item.communityName].filter(Boolean).join(" / ") || "Unlabeled row";
+        csvLog.push(`⚠ Unmapped workbook row: ${label} · ${item.reason}.`);
+      });
+      if (unresolvedWorkbookRows.length > 6) {
+        csvLog.push(`ℹ ${unresolvedWorkbookRows.length - 6} additional workbook row(s) also failed mapping validation.`);
+      }
+    }
     csvLog.push(`ℹ Community records updated across tabs/calculations for ${touchedCommunities.size} communit${touchedCommunities.size === 1 ? "y" : "ies"}.`);
     renderTab();
   } catch (err) {
