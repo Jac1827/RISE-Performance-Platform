@@ -1242,6 +1242,7 @@ let csvLog = [];
 let csvError = "";
 let importMonthOverride = currentMonth;
 let importRoutingMode = "file_first";
+let atlasWorkbookImportMode = "merge_scope";
 let monthlyTemplateImportTargetTouched = false;
 let monthlyTemplateImportTarget = buildDefaultMonthlyTemplateImportTarget();
 let extractedDashboardRows = [];
@@ -1256,6 +1257,7 @@ let importTracking = defaultImportTracking();
 let atlasPortfolioMap = null;
 let atlasPortfolioMapMarkers = [];
 let portfolioReportMode = "owner";
+let portfolioMonthScopeByPeriod = {};
 let portfolioReportSections = defaultPortfolioReportSections();
 let portfolioReportFilters = defaultPortfolioReportFilters();
 let monthlyPresentationCommunities = [];
@@ -2942,6 +2944,8 @@ function normalizeOpsGlobalData(data) {
       ...(input.portfolioReportFilters && typeof input.portfolioReportFilters === "object" ? input.portfolioReportFilters : {})
     },
     portfolioReportMode: input.portfolioReportMode === "regional" ? "regional" : "owner",
+    atlasWorkbookImportMode: input.atlasWorkbookImportMode === "replace_scope" ? "replace_scope" : "merge_scope",
+    portfolioMonthScopeByPeriod: normalizePortfolioMonthScopeByPeriod(input.portfolioMonthScopeByPeriod),
     reportHubType: normalizeReportHubType(input.reportHubType),
     reportHubPerspective: normalizeReportHubPerspective(input.reportHubPerspective),
     reportHubMonth: Number.isInteger(input.reportHubMonth) ? clampNumber(input.reportHubMonth, 0, 11) : DEFAULT_CURRENT_MONTH,
@@ -2985,6 +2989,8 @@ function applyOpsGlobalData(data) {
   portfolioReportSections = normalized.portfolioReportSections;
   portfolioReportFilters = normalized.portfolioReportFilters;
   portfolioReportMode = normalized.portfolioReportMode;
+  atlasWorkbookImportMode = normalized.atlasWorkbookImportMode;
+  portfolioMonthScopeByPeriod = normalized.portfolioMonthScopeByPeriod;
   reportHubType = normalized.reportHubType;
   reportHubPerspective = normalized.reportHubPerspective;
   reportHubMonth = normalized.reportHubMonth;
@@ -3038,6 +3044,8 @@ function persistOpsGlobalData() {
     portfolioReportSections,
     portfolioReportFilters,
     portfolioReportMode,
+    atlasWorkbookImportMode,
+    portfolioMonthScopeByPeriod,
     reportHubType,
     reportHubPerspective,
     reportHubMonth,
@@ -3530,6 +3538,9 @@ function persistSaved() {
     await atlasStateSetValue(ATLAS_STATE_COMMUNITY_KEY, serialized);
     removeLegacyCommunityStorageKeys();
   }, "community_data");
+  dashboardSharedSyncMeta.lastAppliedAt = new Date().toISOString();
+  dashboardSharedSyncMeta.lastError = "";
+  persistDashboardSharedSyncMeta();
   return { ok: true, message: "" };
 }
 function buildDailyBackupDateKey(date = new Date()) {
@@ -3707,6 +3718,43 @@ function getWorkspaceScopedAggregate(monthIdx = getSelectedDashboardMonthIndex()
     aggregate: aggregateCommunitySummaries(details.map(detail => detail.summary))
   };
 }
+
+function normalizePortfolioMonthScopeByPeriod(value) {
+  if (!value || typeof value !== "object") return {};
+  const normalized = {};
+  Object.entries(value).forEach(([periodKey, names]) => {
+    if (!Array.isArray(names)) return;
+    const filtered = names
+      .map(name => matchPropertyName(name, { fallbackToCurrent: false }))
+      .filter(Boolean);
+    if (filtered.length === 0) return;
+    normalized[String(periodKey)] = Array.from(new Set(filtered));
+  });
+  return normalized;
+}
+
+function getPortfolioScopePeriodKey(monthIdx = getSelectedDashboardMonthIndex(), year = new Date().getFullYear()) {
+  return buildPeriodKey(monthIdx, year);
+}
+
+function setPortfolioMonthScopeForPeriod(periodKey, names = []) {
+  const filtered = Array.from(new Set((Array.isArray(names) ? names : [])
+    .map(name => matchPropertyName(name, { fallbackToCurrent: false }))
+    .filter(Boolean)));
+  if (filtered.length === 0) delete portfolioMonthScopeByPeriod[String(periodKey)];
+  else portfolioMonthScopeByPeriod[String(periodKey)] = filtered;
+}
+
+function getPortfolioScopedCommunityNamesForPeriod(periodKey, recordMap = savedData) {
+  const scopedNames = Array.isArray(portfolioMonthScopeByPeriod?.[String(periodKey)])
+    ? portfolioMonthScopeByPeriod[String(periodKey)]
+    : [];
+  if (scopedNames.length > 0) return scopedNames;
+  const names = Object.keys((recordMap && typeof recordMap === "object") ? recordMap : {}).filter(Boolean);
+  if (names.length > 0) return names;
+  return [getProp().name];
+}
+
 function buildOperationsWorkspaceContext() {
   return {
     community: getWorkspaceScopeDisplayName(),
@@ -4547,7 +4595,12 @@ function renderPropGrid() {
     workspaceStatus.className = `workspace-pill${isSavedScope ? " is-saved" : ""}`;
   }
   if (workspaceSubline) {
-    workspaceSubline.textContent = `${isPortfolioWorkspaceSelected() ? `${details.length} communities · ${aggregate.totalUnits.toLocaleString()} units` : getHeaderSubText()} · Reporting month ${FULL_MONTHS[getSelectedDashboardMonthIndex()]} · ${savedCount} of ${totalCount} communities saved in this browser.`;
+    const portfolioScopeKey = getPortfolioScopePeriodKey(getSelectedDashboardMonthIndex());
+    const hasScopedPortfolioMonth = Array.isArray(portfolioMonthScopeByPeriod?.[portfolioScopeKey]) && portfolioMonthScopeByPeriod[portfolioScopeKey].length > 0;
+    const scopeStorageLabel = isPortfolioWorkspaceSelected() && hasScopedPortfolioMonth
+      ? `${savedCount} communities still saved in this browser`
+      : `${savedCount} of ${totalCount} communities saved in this browser`;
+    workspaceSubline.textContent = `${isPortfolioWorkspaceSelected() ? `${details.length} communities · ${aggregate.totalUnits.toLocaleString()} units` : getHeaderSubText()} · Reporting month ${FULL_MONTHS[getSelectedDashboardMonthIndex()]} · ${scopeStorageLabel}.`;
   }
   if (workspaceCount) {
     workspaceCount.textContent = isPortfolioWorkspaceSelected()
@@ -8303,6 +8356,10 @@ function attachEventListeners() {
       }
       else if (field === "importMonthOverride") { importMonthOverride = Number(el.value); }
       else if (field === "importRoutingMode") { importRoutingMode = el.value === "force_override" ? "force_override" : "file_first"; }
+      else if (field === "atlasWorkbookImportMode") {
+        atlasWorkbookImportMode = el.value === "replace_scope" ? "replace_scope" : "merge_scope";
+        persistOpsGlobalData();
+      }
       else if (field === "seasonal") { updateSeasonal(idx, el.value); }
       else if (field === "bonusApps") { bonusPayouts.apps = Number(el.value); }
       else if (field === "bonusLeases") { bonusPayouts.leases = Number(el.value); }
@@ -17482,6 +17539,8 @@ function resetImportWorkspace() {
   marketSurveyImportSourceLabel = "";
   extractFieldMap = { ...DEFAULT_EXTRACT_FIELD_MAP };
   importRoutingMode = "file_first";
+  atlasWorkbookImportMode = "merge_scope";
+  persistOpsGlobalData();
   renderTab();
 }
 
@@ -17988,25 +18047,15 @@ function buildPortfolioDetailsFromRecordMap(recordMap) {
   }).filter(Boolean);
 }
 
-function getPortfolioScopeCommunityNames(recordMap = savedData) {
-  const names = [];
-  const seen = new Set();
-  const addName = (name) => {
-    const normalized = String(name ?? "").trim();
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    names.push(normalized);
-  };
-  PROPERTIES.forEach(prop => addName(prop.name));
-  Object.keys(recordMap ?? {}).forEach(addName);
-  addName(getProp().name);
-  return names;
+function getPortfolioScopeCommunityNames(recordMap = savedData, monthIdx = getSelectedDashboardMonthIndex()) {
+  const periodKey = getPortfolioScopePeriodKey(monthIdx);
+  return getPortfolioScopedCommunityNamesForPeriod(periodKey, recordMap);
 }
 
 function buildPortfolioDetailsForMonth(monthIdx, recordMap = savedData) {
   const map = (recordMap && typeof recordMap === "object") ? recordMap : {};
   const scopedMap = { ...map, [getProp().name]: getCurrentCommunityRecord() };
-  const names = getPortfolioScopeCommunityNames(scopedMap);
+  const names = getPortfolioScopeCommunityNames(scopedMap, monthIdx);
   let details = names.map(name => {
     const record = normalizeSavedCommunityRecord(name, scopedMap[name]);
     const prop = getPropertyByName(name);
@@ -23118,6 +23167,14 @@ function renderCSVTab() {
         <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">Use this as the fallback month, or force it for every staged row when needed. ATLAS Monthly_Upload workbooks respect this override for weekly and historical backfill uploads.</div>
       </div>
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div class="card-title" style="margin-bottom:6px">ATLAS Workbook Scope</div>
+        <select data-field="atlasWorkbookImportMode">
+          <option value="merge_scope" ${atlasWorkbookImportMode==="merge_scope"?"selected":""}>Merge into saved communities</option>
+          <option value="replace_scope" ${atlasWorkbookImportMode==="replace_scope"?"selected":""}>Replace selected month scope</option>
+        </select>
+        <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">Use replace when the workbook is the source of truth for the selected month. It resets that month&apos;s portfolio scope to the uploaded communities so old browser saves do not stay in the rollup.</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px">
         <div class="card-title" style="margin-bottom:6px">Ideal Upload Format</div>
         <div style="font-size:0.68rem;color:var(--muted);line-height:1.55">1 row per property per month, with <code>property</code> and <code>month</code> included in every row. Upload multiple files, review the staged preview, edit any exceptions, then apply.</div>
       </div>
@@ -24727,6 +24784,46 @@ function normalizeAtlasWorkbookText(value) {
   return text.startsWith("=") ? "" : text;
 }
 
+function inferAtlasWorkbookYear(value) {
+  if (value instanceof Date && !isNaN(value)) return value.getFullYear();
+  if (typeof value === "number" && Number.isFinite(value) && value > 30000) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const dt = new Date(excelEpoch.getTime() + (value * 86400000));
+    return isNaN(dt) ? null : dt.getUTCFullYear();
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed) ? null : parsed.getFullYear();
+}
+
+function resetAtlasMonthlyUploadMonthForRecord(record, monthIdx) {
+  clearMonthlyRecordFields(record, monthIdx, [
+    "occupied",
+    "leased",
+    "move_outs",
+    "move_ins",
+    "guest_cards",
+    "walk_in",
+    "off_site_event",
+    "phone_calls",
+    "emails_online",
+    "text_chat_other",
+    "tours",
+    "applications",
+    "applications_approved",
+    "denied",
+    "cancelled",
+    "pending_decision",
+    "leases_signed",
+    "budget_occ",
+    "market_rent",
+    "rent_roll_total",
+    "concessions",
+    "ner",
+    "renewal_expirations",
+    "renewals_signed"
+  ]);
+}
+
 function inferAtlasWorkbookCommunityName(fileName = "", row = {}, getCell = () => "") {
   const candidates = [
     getCell(row, "community_name"),
@@ -24846,6 +24943,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
     const normalizedRows = [];
     const touchedCommunities = new Set();
     const seenWorkbookCommunityIds = new Set();
+    const touchedPeriods = new Map();
     const unresolvedWorkbookRows = [];
     const log = [];
     let matched = 0;
@@ -24884,6 +24982,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       }
 
       const detectedMonthIdx = parseAtlasMonthIndex(reportMonthRaw);
+      const detectedYear = inferAtlasWorkbookYear(reportMonthRaw);
       const targetMonthIdx = forcedTarget.monthIdx ?? (importRoutingMode === "force_override"
         ? getImportTargetMonth()
         : (detectedMonthIdx ?? getImportTargetMonth()));
@@ -24896,6 +24995,10 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         });
         continue;
       }
+      const targetYear = forcedTarget.year ?? detectedYear ?? new Date().getFullYear();
+      const periodKey = buildPeriodKey(targetMonthIdx, targetYear);
+      if (!touchedPeriods.has(periodKey)) touchedPeriods.set(periodKey, new Set());
+      touchedPeriods.get(periodKey).add(mappedName);
 
       const leadWalkInsValue = getFirstNumericCell(row, ["lead_walk_ins", "lead_walkins", "walk_in", "walk_in_leads", "original_contact_method_walk_in"]);
       const offSiteEventValue = getFirstNumericCell(row, ["lead_off_site_event", "lead_offsiteevent", "off_site_event", "off_site_event_leads", "original_contact_method_off_site_event"]);
@@ -24920,7 +25023,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       included += 1;
       const mappedRow = {
         property: mappedName,
-        month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : MONTHS[targetMonthIdx],
+        month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : (detectedYear ? buildHistoricalMonthLabel(targetMonthIdx, targetYear) : MONTHS[targetMonthIdx]),
         occupied: getCell(row, "occupied_units") ?? "",
         leased: getCell(row, "leased_units") ?? "",
         move_outs: getCell(row, "move_outs") ?? "",
@@ -25048,6 +25151,36 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       renderTab();
       return;
     }
+    let replacedScopeCommunities = 0;
+    if (!forcedTarget.community) {
+      touchedPeriods.forEach((importedNames, periodKey) => {
+        if (atlasWorkbookImportMode !== "replace_scope") {
+          setPortfolioMonthScopeForPeriod(periodKey, []);
+          return;
+        }
+        const [monthPart] = String(periodKey).split("-");
+        const monthIdx = parseMonthIndexValue(monthPart);
+        if (monthIdx == null) return;
+        const savedNames = Object.keys(savedData ?? {}).filter(Boolean);
+        savedNames.forEach(name => {
+          if (importedNames.has(name)) return;
+          const record = normalizeSavedCommunityRecord(name, savedData[name]);
+          resetAtlasMonthlyUploadMonthForRecord(record, monthIdx);
+          savedData[name] = normalizeSavedCommunityRecord(name, record);
+          replacedScopeCommunities += 1;
+        });
+        const orderedImportedNames = PROPERTIES
+          .map(prop => prop.name)
+          .filter(name => importedNames.has(name));
+        setPortfolioMonthScopeForPeriod(periodKey, orderedImportedNames);
+      });
+      const globalPersistResult = persistOpsGlobalData();
+      if (globalPersistResult?.ok === false) {
+        csvError = globalPersistResult.message;
+        renderTab();
+        return;
+      }
+    }
     mergeExtractedDashboardRows(normalizedRows, `ATLAS Workbook ${file.name}`);
     const saveResult = persistSaved();
     if (saveResult?.ok === false) {
@@ -25064,6 +25197,9 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       : "file month routing";
     csvLog = [`✅ Imported ${included} ATLAS Monthly_Upload row(s) from ${file.name} using ${modeLabel}.`, ...log];
     if (skipped > 0) csvLog.push(`ℹ Skipped ${skipped} row(s) marked ERROR or missing community/month mapping.`);
+    if (!forcedTarget.community && atlasWorkbookImportMode === "replace_scope") {
+      csvLog.push(`✅ Replace scope mode reset the selected month rollup to ${touchedCommunities.size} uploaded communit${touchedCommunities.size === 1 ? "y" : "ies"} and cleared stale month data from ${replacedScopeCommunities} previously saved communit${replacedScopeCommunities === 1 ? "y" : "ies"}.`);
+    }
     if (!forcedTarget.community && activeMasterCommunities.length > 0) {
       const missingMasterCommunities = activeMasterCommunities.filter(item => !seenWorkbookCommunityIds.has(item.id));
       if (missingMasterCommunities.length > 0) {
