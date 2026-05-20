@@ -3089,6 +3089,18 @@ function deriveSavedBudgetTargetsFromMonthlyData(monthEntries, existingTargets) 
   });
 }
 
+function repairMonthlyBudgetTargets(monthEntries, savedTargets) {
+  const normalizedTargets = Array.from({ length: 12 }, (_, idx) =>
+    normalizeBudgetOccupancyPct(Array.isArray(savedTargets) ? savedTargets[idx] : 0)
+  );
+  return Array.from({ length: 12 }, (_, idx) => {
+    const baseEntry = { ...defaultMonthly()[idx], ...((Array.isArray(monthEntries) ? monthEntries[idx] : null) ?? {}) };
+    const monthlyPct = normalizeBudgetOccupancyPct(baseEntry.budgetOcc);
+    const repairedPct = monthlyPct > 0 ? monthlyPct : normalizedTargets[idx];
+    return repairedPct > 0 ? { ...baseEntry, budgetOcc: repairedPct } : baseEntry;
+  });
+}
+
 function getSavedBudgetOccPct(savedTargets, monthIdx) {
   if (!Array.isArray(savedTargets) || monthIdx < 0 || monthIdx > 11) return 0;
   return normalizeBudgetOccupancyPct(savedTargets[monthIdx]);
@@ -3382,11 +3394,15 @@ function normalizeSavedCommunityRecord(propName, data) {
   const legacyBonusRolesByQ = input.bonusRoles && !input.bonusRolesByQ
     ? { Q1: input.bonusRoles, Q2: input.bonusRoles, Q3: input.bonusRoles, Q4: input.bonusRoles }
     : input.bonusRolesByQ;
-  const normalizedMonthlyData = Array.isArray(input.monthlyData) && input.monthlyData.length === 12
+  const seededMonthlyData = Array.isArray(input.monthlyData) && input.monthlyData.length === 12
     ? input.monthlyData.map((entry, idx) => ({ ...defaults.monthlyData[idx], ...(entry ?? {}) }))
     : defaults.monthlyData;
+  const repairedMonthlyData = repairMonthlyBudgetTargets(
+    seededMonthlyData,
+    Array.isArray(input.savedBudgetTargets) ? input.savedBudgetTargets : defaults.savedBudgetTargets
+  );
   const normalizedSavedBudgetTargets = deriveSavedBudgetTargetsFromMonthlyData(
-    normalizedMonthlyData,
+    repairedMonthlyData,
     Array.isArray(input.savedBudgetTargets) ? input.savedBudgetTargets : defaults.savedBudgetTargets
   );
   return {
@@ -3397,7 +3413,7 @@ function normalizeSavedCommunityRecord(propName, data) {
     leasedGoal: Number(input.leasedGoal ?? defaults.leasedGoal),
     currentMonth: Number(input.currentMonth ?? defaults.currentMonth),
     conversionRate: Number(input.conversionRate ?? defaults.conversionRate),
-    monthlyData: normalizedMonthlyData,
+    monthlyData: repairedMonthlyData,
     savedBudgetTargets: normalizedSavedBudgetTargets,
     seasonal: Array.isArray(input.seasonal) && input.seasonal.length === 12 ? input.seasonal : defaults.seasonal,
     importMonthOverride: Number.isInteger(input.importMonthOverride) ? input.importMonthOverride : Number(input.importMonthOverride ?? defaults.importMonthOverride),
@@ -3505,6 +3521,14 @@ function buildSerializedSavedDataPayload() {
     }];
   }));
 }
+
+function normalizeSavedCommunityMap(data = {}) {
+  const source = data && typeof data === "object" ? data : {};
+  return Object.fromEntries(Object.entries(source).map(([name, record]) => [
+    name,
+    normalizeSavedCommunityRecord(name, record)
+  ]));
+}
 async function loadSaved() {
   try {
     const stored = await atlasStateGetValue(ATLAS_STATE_COMMUNITY_KEY);
@@ -3514,7 +3538,7 @@ async function loadSaved() {
       clearAtlasPersistenceError();
       persistAtlasPersistenceMeta();
       removeLegacyCommunityStorageKeys();
-      return stored;
+      return normalizeSavedCommunityMap(stored);
     }
   } catch (error) {
     markAtlasPersistenceError(error, "Could not read ATLAS community data from IndexedDB.");
@@ -3529,7 +3553,7 @@ async function loadSaved() {
     atlasPersistenceMeta.source = "localstorage_migration";
     persistAtlasPersistenceMeta();
   }
-  return fallback;
+  return normalizeSavedCommunityMap(fallback);
 }
 function persistSaved() {
   const serialized = buildSerializedSavedDataPayload();
@@ -3681,6 +3705,11 @@ async function hydrateWeeklySnapshotState() {
 
 async function hydrateDashboardPersistentState() {
   savedData = await loadSaved();
+  const normalizedSavedData = normalizeSavedCommunityMap(savedData);
+  if (JSON.stringify(normalizedSavedData) !== JSON.stringify(savedData)) {
+    savedData = normalizedSavedData;
+    persistSaved();
+  }
   await hydrateDailyBackupState();
   await hydrateWeeklySnapshotState();
   atlasPersistenceMeta.lastHydratedAt = new Date().toISOString();
@@ -8712,6 +8741,7 @@ function renderPortfolioScopedSetupTab() {
 function renderPortfolioScopedOverviewTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
   const selectedMonth = getSelectedDashboardMonthIndex();
+  const missingBudgetDetails = details.filter(detail => getRecordBudgetOccPct(detail.record, selectedMonth) <= 0);
   const buildGoalRecommendationHtml = (detail) => {
     const plan = getCommunityPerformancePlan(detail.name, detail.record) ?? {};
     const currentMonthEntry = detail.record?.monthlyData?.[selectedMonth] ?? {};
@@ -8740,6 +8770,9 @@ function renderPortfolioScopedOverviewTab() {
     ${statBox("Net Absorption", formatSignedDisplay(aggregate.monthAbsorption ?? 0), `${Math.round(aggregate.moveIns ?? 0)} move-ins · ${Math.round(aggregate.moveOuts ?? 0)} move-outs`, "#3fb950")}
     ${statBox("Budget Gap Units", Math.max(aggregate.occGapUnits ?? 0, 0), `${aggregate.onTrackBudgetOccCount ?? 0}/${aggregate.trackedBudgetOccCount ?? 0} communities on budget pace`, "#d29922")}
   </div>`;
+  const missingBudgetNotice = missingBudgetDetails.length > 0
+    ? `<div class="alert-red" style="margin:12px 0 0 0">Budget occupancy is still missing for ${missingBudgetDetails.length} communit${missingBudgetDetails.length === 1 ? "y" : "ies"} in ${MONTHS[selectedMonth]}: ${escapeHtml(missingBudgetDetails.map(detail => detail.name).join(", "))}. Those rows need a saved leasing-schedule budget before portfolio budget pacing and DLR budget comparisons can be trusted.</div>`
+    : "";
   const bodyHtml = `<div class="tbl-wrap">
     <div class="tbl-header"><h2>Portfolio occupancy editor</h2><p>Edit the selected month’s occupancy inputs and set each community’s lease and application goals here. Those saved goals feed the leasing schedule, traffic pacing, bonus calculations, and reporting across ATLAS.</p></div>
     <table>
@@ -8769,7 +8802,7 @@ function renderPortfolioScopedOverviewTab() {
         </tr>`;
       }).join("")}</tbody>
     </table>
-  </div>`;
+  </div>${missingBudgetNotice}`;
   return renderPortfolioScopePanel("Portfolio Overview", "Aggregate operating position for the selected month across all saved communities.", cardsHtml, bodyHtml);
 }
 
