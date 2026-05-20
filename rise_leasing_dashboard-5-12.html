@@ -3116,6 +3116,10 @@ function getRecordBudgetOccPct(record, monthIdx) {
   return getBudgetOccPctForMonth(record?.monthlyData?.[monthIdx], record?.savedBudgetTargets, monthIdx);
 }
 
+function getRecordSavedBudgetOccPct(record, monthIdx) {
+  return getSavedBudgetOccPct(record?.savedBudgetTargets, monthIdx);
+}
+
 function setRecordBudgetOccPct(record, monthIdx, value) {
   if (!record || monthIdx < 0 || monthIdx > 11) return 0;
   if (!Array.isArray(record.monthlyData) || record.monthlyData.length !== 12) record.monthlyData = defaultMonthly();
@@ -4749,7 +4753,7 @@ function getCommunitySummary(propName, sourceData) {
   const prevMonthData = scopeMonthlyData[Math.max(scopeCurrentMonth - 1, 0)] ?? {};
   const currentRow = schedule[scopeCurrentMonth] ?? {};
   const nextRow = schedule[Math.min(scopeCurrentMonth + 1, 11)] ?? currentRow;
-  const budgetOccPct = getRecordBudgetOccPct(sourceData, scopeCurrentMonth);
+  const budgetOccPct = getRecordSavedBudgetOccPct(sourceData, scopeCurrentMonth);
   const budgetLeasedPct = Number(nextRow.budgetLeased ?? currentRow.budgetLeased ?? 0) || 0;
   const occPct = getOccupancyPctFromUnits(occupied, totalUnits, corporateUnits);
   const leasedPct = getOccupancyPctFromUnits(leased, totalUnits, corporateUnits);
@@ -5131,7 +5135,7 @@ function getCommunityPerformancePlan(propName, sourceData) {
   const currentRow = schedule[scopeCurrentMonth] ?? {};
   const currentMonthData = scopeMonthlyData[scopeCurrentMonth] ?? {};
   const currentAppMetrics = getApplicationDecisionMetrics(currentMonthData);
-  const budgetOccPct = getRecordBudgetOccPct(record, scopeCurrentMonth);
+  const budgetOccPct = getRecordSavedBudgetOccPct(record, scopeCurrentMonth);
   const budgetOccUnits = occupancyBaseUnits > 0 && budgetOccPct > 0 ? Math.ceil(occupancyBaseUnits * budgetOccPct / 100) : 0;
   const occupancyGapUnits = Math.max(budgetOccUnits - getComparableOccupancyUnits(Number(record.currentOccupied) || 0, record.corporateLeaseUnits), 0);
   const quarterTotals = getQuarterMonths(bonusQuarter).reduce((acc, idx) => {
@@ -8741,7 +8745,7 @@ function renderPortfolioScopedSetupTab() {
 function renderPortfolioScopedOverviewTab() {
   const { details, aggregate } = getWorkspaceScopedAggregate(getSelectedDashboardMonthIndex());
   const selectedMonth = getSelectedDashboardMonthIndex();
-  const missingBudgetDetails = details.filter(detail => getRecordBudgetOccPct(detail.record, selectedMonth) <= 0);
+  const missingBudgetDetails = details.filter(detail => getRecordSavedBudgetOccPct(detail.record, selectedMonth) <= 0);
   const buildGoalRecommendationHtml = (detail) => {
     const plan = getCommunityPerformancePlan(detail.name, detail.record) ?? {};
     const currentMonthEntry = detail.record?.monthlyData?.[selectedMonth] ?? {};
@@ -8779,7 +8783,7 @@ function renderPortfolioScopedOverviewTab() {
       <thead><tr><th class="l">Community</th><th>Physical %</th><th>Leased %</th><th>Occupied</th><th>Leased</th><th>Budget Occ %</th><th>This Month Lease Goal</th><th>This Month App Goal</th><th>Move-Ins</th><th>Move-Outs</th><th>Goal Guidance</th></tr></thead>
       <tbody>${details.map(detail => {
         const entry = detail.record?.monthlyData?.[selectedMonth] ?? {};
-        const budgetOccPct = getRecordBudgetOccPct(detail.record, selectedMonth);
+        const budgetOccPct = getRecordSavedBudgetOccPct(detail.record, selectedMonth);
         const plan = getCommunityPerformancePlan(detail.name, detail.record) ?? {};
         const recommendedLeaseGoal = Math.max(0, Math.round(Number(plan.currentGrossLeaseNeed ?? 0) || 0));
         const recommendedAppGoal = Math.max(0, Math.round(Number(plan.currentAppNeed ?? 0) || 0));
@@ -9911,7 +9915,7 @@ function buildRecommendationsForRecord(propName, sourceData) {
   const closeRate = applicationMetrics.appToLeasePct;
   const approvalPct = applicationMetrics.approvalPct;
   const occPct = getOccupancyPctFromUnits(Number(record.currentOccupied) || 0, totalUnits, corporateUnits);
-  const budgetOccPct = getRecordBudgetOccPct(record, monthIdx);
+  const budgetOccPct = getRecordSavedBudgetOccPct(record, monthIdx);
   const recommendations = [];
 
   if (budgetOccPct > 0 && occPct + 0.5 < budgetOccPct) {
@@ -22282,7 +22286,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
         mtm: renewals.undecided,
         pendingMoveOuts: getEffectiveMoveOutsForMonth(idx, scopeMonthlyData).effective,
         pendingMoveIns: Number(entry.moveIns) || 0,
-        budgetedOccupancy: getBudgetOccPctForMonth(entry, record.savedBudgetTargets, idx) || Number(row.budgetOcc) || 0,
+        budgetedOccupancy: getRecordSavedBudgetOccPct(record, idx),
         projectedOccupancy: Number(row.occPct) || 0,
         moveInsNeeded: Number(row.netOccLeases) || 0
       };
@@ -22299,7 +22303,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     ? { occupiedUnits: Math.max(0, Number(dailyBoxScore.trendUnits) || 0), pct: (Math.max(0, Number(dailyBoxScore.trendUnits) || 0) / totalUnits) * 100 }
     : computeProjectedEndingPhysicalOccupancy(record, totalUnits, reportMetricMonthIdx, 3);
   const trendingOccupancyPct = Number(projectedEndingOccupancy.pct ?? occupancyPct) || occupancyPct;
-  const budgetOccPct = getBudgetOccPctForMonth(monthEntry, record.savedBudgetTargets, reportMetricMonthIdx) || Number(scheduleRow.budgetOcc) || 0;
+  const budgetOccPct = getRecordSavedBudgetOccPct(record, reportMetricMonthIdx);
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
   const mtdTraffic = buildDlrTrafficMetricsFromSummary(dlrSummary, monthEntry, dailyBoxScore, {
