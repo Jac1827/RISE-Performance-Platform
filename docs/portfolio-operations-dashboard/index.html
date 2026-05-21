@@ -21659,6 +21659,7 @@ function getCommunityRecordForScope(propName) {
 function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
   const corporateUnits = normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
   let runningUnits = snapshotKey === "leasedSnapshot"
     ? Math.max(0, Number(record?.currentLeased) || 0)
     : Math.max(0, Number(record?.currentOccupied) || 0);
@@ -21668,7 +21669,11 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
   if (targetMonth < anchorMonth) {
     for (let month = anchorMonth; month > targetMonth; month -= 1) {
       const priorSnapshot = Number(monthEntries[month - 1]?.[snapshotKey] ?? 0);
-      if (priorSnapshot > 0) return getComparableOccupancyUnits(priorSnapshot, corporateUnits);
+      if (priorSnapshot > 0) {
+        return occupancyBaseUnits > 0
+          ? Math.min(getComparableOccupancyUnits(priorSnapshot, corporateUnits), occupancyBaseUnits)
+          : getComparableOccupancyUnits(priorSnapshot, corporateUnits);
+      }
       runningUnits = Math.max(runningUnits + getEffectiveMoveOutsForMonth(month, monthEntries).effective - (monthEntries[month]?.moveIns ?? 0), 0);
       runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
     }
@@ -21677,21 +21682,24 @@ function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, sn
   for (let month = anchorMonth + 1; month <= targetMonth; month += 1) {
     const explicitSnapshot = Number(monthEntries[month]?.[snapshotKey] ?? 0);
     if (explicitSnapshot > 0) {
-      runningUnits = explicitSnapshot;
+      runningUnits = getComparableOccupancyUnits(explicitSnapshot, corporateUnits);
       continue;
     }
     runningUnits = Math.max(runningUnits - getEffectiveMoveOutsForMonth(month, monthEntries).effective + (monthEntries[month]?.moveIns ?? 0), 0);
-    runningUnits = totalUnits > 0 ? Math.min(runningUnits, totalUnits) : runningUnits;
+    runningUnits = occupancyBaseUnits > 0 ? Math.min(runningUnits, occupancyBaseUnits) : runningUnits;
   }
-  return getComparableOccupancyUnits(runningUnits, corporateUnits);
+  return occupancyBaseUnits > 0
+    ? Math.min(getComparableOccupancyUnits(runningUnits, corporateUnits), occupancyBaseUnits)
+    : getComparableOccupancyUnits(runningUnits, corporateUnits);
 }
 
 function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth, horizonMonths = 3) {
   const anchorMonth = Number.isInteger(record?.currentMonth) ? record.currentMonth : DEFAULT_CURRENT_MONTH;
   const monthEntries = Array.isArray(record?.monthlyData) && record.monthlyData.length === 12 ? record.monthlyData : defaultMonthly();
-  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, record?.corporateLeaseUnits);
+  const corporateUnits = normalizeCorporateLeaseUnits(record?.corporateLeaseUnits, totalUnits);
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateUnits);
   let occupiedUnits = startMonth === anchorMonth
-    ? getComparableOccupancyUnits(record?.currentOccupied, record?.corporateLeaseUnits)
+    ? getComparableOccupancyUnits(record?.currentOccupied, corporateUnits)
     : estimateSnapshotUnitsForRecordMonth(record, totalUnits, startMonth, "occupiedSnapshot");
   if (!Number.isInteger(startMonth) || occupancyBaseUnits <= 0) {
     return {
@@ -21704,7 +21712,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
   for (let month = startMonth + 1; month <= endMonthIdx; month += 1) {
     const explicitSnapshot = Number(monthEntries[month]?.occupiedSnapshot ?? 0);
     if (explicitSnapshot > 0) {
-      occupiedUnits = explicitSnapshot;
+      occupiedUnits = getComparableOccupancyUnits(explicitSnapshot, corporateUnits);
       continue;
     }
     occupiedUnits = Math.max(
@@ -21713,7 +21721,7 @@ function computeProjectedEndingPhysicalOccupancy(record, totalUnits, startMonth,
         + (Number(monthEntries[month]?.moveIns) || 0),
       0
     );
-    occupiedUnits = totalUnits > 0 ? Math.min(occupiedUnits, totalUnits) : occupiedUnits;
+    occupiedUnits = occupancyBaseUnits > 0 ? Math.min(occupiedUnits, occupancyBaseUnits) : occupiedUnits;
   }
   return {
     occupiedUnits,
