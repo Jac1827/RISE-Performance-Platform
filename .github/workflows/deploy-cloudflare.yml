@@ -29,6 +29,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Wrangler
+        run: npm install --no-save wrangler@^4
+
       - name: Upload preview Worker version
         uses: cloudflare/wrangler-action@v3
         with:
@@ -43,6 +51,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Wrangler
+        run: npm install --no-save wrangler@^4
 
       - name: Deploy production Worker
         uses: cloudflare/wrangler-action@v3
