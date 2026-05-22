@@ -17316,7 +17316,7 @@ function renderReportingTab() {
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-gray btn-sm" onclick="openMonthlyInvestorPresentation(false)">👁 Preview Deck</button>
       <button class="btn btn-blue btn-sm" onclick="openMonthlyInvestorPresentation(true)">🖨 Investor PDF / Print</button>
-      <button class="btn btn-gray btn-sm" onclick="setReportHubType('investor_property_packet')">📦 Investor Packet</button>
+      <button class="btn btn-gray btn-sm" onclick="setReportHubType('investor_property_packet')">Investor Info</button>
       <button class="btn btn-gray btn-sm" onclick="exportMonthlyInvestorPresentationPptx()">🪄 Export for Canva</button>
       <button class="btn btn-gray btn-sm" onclick="setReportHubType('dlr')">📘 Build DLR</button>
     </div>
@@ -17354,7 +17354,7 @@ function renderReportingTab() {
         <div class="card-title" style="margin-bottom:6px">Report Type</div>
         <select onchange="setReportHubType(this.value)">
           <option value="investor_snapshot" ${reportHubType==="investor_snapshot"?"selected":""}>Investor Snap Shot</option>
-          <option value="investor_property_packet" ${reportHubType==="investor_property_packet"?"selected":""}>Investor Property Packet</option>
+          <option value="investor_property_packet" ${reportHubType==="investor_property_packet"?"selected":""}>Investor Community Information</option>
           <option value="weekly_portfolio_snapshot" ${reportHubType==="weekly_portfolio_snapshot"?"selected":""}>Weekly Portfolio Snap Shot</option>
           <option value="monthly_investor_deck" ${reportHubType==="monthly_investor_deck"?"selected":""}>Monthly Investor Deck</option>
           <option value="investor_marketing_report" ${reportHubType==="investor_marketing_report"?"selected":""}>Investor Marketing Report</option>
@@ -17826,7 +17826,7 @@ function setReportHubPerspective(value) {
 function getReportHubTypeLabel(type = reportHubType) {
   return {
     investor_snapshot: "Investor Snap Shot",
-    investor_property_packet: "Investor Property Packet",
+    investor_property_packet: "Investor Community Information",
     weekly_portfolio_snapshot: "Weekly Portfolio Snap Shot",
     monthly_investor_deck: "Monthly Investor Deck",
     investor_marketing_report: "Investor Marketing Report",
@@ -19392,12 +19392,12 @@ function buildMonthlyInvestorPresentationData(variant = "monthly_investor_deck")
   return {
     variant,
     title: isInvestorPacket
-      ? "Investor Property Packet"
+      ? "Investor Community Information"
       : (details.length === 1 ? "Community Market Analysis" : "Portfolio Market Analysis"),
-    subtitle,
-    coverMonthLabel: `${getDashboardMonthLabel(selectedMonth)} ${isInvestorPacket ? "Investor Property Packet" : "Investor Presentation"}`,
+    subtitle: isInvestorPacket ? communityNames.join(" · ") : subtitle,
+    coverMonthLabel: `${getDashboardMonthLabel(selectedMonth)} ${isInvestorPacket ? "Investor Community Information" : "Investor Presentation"}`,
     footerLabel: isInvestorPacket
-      ? "ATLAS RISE Ops · Investor Property Packet"
+      ? "ATLAS RISE Ops · Investor Community Information"
       : "ATLAS RISE Ops · Monthly Market Analysis",
     generatedAt,
     currentMonthLabel: getDashboardMonthLabel(selectedMonth),
@@ -19899,6 +19899,87 @@ function buildMonthlyPresentationCommunitySpotlightSlide(report, detail, photoIn
   );
 }
 
+function buildInvestorCommunityInformationSlides(report) {
+  const metricCards = buildMonthlyInvestorPresentationMetricCards(report);
+  const narrative = buildMonthlyInvestorPresentationNarrative(report);
+  const communityCards = report.details.map(detail => {
+    const summary = detail.summary ?? {};
+    const market = buildRegionalPricingWorksheetSnapshot(detail, null, report.currentMonthIdx);
+    const meta = getCompCalculatorScopeMeta(detail, market);
+    const addressLine = String(detail.record?.communityAddress ?? "").trim();
+    const photoUrl = getDetailPresentationPhoto(detail, report, true);
+    const team = getPresentationCommunityStaffForDetail(detail)
+      .map(member => member.name)
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(" · ");
+    const highlights = buildInvestorPropertyPacketHighlights(detail, report.currentMonthIdx);
+    const marketLine = [
+      meta.city || "",
+      meta.marketArea && meta.marketArea !== meta.city ? meta.marketArea : ""
+    ].filter(Boolean).join(" · ");
+    return `<article class="deck-info-card">
+      ${photoUrl ? `<img src="${photoUrl}" alt="" class="deck-info-photo">` : ""}
+      <div class="deck-info-content">
+        <div class="deck-info-name">${escapeHtml(detail.name)}</div>
+        ${addressLine ? `<div class="deck-info-meta">${escapeHtml(addressLine)}</div>` : ""}
+        ${marketLine ? `<div class="deck-info-meta">${escapeHtml(marketLine)}</div>` : ""}
+        <div class="deck-info-stats">
+          <span>${Math.round(summary.totalUnits ?? getTotalUnitsFor(getPropertyByName(detail.name), detail.record?.customUnits) ?? 0)} units</span>
+          <span>${getSummaryOccPct(summary).toFixed(1)}% occ</span>
+          <span>${getSummaryLeasedPct(summary).toFixed(1)}% leased</span>
+          <span>${Math.round(summary.guestCards ?? 0)} leads</span>
+          <span>${Math.round(summary.tours ?? 0)} tours</span>
+          <span>${Math.round(summary.applications ?? 0)} apps</span>
+          <span>${Math.round(summary.applicationsApproved ?? 0)} approved</span>
+          <span>${formatSignedDisplay(summary.monthAbsorption ?? 0)} absorption</span>
+        </div>
+        <div class="deck-info-highlight">${escapeHtml(highlights[0] || "Current ATLAS activity shows a clear operating picture for the selected reporting month.")}</div>
+        <div class="deck-info-team">${escapeHtml(team || "Community leadership details available from setup")}</div>
+      </div>
+    </article>`;
+  }).join("");
+  const aggregateMarket = buildMarketSurveyAggregateForDetails(report.details);
+  const aggregateFacts = [
+    aggregateMarket.compAverageRentCount > 0 ? `Average comp rent: ${formatPresentationCurrencyValue(aggregateMarket.compAverageRentTotal / aggregateMarket.compAverageRentCount)}` : "",
+    aggregateMarket.compAverageNerCount > 0 ? `Average comp NER: ${formatPresentationCurrencyValue(aggregateMarket.compAverageNerTotal / aggregateMarket.compAverageNerCount)}` : "",
+    Number(aggregateMarket.applicationsLast30 ?? 0) > 0 ? `${Math.round(aggregateMarket.applicationsLast30)} APTIQ applications in the last 30 days` : "",
+    Number(aggregateMarket.leasesLast30 ?? 0) > 0 ? `${Math.round(aggregateMarket.leasesLast30)} APTIQ leases in the last 30 days` : ""
+  ].filter(Boolean);
+  return [
+    renderMonthlyInvestorPresentationSlide(
+      report,
+      report.title,
+      "High-level community information",
+      `<div class="deck-metric-grid deck-metric-grid-tight">
+        ${metricCards.slice(0, 4).map(card => `<div class="deck-metric-card">
+          <div class="deck-metric-label">${escapeHtml(card.label)}</div>
+          <div class="deck-metric-value">${escapeHtml(card.value)}</div>
+          <div class="deck-metric-sub">${escapeHtml(card.sub)}</div>
+        </div>`).join("")}
+      </div>
+      <div class="deck-two-col">
+        <div class="deck-narrative">
+          ${narrative.map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}
+          ${aggregateFacts.length > 0 ? `<p>${aggregateFacts.map(escapeHtml).join(" · ")}</p>` : ""}
+        </div>
+        <div class="deck-panel deck-panel-transparent">
+          ${buildMonthlyPresentationPhotoMosaic(report, 4)}
+        </div>
+      </div>`,
+      RISE_PRESENTATION_BRAND.blue,
+      { photoUrl: report.photoPool[0]?.src ?? report.primaryPhoto }
+    ),
+    renderMonthlyInvestorPresentationSlide(
+      report,
+      report.details.length === 1 ? `${report.details[0].name} Community Detail` : "Selected Community Details",
+      "Operating snapshot, market color, and team coverage",
+      `<div class="deck-info-grid">${communityCards}</div>`,
+      RISE_PRESENTATION_BRAND.cyan
+    )
+  ];
+}
+
 function buildMonthlyPresentationPricingSlide(report) {
   const blank = label => `<span class="deck-fill-blank">${escapeHtml(label)}</span>`;
   const formatCurrency = value => value > 0 ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "";
@@ -19977,6 +20058,9 @@ function buildMonthlyPresentationPricingSlide(report) {
 }
 
 function buildMonthlyInvestorPresentationSlides(report) {
+  if (report?.variant === "investor_property_packet") {
+    return buildInvestorCommunityInformationSlides(report);
+  }
   const metricCards = buildMonthlyInvestorPresentationMetricCards(report);
   const narrative = buildMonthlyInvestorPresentationNarrative(report);
   const opportunities = buildMonthlyInvestorPresentationOpportunities(report, 8);
@@ -20329,6 +20413,16 @@ function buildMonthlyInvestorPresentationDocument(report, { editable = false } =
     .deck-team-avatar{width:52px;height:52px;border-radius:50%;background-size:cover;background-position:center;flex:0 0 auto;border:2px solid rgba(255,255,255,0.16)}
     .deck-team-name{font-size:13px;font-weight:700;color:#ffffff}
     .deck-team-role{font-size:11px;color:var(--deck-muted);margin-top:3px}
+    .deck-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+    .deck-info-card{display:grid;grid-template-columns:82px minmax(0,1fr);gap:12px;background:rgba(255,255,255,0.09);border:1px solid var(--deck-line);border-radius:16px;padding:10px;min-height:132px;overflow:hidden}
+    .deck-info-photo{width:82px;height:112px;border-radius:12px;object-fit:cover;object-position:center;filter:saturate(1.08) contrast(1.05)}
+    .deck-info-content{min-width:0}
+    .deck-info-name{font-size:15px;font-weight:700;color:#fff;line-height:1.2;margin-bottom:4px}
+    .deck-info-meta{font-size:10px;color:var(--deck-muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .deck-info-stats{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+    .deck-info-stats span{font-size:9.5px;line-height:1;padding:5px 6px;border-radius:999px;background:rgba(140,199,255,0.12);border:1px solid rgba(140,199,255,0.18);color:#eaf6ff}
+    .deck-info-highlight{font-size:10.5px;line-height:1.45;color:#f5fbfb;margin-top:4px}
+    .deck-info-team{font-size:10px;color:var(--deck-accent-soft);line-height:1.35;margin-top:6px}
     .deck-signal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
     .deck-signal-card,.deck-pricing-action-card{background:rgba(255,255,255,0.08);border:1px solid var(--deck-line);border-radius:14px;padding:12px}
     .deck-signal-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--deck-muted);margin-bottom:6px}
@@ -21311,7 +21405,7 @@ async function downloadInvestorPropertyPacketHtml() {
   const blob = new Blob([documentHtml], { type: "text/html" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `atlas_investor_property_packet_${new Date().toISOString().slice(0,10)}.html`;
+  link.download = `atlas_investor_community_information_${new Date().toISOString().slice(0,10)}.html`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -21550,7 +21644,7 @@ function buildReportHubEmailDraft(type = reportHubType) {
         `${report.title}`,
         `${report.scopeSummary}`,
         "",
-        "The latest investor-facing property packet is ready from the Reporting Hub.",
+        "The latest Investor Community Information report is ready from the Reporting Hub.",
         "Use Preview, Print / PDF, or Download Editable HTML before sending."
       ].join("\n")
     };
@@ -24708,9 +24802,17 @@ async function processRonaldoMonthlyBackfillFiles(files, options = {}) {
     return;
   }
   csvError = "";
-  csvLog = [`📦 Ronaldo monthly backfill target: ${MONTHS[targetMonthIdx]} ${targetYear}`];
+  const shouldForceWorkbookPeriod = Number.isInteger(options.forcedMonthIdx)
+    || Number.isInteger(options.forcedYear)
+    || monthlyTemplateImportTargetTouched;
+  csvLog = [shouldForceWorkbookPeriod
+    ? `📦 Ronaldo monthly backfill target: ${MONTHS[targetMonthIdx]} ${targetYear}`
+    : "📦 Ronaldo monthly backfill target: workbook Report_Month routing"];
+  const workbookImportOptions = shouldForceWorkbookPeriod
+    ? { forcedMonthIdx: targetMonthIdx, forcedYear: targetYear }
+    : {};
   for (const file of workbookFiles) {
-    await handleAtlasAdvancedWorkbook(file, { forcedMonthIdx: targetMonthIdx, forcedYear: targetYear });
+    await handleAtlasAdvancedWorkbook(file, workbookImportOptions);
   }
   if (workbookFiles.length > 0) {
     const workbookResult = await processRonaldoMonthlyReferenceFiles(workbookFiles, { forcedMonthIdx: targetMonthIdx, forcedYear: targetYear });
@@ -25351,10 +25453,17 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
     const headerKeys = (monthlyRows[0] || []).map(normalizeAtlasColumnKey);
     const colIdx = Object.fromEntries(headerKeys.map((key, idx) => [key, idx]));
     const getCell = (row, key) => row[colIdx[key]] ?? "";
+    const getFirstCell = (row, keys = []) => {
+      for (const key of keys) {
+        const raw = getCell(row, key);
+        if (raw !== "" && raw !== null && raw !== undefined) return raw;
+      }
+      return "";
+    };
     const getNumericCell = (row, key) => {
       const raw = getCell(row, key);
       if (raw === "" || raw === null || raw === undefined) return null;
-      const numeric = Number(String(raw).replace(/[$,%]/g, ""));
+      const numeric = Number(String(raw).replace(/[$,%]/g, "").replace(/,/g, ""));
       return Number.isFinite(numeric) ? numeric : null;
     };
     const getFirstNumericCell = (row, keys = []) => {
@@ -25470,8 +25579,8 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       const leadSourceTotal = leadSourceValues.some(value => value !== null)
         ? leadSourceValues.reduce((sum, value) => sum + (value ?? 0), 0)
         : null;
-      const guestCardsValue = getFirstNumericCell(row, ["leads", "new_leads", "guest_cards"]);
-      const toursValue = getFirstNumericCell(row, ["tours", "traffic", "first_visits_tours", "tours_first_visits_tours"]);
+      const guestCardsValue = getFirstNumericCell(row, ["leads", "new_leads", "guest_cards", "traffic"]);
+      const toursValue = getFirstNumericCell(row, ["tours", "traffic_tours", "first_visits_tours", "tours_first_visits_tours"]);
       const applicationsValue = getFirstNumericCell(row, ["applications", "application_completed", "completed_applications"]);
       const approvedApplicationsValue = getFirstNumericCell(row, ["approved_applications", "applications_approved", "application_approved"]);
       const deniedValue = getFirstNumericCell(row, ["denied", "denied_applications", "application_denied"]);
@@ -25481,8 +25590,8 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       const totalUnitsValue = getFirstNumericCell(row, ["total_units"]);
       const occupiedUnitsValue = getFirstNumericCell(row, ["occupied_units"]);
       const leasedUnitsValue = getFirstNumericCell(row, ["leased_units"]);
-      const occupiedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getCell(row, "physical_occupancy_pct") || getCell(row, "physical_occupancy_") || getCell(row, "physical_occupancy") || getCell(row, "occupancy_pct"));
-      const leasedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getCell(row, "leased_pct") || getCell(row, "leased_") || getCell(row, "leased"));
+      const occupiedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getFirstCell(row, ["physical_occupancy_pct", "physical_occupancy", "occupancy_pct"]));
+      const leasedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getFirstCell(row, ["leased_pct", "leased"]));
 
       included += 1;
       const mappedRow = {
@@ -25509,8 +25618,8 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         market_rent: getCell(row, "avg_market_rent") ?? "",
         budget_rent: "",
         budget_ner: "",
-        rent_roll_total: getCell(row, "gross_potential_rent_") ?? "",
-        concessions: getCell(row, "concessions_") ?? "",
+        rent_roll_total: getFirstCell(row, ["gross_potential_rent", "gross_potential_rent_", "rent_roll_total"]) ?? "",
+        concessions: getFirstCell(row, ["concessions", "concessions_", "concessions_amount"]) ?? "",
         ner: getCell(row, "actual_rent") ?? "",
         renewal_expirations: getCell(row, "renewals_sent") ?? "",
         renewals_signed: getCell(row, "renewals_signed") ?? "",
@@ -25566,7 +25675,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         Object.entries(applyFieldMap).forEach(([sourceKey, targetKey]) => {
           const rawVal = mappedRow[sourceKey];
           if (rawVal === "" || rawVal === null || rawVal === undefined) return;
-          const numeric = Number(String(rawVal).replace(/[$,%]/g, ""));
+          const numeric = Number(String(rawVal).replace(/[$,%]/g, "").replace(/,/g, ""));
           if (!Number.isFinite(numeric)) return;
           applyValueToRecord(targetRecord, targetMonthIdx, targetKey, numeric);
         });
