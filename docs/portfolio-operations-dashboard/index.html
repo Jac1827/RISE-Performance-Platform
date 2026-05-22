@@ -25263,7 +25263,8 @@ async function processRonaldoMonthlyBackfillFiles(files, options = {}) {
     : "📦 Ronaldo monthly backfill target: workbook Report_Month routing"];
   const workbookImportOptions = {
     ...(shouldForceWorkbookPeriod ? { forcedMonthIdx: targetMonthIdx, forcedYear: targetYear } : {}),
-    replacePortfolioScope: true
+    replacePortfolioScope: true,
+    replaceLeadSourceBuckets: true
   };
   for (const file of workbookFiles) {
     await handleAtlasAdvancedWorkbook(file, workbookImportOptions);
@@ -26117,17 +26118,21 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
           text_chat_other: "text_chat_other"
         };
         const hasLeadSourceBreakdown = leadSourceValues.some(value => value !== null);
-        const rebalancedLeadSourceResult = !hasLeadSourceBreakdown && guestCardsValue !== null
+        const shouldReplaceLeadSourceBuckets = options.replaceLeadSourceBuckets === true || options.replacePortfolioScope === true;
+        const shouldClearLeadSourceBuckets = shouldReplaceLeadSourceBuckets && !hasLeadSourceBreakdown && guestCardsValue !== null;
+        const rebalancedLeadSourceResult = !shouldReplaceLeadSourceBuckets && !hasLeadSourceBreakdown && guestCardsValue !== null
           ? rebalanceLeadSourceBreakdown(targetRecord, targetMonthIdx, guestCardsValue)
           : null;
-        if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult?.strategy === "rescaled_existing") {
+        if (shouldClearLeadSourceBuckets) {
+          leadSourceLogNote = `↳ lead mix not supplied in Monthly_Upload; cleared stale source buckets and kept ${mappedRow.guest_cards || 0} total leads as an aggregate import.`;
+        } else if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult?.strategy === "rescaled_existing") {
           leadSourceLogNote = `↳ lead mix not supplied in Monthly_Upload; rescaled the saved source mix to ${mappedRow.guest_cards || 0} total leads.`;
         } else if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult?.strategy === "catch_all") {
           leadSourceLogNote = `↳ lead mix not supplied in Monthly_Upload; routed ${mappedRow.guest_cards || 0} unattributed leads into text/chat/other so the funnel stays in sync.`;
         }
         const fieldsToClear = [
           ...Object.values(monthlyFieldMap),
-          ...((hasLeadSourceBreakdown || rebalancedLeadSourceResult) ? Object.values(leadSourceFieldMap) : [])
+          ...((hasLeadSourceBreakdown || rebalancedLeadSourceResult || shouldClearLeadSourceBuckets) ? Object.values(leadSourceFieldMap) : [])
         ];
         clearMonthlyRecordFields(targetRecord, targetMonthIdx, fieldsToClear);
         const applyFieldMap = {
