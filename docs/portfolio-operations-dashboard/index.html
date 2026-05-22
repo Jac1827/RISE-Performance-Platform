@@ -24436,6 +24436,12 @@ function getRonaldoGeneratorSheetKind(name) {
 
 function detectRonaldoGeneratorSheetKindFromRows(rows = []) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
+  const headerKeys = Array.isArray(rows[0])
+    ? rows[0].map(cell => normalizeAtlasColumnKey(cell)).filter(Boolean)
+    : [];
+  const headerSet = new Set(headerKeys);
+  if (headerSet.has("report_month") && headerSet.has("community_id") && headerSet.has("row_status")) return "monthly_upload";
+  if (headerSet.has("community_id") && headerSet.has("community_name") && headerSet.has("active_flag")) return "community_master";
   const sampleText = rows
     .slice(0, 40)
     .flatMap(row => Array.isArray(row) ? row : [])
@@ -25179,6 +25185,7 @@ async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
         const kind = getRonaldoGeneratorSheetKind(sheetName);
         return kind && kind !== "monthly_upload" && kind !== "community_master";
       });
+      const hasMonthlyUploadSheet = sheetNames.some(sheetName => getRonaldoGeneratorSheetKind(sheetName) === "monthly_upload");
       const detailSheetKinds = sheetNames
         .map(sheetName => ({ sheetName, kind: getRonaldoGeneratorSheetKind(sheetName) }))
         .filter(item => item.kind && item.kind !== "monthly_upload" && item.kind !== "community_master");
@@ -25194,6 +25201,10 @@ async function processRonaldoMonthlyReferenceFiles(files, options = {}) {
           const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", raw: false });
           fileRows.push(...mapRonaldoGeneratorDetailRows(sheetRows, kind, forcedTarget, `${file.name} · ${sheetName}`, notes, {}));
         }
+      }
+      if (fileRows.length === 0 && hasMonthlyUploadSheet && !hasGeneratorDetailSheet) {
+        notes.push(`ℹ ${file.name} was already handled as an ATLAS Monthly_Upload workbook; skipped the generator-reference scan.`);
+        continue;
       }
       if (fileRows.length === 0) {
         for (const sheetName of sheetNames) {
@@ -26070,6 +26081,9 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         renewal_undecided: "",
         renewal_early_termination: ""
       };
+      let leadSourceLogNote = leadSourceValues.some(value => value !== null)
+        ? `↳ lead mix: walk ${leadWalkInsValue ?? 0}, calls ${leadCallsValue ?? 0}, email/online ${leadEmailsOnlineValue ?? 0}, text/chat/other ${leadChatTextOtherValue ?? 0}`
+        : "↳ lead mix not supplied in Monthly_Upload; no source buckets were changed.";
       const targetRecord = getPropertyRecordForApply(mappedName);
       if (targetRecord) {
         touchedCommunities.add(mappedName);
@@ -26105,6 +26119,11 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
         const rebalancedLeadSourceResult = !hasLeadSourceBreakdown && guestCardsValue !== null
           ? rebalanceLeadSourceBreakdown(targetRecord, targetMonthIdx, guestCardsValue)
           : null;
+        if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult?.strategy === "rescaled_existing") {
+          leadSourceLogNote = `↳ lead mix not supplied in Monthly_Upload; rescaled the saved source mix to ${mappedRow.guest_cards || 0} total leads.`;
+        } else if (!hasLeadSourceBreakdown && rebalancedLeadSourceResult?.strategy === "catch_all") {
+          leadSourceLogNote = `↳ lead mix not supplied in Monthly_Upload; routed ${mappedRow.guest_cards || 0} unattributed leads into text/chat/other so the funnel stays in sync.`;
+        }
         const fieldsToClear = [
           ...Object.values(monthlyFieldMap),
           ...((hasLeadSourceBreakdown || rebalancedLeadSourceResult) ? Object.values(leadSourceFieldMap) : [])
@@ -26149,15 +26168,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       if (log.length < 18) {
         const monthLabel = MONTHS[targetMonthIdx];
         log.push(`${mappedName} · ${monthLabel}: occupied ${mappedRow.occupied || "—"}, leased ${mappedRow.leased || "—"}, leads ${mappedRow.guest_cards || "—"}`);
-        if ([leadWalkInsValue, leadCallsValue, leadEmailsOnlineValue, leadChatTextOtherValue].some(value => value !== null)) {
-          log.push(`↳ lead mix: walk ${leadWalkInsValue ?? 0}, calls ${leadCallsValue ?? 0}, email/online ${leadEmailsOnlineValue ?? 0}, text/chat/other ${leadChatTextOtherValue ?? 0}`);
-        } else if (rebalancedLeadSourceResult?.strategy === "rescaled_existing") {
-          log.push(`↳ lead mix not supplied in Monthly_Upload; rescaled the saved source mix to ${mappedRow.guest_cards || 0} total leads.`);
-        } else if (rebalancedLeadSourceResult?.strategy === "catch_all") {
-          log.push(`↳ lead mix not supplied in Monthly_Upload; routed ${mappedRow.guest_cards || 0} unattributed leads into text/chat/other so the funnel stays in sync.`);
-        } else {
-          log.push("↳ lead mix not supplied in Monthly_Upload; no source buckets were changed.");
-        }
+        log.push(leadSourceLogNote);
       }
     }
 
