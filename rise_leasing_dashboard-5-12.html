@@ -1793,6 +1793,7 @@ function normalizeReportHubType(value) {
   const mapped = legacyMap[normalized] || normalized || "weekly_portfolio_snapshot";
   return [
     "investor_snapshot",
+    "investor_property_packet",
     "weekly_portfolio_snapshot",
     "monthly_investor_deck",
     "investor_marketing_report",
@@ -2544,6 +2545,7 @@ function defaultDlrSummary() {
       highlights: "",
       wins: ""
     },
+    editableNotesByPeriod: {},
     marketingEntries: Array.from({ length: 3 }, () => ({
       contactName: "",
       phone: "",
@@ -2576,6 +2578,22 @@ function normalizeDlrSummary(data) {
   const defaults = defaultDlrSummary();
   const input = data ?? {};
   const normalizeArray = (values, mapper = value => value) => Array.isArray(values) ? values.map(mapper) : [];
+  const normalizeScopedEditableNotes = value => {
+    const source = value && typeof value === "object" ? value : {};
+    return Object.fromEntries(
+      Object.entries(source)
+        .map(([periodKey, notes]) => [
+          String(periodKey ?? "").trim(),
+          {
+            tours: String(notes?.tours ?? "").trim(),
+            applications: String(notes?.applications ?? "").trim(),
+            highlights: String(notes?.highlights ?? "").trim(),
+            wins: String(notes?.wins ?? "").trim()
+          }
+        ])
+        .filter(([periodKey]) => periodKey)
+    );
+  };
   const normalizeMarketingEntries = values => {
     const source = Array.isArray(values) ? values : defaults.marketingEntries;
     const seeded = source.length >= 3 ? source : [...source, ...Array.from({ length: 3 - source.length }, () => ({}))];
@@ -2614,6 +2632,7 @@ function normalizeDlrSummary(data) {
       highlights: String(input.editableNotes?.highlights ?? "").trim(),
       wins: String(input.editableNotes?.wins ?? "").trim()
     },
+    editableNotesByPeriod: normalizeScopedEditableNotes(input.editableNotesByPeriod),
     marketingEntries: normalizeMarketingEntries(input.marketingEntries),
     forwardLook: {
       months: normalizeArray(input.forwardLook?.months, value => String(value ?? "").trim()).filter(Boolean),
@@ -11300,6 +11319,10 @@ function getDlrEditableNoteFieldId(sectionKey) {
   return `dlr-editable-note-${sectionKey}`;
 }
 
+function getDlrEditableNotePeriodKey(monthIdx = getReportHubMonthIndex(), year = getReportHubYear()) {
+  return buildPeriodKey(monthIdx, year);
+}
+
 function readDlrEditableNotesFromDom() {
   if (typeof document === "undefined") return null;
   const values = {};
@@ -11316,12 +11339,14 @@ function readDlrEditableNotesFromDom() {
 function resolveDlrEditableNotes(summary, generatedNotes, options = {}) {
   const normalizedSummary = normalizeDlrSummary(summary);
   const domValues = options.includeDom === false ? null : readDlrEditableNotesFromDom();
+  const scopedPeriodKey = String(options.periodKey ?? getDlrEditableNotePeriodKey()).trim();
+  const scopedNotes = scopedPeriodKey ? normalizedSummary.editableNotesByPeriod?.[scopedPeriodKey] : null;
   const resolvedNotes = {};
   const editorValues = {};
   DLR_EDITABLE_NOTE_SECTIONS.forEach(section => {
     const generatedLines = Array.isArray(generatedNotes?.[section.key]) ? generatedNotes[section.key] : [];
     const generatedText = formatDlrEditableNoteText(generatedLines);
-    const persistedText = String(normalizedSummary.editableNotes?.[section.key] ?? "").trim();
+    const persistedText = String(scopedNotes?.[section.key] ?? normalizedSummary.editableNotes?.[section.key] ?? "").trim();
     const domText = domValues && typeof domValues[section.key] === "string" ? domValues[section.key].trim() : "";
     const finalText = domText || persistedText || generatedText;
     editorValues[section.key] = finalText;
@@ -11376,11 +11401,20 @@ function setDlrReportDateFromInput(value) {
 function persistDlrEditableNoteField(sectionKey, value) {
   if (!DLR_EDITABLE_NOTE_SECTIONS.some(section => section.key === sectionKey)) return false;
   const matchedCommunity = getHistoricalImportCommunityName();
+  const periodKey = getDlrEditableNotePeriodKey();
   return updateCommunityDlrSummary(matchedCommunity, summary => {
     const nextSummary = normalizeDlrSummary(summary);
+    const nextScopedNotes = {
+      ...(nextSummary.editableNotesByPeriod?.[periodKey] ?? {}),
+      [sectionKey]: String(value ?? "").trim()
+    };
     nextSummary.editableNotes = {
       ...nextSummary.editableNotes,
       [sectionKey]: String(value ?? "").trim()
+    };
+    nextSummary.editableNotesByPeriod = {
+      ...nextSummary.editableNotesByPeriod,
+      [periodKey]: nextScopedNotes
     };
     return nextSummary;
   }, { render: false });
@@ -11388,6 +11422,7 @@ function persistDlrEditableNoteField(sectionKey, value) {
 
 function resetDlrEditableNotes() {
   const matchedCommunity = getHistoricalImportCommunityName();
+  const periodKey = getDlrEditableNotePeriodKey();
   updateCommunityDlrSummary(matchedCommunity, summary => {
     const nextSummary = normalizeDlrSummary(summary);
     nextSummary.editableNotes = {
@@ -11395,6 +11430,15 @@ function resetDlrEditableNotes() {
       applications: "",
       highlights: "",
       wins: ""
+    };
+    nextSummary.editableNotesByPeriod = {
+      ...nextSummary.editableNotesByPeriod,
+      [periodKey]: {
+        tours: "",
+        applications: "",
+        highlights: "",
+        wins: ""
+      }
     };
     nextSummary.marketingEntries = Array.from({ length: 3 }, () => ({
       contactName: "",
@@ -17272,6 +17316,7 @@ function renderReportingTab() {
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-gray btn-sm" onclick="openMonthlyInvestorPresentation(false)">👁 Preview Deck</button>
       <button class="btn btn-blue btn-sm" onclick="openMonthlyInvestorPresentation(true)">🖨 Investor PDF / Print</button>
+      <button class="btn btn-gray btn-sm" onclick="setReportHubType('investor_property_packet')">📦 Investor Packet</button>
       <button class="btn btn-gray btn-sm" onclick="exportMonthlyInvestorPresentationPptx()">🪄 Export for Canva</button>
       <button class="btn btn-gray btn-sm" onclick="setReportHubType('dlr')">📘 Build DLR</button>
     </div>
@@ -17309,6 +17354,7 @@ function renderReportingTab() {
         <div class="card-title" style="margin-bottom:6px">Report Type</div>
         <select onchange="setReportHubType(this.value)">
           <option value="investor_snapshot" ${reportHubType==="investor_snapshot"?"selected":""}>Investor Snap Shot</option>
+          <option value="investor_property_packet" ${reportHubType==="investor_property_packet"?"selected":""}>Investor Property Packet</option>
           <option value="weekly_portfolio_snapshot" ${reportHubType==="weekly_portfolio_snapshot"?"selected":""}>Weekly Portfolio Snap Shot</option>
           <option value="monthly_investor_deck" ${reportHubType==="monthly_investor_deck"?"selected":""}>Monthly Investor Deck</option>
           <option value="investor_marketing_report" ${reportHubType==="investor_marketing_report"?"selected":""}>Investor Marketing Report</option>
@@ -17780,6 +17826,7 @@ function setReportHubPerspective(value) {
 function getReportHubTypeLabel(type = reportHubType) {
   return {
     investor_snapshot: "Investor Snap Shot",
+    investor_property_packet: "Investor Property Packet",
     weekly_portfolio_snapshot: "Weekly Portfolio Snap Shot",
     monthly_investor_deck: "Monthly Investor Deck",
     investor_marketing_report: "Investor Marketing Report",
@@ -17838,7 +17885,7 @@ function configureReportHubDefaultsForType(type) {
       reputation: false,
       finances: true
     });
-  } else if (normalized === "investor_snapshot" || normalized === "monthly_investor_deck") {
+  } else if (normalized === "investor_snapshot" || normalized === "monthly_investor_deck" || normalized === "investor_property_packet") {
     portfolioReportMode = "owner";
     reportHubPerspective = "investor";
   }
@@ -17981,7 +18028,11 @@ function getPortfolioReportScopeSummary(report) {
 }
 
 function getReportRecommendationKey(name) {
-  return `${normalizeReportHubType(reportHubType)}::${getReportHubYear()}-${String(getReportHubMonthIndex() + 1).padStart(2, "0")}::${String(name || "portfolio").trim()}`;
+  const reportType = normalizeReportHubType(reportHubType);
+  const communityScope = reportType === "dlr"
+    ? (matchPropertyName(getDlrReportCommunityName(), { fallbackToCurrent: false }) || getProp().name)
+    : "";
+  return `${reportType}::${getReportHubYear()}-${String(getReportHubMonthIndex() + 1).padStart(2, "0")}::${String(name || "portfolio").trim()}${communityScope ? `::${communityScope}` : ""}`;
 }
 
 function buildGeneratedReportRecommendation(detail) {
@@ -19210,6 +19261,42 @@ function buildMonthlyPresentationRegionalStaffPanel(report) {
   </div>`;
 }
 
+function buildInvestorPropertyPacketHighlights(detail, reportMonthIdx = getReportHubMonthIndex()) {
+  const summary = detail?.summary ?? {};
+  const market = buildRegionalPricingWorksheetSnapshot(detail, null, reportMonthIdx);
+  const meta = getCompCalculatorScopeMeta(detail, market);
+  const marketNarrative = String(market.pricingNotes || market.compNarrative || "").trim();
+  const budgetGap = Number(summary.budgetOccPct ?? 0) - getSummaryOccPct(summary);
+  const highlights = [];
+  if (Number(summary.applicationsApproved ?? 0) > 0 || Number(summary.applications ?? 0) > 0) {
+    highlights.push(`The current leasing funnel is showing ${Math.round(summary.applicationsApproved ?? 0)} approved applications from ${Math.round(summary.applications ?? 0)} month-to-date applications, giving investors a clean read on near-term conversion potential.`);
+  }
+  if (Number(summary.monthAbsorption ?? 0) >= 0) {
+    highlights.push(`${detail.name} is carrying ${formatSignedDisplay(summary.monthAbsorption ?? 0)} net absorption month to date, supported by ${Math.round(summary.moveIns ?? 0)} move-ins against ${Math.round(summary.moveOuts ?? 0)} move-outs.`);
+  } else {
+    highlights.push(`${detail.name} has ${Math.round(summary.moveIns ?? 0)} scheduled move-ins already in the saved trend, which keeps the next occupancy step visible even while the current month is still balancing move-out volume.`);
+  }
+  if (Number(summary.budgetOccPct ?? 0) > 0) {
+    highlights.push(budgetGap <= 0
+      ? `Physical occupancy is pacing ${Math.abs(budgetGap).toFixed(1)} points ahead of the saved budget line, which supports the current underwriting story for ${detail.name}.`
+      : `Physical occupancy is currently ${getSummaryOccPct(summary).toFixed(1)}%, with approved applications, scheduled move-ins, and a visible leasing runway supporting the next step toward the ${Number(summary.budgetOccPct).toFixed(1)}% budget target.`);
+  }
+  if (Number(market.compAverageRent ?? 0) > 0) {
+    const subjectRent = Number(market.subjectAskingRent ?? 0);
+    const rentDelta = subjectRent - Number(market.compAverageRent ?? 0);
+    highlights.push(rentDelta >= 0
+      ? `Saved pricing has ${detail.name} positioned ${formatPresentationCurrencyValue(Math.abs(rentDelta))} above the current comp-average ask in ${meta.marketArea}, reinforcing the asset’s revenue upside story.`
+      : `Saved pricing keeps ${detail.name} competitively positioned at ${formatPresentationCurrencyValue(subjectRent)} against a ${formatPresentationCurrencyValue(market.compAverageRent)} submarket average in ${meta.marketArea}.`);
+  }
+  if (marketNarrative) {
+    highlights.push(marketNarrative);
+  }
+  if (Number(summary.renewalRetentionRate ?? 0) > 0) {
+    highlights.push(`Resident retention is running at ${(summary.renewalRetentionRate ?? 0).toFixed(1)}%, which adds durability to the asset’s leasing momentum and helps protect occupancy gains.`);
+  }
+  return highlights.filter(Boolean).slice(0, 5);
+}
+
 function getMonthlyInvestorPresentationSections() {
   const allowed = ["overview", "traffic", "renewals", "reputation"];
   const selected = getSelectedPortfolioReportSections().filter(sectionKey => allowed.includes(sectionKey));
@@ -19277,7 +19364,7 @@ function getMonthlyPresentationCurrentEntry(detail) {
   return detail?.record?.monthlyData?.[monthIdx] ?? {};
 }
 
-function buildMonthlyInvestorPresentationData() {
+function buildMonthlyInvestorPresentationData(variant = "monthly_investor_deck") {
   const selectedMonth = getReportHubMonthIndex();
   const allDetails = buildPortfolioDetailsForMonth(selectedMonth);
   const details = getMonthlyPresentationScopedDetails(allDetails);
@@ -19298,12 +19385,20 @@ function buildMonthlyInvestorPresentationData() {
   const photoPool = collectMonthlyPresentationPhotos(details, 8);
   const regionalStaff = getMonthlyPresentationRegionalStaffForDetails(details);
   const communityNames = details.map(detail => detail.name);
+  const isInvestorPacket = variant === "investor_property_packet";
   const subtitle = details.length === 1
     ? `${communityNames[0]}${details[0].record?.investorName ? ` - ${details[0].record.investorName}` : ""}`
     : communityNames.join(" · ");
   return {
-    title: details.length === 1 ? "Community Market Analysis" : "Portfolio Market Analysis",
+    variant,
+    title: isInvestorPacket
+      ? "Investor Property Packet"
+      : (details.length === 1 ? "Community Market Analysis" : "Portfolio Market Analysis"),
     subtitle,
+    coverMonthLabel: `${getDashboardMonthLabel(selectedMonth)} ${isInvestorPacket ? "Investor Property Packet" : "Investor Presentation"}`,
+    footerLabel: isInvestorPacket
+      ? "ATLAS RISE Ops · Investor Property Packet"
+      : "ATLAS RISE Ops · Monthly Market Analysis",
     generatedAt,
     currentMonthLabel: getDashboardMonthLabel(selectedMonth),
     previousMonthLabel: previousMonthIdx !== null ? getDashboardMonthLabel(previousMonthIdx) : "",
@@ -19318,6 +19413,10 @@ function buildMonthlyInvestorPresentationData() {
     communityNames,
     regionalStaff
   };
+}
+
+function buildInvestorPropertyPacketData() {
+  return buildMonthlyInvestorPresentationData("investor_property_packet");
 }
 
 function buildMonthlyInvestorPresentationMetricCards(report) {
@@ -19366,13 +19465,16 @@ function buildMonthlyInvestorPresentationMetricCards(report) {
 }
 
 function buildMonthlyInvestorPresentationAgenda(report) {
-  const items = ["Executive Summary"];
-  if (report.details.length > 1) items.push("Selected Community Snapshot");
-  if (report.selectedSections.includes("overview")) items.push("Budget & Revenue Position");
-  if (report.selectedSections.includes("traffic") || report.selectedSections.includes("overview")) items.push("Leasing Traffic & Conversion");
-  if (report.selectedSections.includes("renewals") || report.selectedSections.includes("reputation")) items.push("Renewals & Resident Experience");
-  if (report.details.length > 0) items.push(report.details.length === 1 ? `${report.details[0].name} Spotlight & Pricing Action` : "Community Spotlights & Pricing Actions");
-  items.push("Thank You / Next Steps");
+  const packetMode = report?.variant === "investor_property_packet";
+  const items = [packetMode ? "Investment Summary" : "Executive Summary"];
+  if (report.details.length > 1) items.push(packetMode ? "Selected Property Snapshot" : "Selected Community Snapshot");
+  if (report.selectedSections.includes("overview")) items.push(packetMode ? "Occupancy & Revenue Upside" : "Budget & Revenue Position");
+  if (report.selectedSections.includes("traffic") || report.selectedSections.includes("overview")) items.push(packetMode ? "Leasing Momentum" : "Leasing Traffic & Conversion");
+  if (report.selectedSections.includes("renewals") || report.selectedSections.includes("reputation")) items.push(packetMode ? "Resident Stability & Experience" : "Renewals & Resident Experience");
+  if (report.details.length > 0) items.push(report.details.length === 1
+    ? `${report.details[0].name} ${packetMode ? "Investment Spotlight" : "Spotlight & Pricing Action"}`
+    : (packetMode ? "Property Investment Spotlights" : "Community Spotlights & Pricing Actions"));
+  items.push(packetMode ? "Investment Takeaways" : "Thank You / Next Steps");
   return items;
 }
 
@@ -19381,13 +19483,20 @@ function buildMonthlyInvestorPresentationNarrative(report) {
   const previousAggregate = report.previousAggregate;
   const occPct = getSummaryOccPct(aggregate);
   const leasedPct = getSummaryLeasedPct(aggregate);
-  const firstParagraph = `${report.currentMonthLabel} closed with physical occupancy at ${occPct.toFixed(1)}% and leased occupancy at ${leasedPct.toFixed(1)}% across ${report.details.length} selected ${report.details.length === 1 ? "community" : "communities"}. Approved applications reached ${Math.round(aggregate.applicationsApproved ?? 0)} month to date, net absorption landed at ${formatSignedDisplay(aggregate.monthAbsorption ?? 0)} units, and ${aggregate.onTrackBudgetOccCount ?? 0} of ${aggregate.trackedBudgetOccCount ?? 0} communities are pacing on track to saved occupancy budget.`;
+  const packetMode = report?.variant === "investor_property_packet";
+  const firstParagraph = packetMode
+    ? `${report.currentMonthLabel} is presenting a high-level investment read across ${report.details.length} selected ${report.details.length === 1 ? "property" : "properties"}, with physical occupancy at ${occPct.toFixed(1)}%, leased occupancy at ${leasedPct.toFixed(1)}%, ${Math.round(aggregate.applicationsApproved ?? 0)} approved applications month to date, and ${formatSignedDisplay(aggregate.monthAbsorption ?? 0)} units of net absorption already supporting the leasing story.`
+    : `${report.currentMonthLabel} closed with physical occupancy at ${occPct.toFixed(1)}% and leased occupancy at ${leasedPct.toFixed(1)}% across ${report.details.length} selected ${report.details.length === 1 ? "community" : "communities"}. Approved applications reached ${Math.round(aggregate.applicationsApproved ?? 0)} month to date, net absorption landed at ${formatSignedDisplay(aggregate.monthAbsorption ?? 0)} units, and ${aggregate.onTrackBudgetOccCount ?? 0} of ${aggregate.trackedBudgetOccCount ?? 0} communities are pacing on track to saved occupancy budget.`;
   const tourToLeaseComparison = previousAggregate
     ? `${formatPortfolioTrendValue(aggregate.tourToLeasePct ?? 0, previousAggregate.tourToLeasePct ?? 0, "point").replace("MoM", "month over month")}`
     : `${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%`;
   const secondParagraph = report.previousMonthLabel
-    ? `Versus ${report.previousMonthLabel}, applications are ${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct").replace("MoM", "month over month")}, renewal retention is ${formatPortfolioTrendValue(aggregate.renewalRetentionRate ?? 0, aggregate.previousRenewalRetentionRate ?? 0, "point").replace("MoM", "month over month")}, and tour-to-lease conversion is ${tourToLeaseComparison}. This export is built from live dashboard data, not a static slide template, so each monthly deck reflects the current operating picture for the selected communities.`
-    : `Tour-to-lease conversion is currently ${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%, and this export is built from live dashboard data rather than a static slide template so the deck always reflects the current operating picture for the selected communities.`;
+    ? (packetMode
+        ? `Versus ${report.previousMonthLabel}, approved applications are ${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct").replace("MoM", "month over month")}, renewal retention is ${formatPortfolioTrendValue(aggregate.renewalRetentionRate ?? 0, aggregate.previousRenewalRetentionRate ?? 0, "point").replace("MoM", "month over month")}, and tour-to-lease conversion is ${tourToLeaseComparison}. The packet stays high level, but it still reads directly from live ATLAS data, APTIQ market inputs, team assignments, and saved community photos.`
+        : `Versus ${report.previousMonthLabel}, applications are ${formatPortfolioTrendValue(aggregate.applicationsApproved ?? 0, aggregate.previousApplicationsApproved ?? 0, "count_pct").replace("MoM", "month over month")}, renewal retention is ${formatPortfolioTrendValue(aggregate.renewalRetentionRate ?? 0, aggregate.previousRenewalRetentionRate ?? 0, "point").replace("MoM", "month over month")}, and tour-to-lease conversion is ${tourToLeaseComparison}. This export is built from live dashboard data, not a static slide template, so each monthly deck reflects the current operating picture for the selected communities.`)
+    : (packetMode
+        ? `Tour-to-lease conversion is currently ${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%, and this packet blends live operating momentum with saved market, staffing, and image data so the story remains investor-ready without losing connection to the actual dashboard numbers.`
+        : `Tour-to-lease conversion is currently ${(aggregate.tourToLeasePct ?? 0).toFixed(1)}%, and this export is built from live dashboard data rather than a static slide template so the deck always reflects the current operating picture for the selected communities.`);
   return [firstParagraph, secondParagraph];
 }
 
@@ -19609,7 +19718,7 @@ function renderMonthlyInvestorPresentationSlide(report, title, subtitle, bodyHtm
       </div>
       <h1 class="deck-title">${escapeHtml(title)}</h1>
       <div class="deck-body">${bodyHtml}</div>
-      <div class="deck-footer">ATLAS RISE Ops · Monthly Market Analysis</div>
+      <div class="deck-footer">${escapeHtml(report.footerLabel || "ATLAS RISE Ops · Monthly Market Analysis")}</div>
     </div>
   </section>`;
 }
@@ -19630,7 +19739,7 @@ function buildMonthlyInvestorPresentationCoverSlide(report) {
         <img src="${resolveExportBrandLogoSrc()}" alt="ATLAS RISE logo" class="deck-cover-logo">
         <h1 class="deck-cover-title">${escapeHtml(report.title)}</h1>
         <div class="deck-cover-subtitle">${escapeHtml(report.subtitle)}</div>
-        <div class="deck-cover-month">${escapeHtml(report.currentMonthLabel)} Investor Presentation</div>
+        <div class="deck-cover-month">${escapeHtml(report.coverMonthLabel || `${report.currentMonthLabel} Investor Presentation`)}</div>
         ${buildMonthlyPresentationRegionalStaffPanel(report)}
       </div>
     </div>
@@ -19716,11 +19825,27 @@ function buildMonthlyPresentationCommunitySnapshotSlide(report) {
 function buildMonthlyPresentationCommunitySpotlightSlide(report, detail, photoIndex = 0) {
   const summary = detail.summary;
   const photoUrl = getDetailPresentationPhoto(detail, report);
+  const packetMode = report?.variant === "investor_property_packet";
   const recommendations = detail.recommendations.slice(0, 3);
+  const packetHighlights = buildInvestorPropertyPacketHighlights(detail, report.currentMonthIdx);
   const teamPanel = buildPresentationTeamPanel(getPresentationCommunityStaffForDetail(detail), "People Behind This Community");
   const marketSurveyCharts = buildCommunityMarketSurveyCharts(detail);
   const pricingActionPanel = buildCommunitySpotlightPricingPanel(detail);
   const monthEntry = getMonthlyPresentationCurrentEntry(detail);
+  const market = buildRegionalPricingWorksheetSnapshot(detail, null, report.currentMonthIdx);
+  const scopeMeta = getCompCalculatorScopeMeta(detail, market);
+  const addressLine = String(detail.record?.communityAddress ?? "").trim();
+  const overviewFacts = [
+    getInvestorPortfolioName(detail.record),
+    addressLine,
+    scopeMeta.city && scopeMeta.marketArea ? `${scopeMeta.city} · ${scopeMeta.marketArea}` : (scopeMeta.marketArea || scopeMeta.city || ""),
+    `${getDashboardMonthLabel(detail.record?.currentMonth ?? currentMonth)} operating picture`
+  ].filter(Boolean);
+  const spotlightBullets = packetMode
+    ? packetHighlights
+    : (recommendations.length > 0
+        ? recommendations.map(item => `<strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.body)}`)
+        : ["No active watchlist items surfaced from the current dashboard sections."]);
   const pricingChart = buildDeckHorizontalCompareChart(
     "Rates & Effective Rent",
     [
@@ -19736,13 +19861,12 @@ function buildMonthlyPresentationCommunitySpotlightSlide(report, detail, photoIn
   return renderMonthlyInvestorPresentationSlide(
     report,
     detail.name,
-    "Community spotlight + pricing action",
+    packetMode ? "Investment spotlight + market position" : "Community spotlight + pricing action",
     `<div class="deck-spotlight-grid">
       <div class="deck-spotlight-stack">
         <div class="deck-panel deck-panel-soft">
-          <div class="deck-panel-title">Community spotlight</div>
-          <div class="deck-spotlight-meta">${escapeHtml(getInvestorPortfolioName(detail.record))}</div>
-          <div class="deck-spotlight-meta">${escapeHtml(getDashboardMonthLabel(detail.record?.currentMonth ?? currentMonth))} operating picture</div>
+          <div class="deck-panel-title">${packetMode ? "Community overview" : "Community spotlight"}</div>
+          ${overviewFacts.map(line => `<div class="deck-spotlight-meta">${escapeHtml(line)}</div>`).join("")}
           <div class="deck-kpi-stack" style="margin-top:14px">
             <div><strong>${getSummaryOccPct(summary).toFixed(1)}%</strong><span>Physical occupancy</span></div>
             <div><strong>${getSummaryLeasedPct(summary).toFixed(1)}%</strong><span>Leased occupancy</span></div>
@@ -19756,9 +19880,11 @@ function buildMonthlyPresentationCommunitySpotlightSlide(report, detail, photoIn
           ${pricingChart}
         </div>
         <div class="deck-panel deck-panel-transparent">
-          <div class="deck-panel-title">Operating focus</div>
+          <div class="deck-panel-title">${packetMode ? "Investment highlights" : "Operating focus"}</div>
           <ul class="deck-bullets">
-            ${recommendations.length > 0 ? recommendations.map(item => `<li><strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.body)}</li>`).join("") : "<li>No active watchlist items surfaced from the current dashboard sections.</li>"}
+            ${packetMode
+              ? spotlightBullets.map(item => `<li>${escapeHtml(item)}</li>`).join("")
+              : spotlightBullets.map(item => `<li>${item}</li>`).join("")}
           </ul>
         </div>
       </div>
@@ -21122,6 +21248,25 @@ async function openMonthlyInvestorPresentation(printImmediately = false) {
   }
 }
 
+async function openInvestorPropertyPacket(printImmediately = false) {
+  let report = buildInvestorPropertyPacketData();
+  if (!report) return;
+  const hydrated = await ensurePresentationReportAssetsLoaded(report);
+  if (hydrated) {
+    report = buildInvestorPropertyPacketData();
+    if (!report) return;
+  }
+  const documentHtml = buildMonthlyInvestorPresentationDocument(report);
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(documentHtml);
+  win.document.close();
+  if (printImmediately) {
+    win.focus();
+    setTimeout(() => win.print(), 250);
+  }
+}
+
 function copyMonthlyInvestorPresentationBrief() {
   const report = buildMonthlyInvestorPresentationData();
   if (!report) return;
@@ -21150,6 +21295,23 @@ async function downloadMonthlyInvestorPresentationBrief() {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `atlas_monthly_market_analysis_editable_${new Date().toISOString().slice(0,10)}.html`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function downloadInvestorPropertyPacketHtml() {
+  let report = buildInvestorPropertyPacketData();
+  if (!report) return;
+  const hydrated = await ensurePresentationReportAssetsLoaded(report);
+  if (hydrated) {
+    report = buildInvestorPropertyPacketData();
+    if (!report) return;
+  }
+  const documentHtml = buildMonthlyInvestorPresentationDocument(report, { editable: true });
+  const blob = new Blob([documentHtml], { type: "text/html" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `atlas_investor_property_packet_${new Date().toISOString().slice(0,10)}.html`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -21323,6 +21485,7 @@ function getReportHubActionOptions(type = reportHubType) {
   ];
   if (["investor_snapshot", "investor_marketing_report", "regional_progress_report"].includes(normalizedType)) return [...common, { value: "export_csv", label: "Export CSV" }, { value: "export_excel", label: "Export Excel" }];
   if (normalizedType === "monthly_investor_deck") return [...common, { value: "export_canva", label: "Export for Canva" }, { value: "export_html", label: "Download Editable HTML" }];
+  if (normalizedType === "investor_property_packet") return [...common, { value: "export_html", label: "Download Editable HTML" }];
   if (normalizedType === "dlr") return [...common, { value: "export_html", label: "Download Editable HTML" }];
   if (normalizedType === "bonus_payout") return [...common, { value: "export_csv", label: "Export CSV" }];
   return common;
@@ -21374,6 +21537,21 @@ function buildReportHubEmailDraft(type = reportHubType) {
         "",
         "The latest investor presentation is ready from the Reporting Hub.",
         "Use Preview, Print / PDF, Export for Canva, or Download Editable HTML before sending."
+      ].join("\n")
+    };
+  }
+  if (normalizedType === "investor_property_packet") {
+    const report = buildInvestorPropertyPacketData();
+    if (!report) return null;
+    return {
+      to,
+      subject: `${report.title} | ${report.currentMonthLabel}`,
+      body: [
+        `${report.title}`,
+        `${report.scopeSummary}`,
+        "",
+        "The latest investor-facing property packet is ready from the Reporting Hub.",
+        "Use Preview, Print / PDF, or Download Editable HTML before sending."
       ].join("\n")
     };
   }
@@ -21591,6 +21769,7 @@ async function runReportHubAction() {
     if (type === "weekly_portfolio_snapshot") return openWeeklyExecutiveReport(false);
     if (["investor_snapshot", "investor_marketing_report", "regional_progress_report"].includes(type)) return openPortfolioPerformanceReport(false);
     if (type === "monthly_investor_deck") return openMonthlyInvestorPresentation(false);
+    if (type === "investor_property_packet") return openInvestorPropertyPacket(false);
     if (type === "dlr") {
       syncDlrTargetFromReportHub({ preserveCommunity: true });
       renderTab();
@@ -21603,6 +21782,7 @@ async function runReportHubAction() {
     if (type === "weekly_portfolio_snapshot") return openWeeklyExecutiveReport(true);
     if (["investor_snapshot", "investor_marketing_report", "regional_progress_report"].includes(type)) return openPortfolioPerformanceReport(true);
     if (type === "monthly_investor_deck") return openMonthlyInvestorPresentation(true);
+    if (type === "investor_property_packet") return openInvestorPropertyPacket(true);
     if (type === "dlr") {
       syncDlrTargetFromReportHub({ preserveCommunity: true });
       return openDlrInvestorOverview(true);
@@ -21617,6 +21797,7 @@ async function runReportHubAction() {
   if (reportHubAction === "export_canva") return exportMonthlyInvestorPresentationPptx();
   if (reportHubAction === "export_html") {
     if (type === "monthly_investor_deck") return downloadMonthlyInvestorPresentationBrief();
+    if (type === "investor_property_packet") return downloadInvestorPropertyPacketHtml();
     syncDlrTargetFromReportHub({ preserveCommunity: true });
     return downloadDlrInvestorOverviewHtml();
   }
@@ -21673,6 +21854,18 @@ function getCommunityRecordForScope(propName) {
   return matchedName === getProp().name
     ? normalizeSavedCommunityRecord(matchedName, getCurrentCommunityRecord())
     : normalizeSavedCommunityRecord(matchedName, savedData?.[matchedName]);
+}
+
+function getPersistedCommunityRecordForScope(propName, options = {}) {
+  const matchedName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
+  const persistedRecord = savedData?.[matchedName];
+  if (persistedRecord) {
+    return normalizeSavedCommunityRecord(matchedName, persistedRecord);
+  }
+  if (options.allowCurrentFallback && matchedName === getProp().name) {
+    return normalizeSavedCommunityRecord(matchedName, getCurrentCommunityRecord());
+  }
+  return null;
 }
 
 function estimateSnapshotUnitsForRecordMonth(record, totalUnits, targetMonth, snapshotKey) {
@@ -22116,7 +22309,7 @@ function buildDlrEmailPlainTextBody(report) {
 }
 
 function getDlrInvestorRecipientLine(report) {
-  const record = getCommunityRecordForScope(report?.communityName || getHistoricalImportCommunityName());
+  const record = getPersistedCommunityRecordForScope(report?.communityName || getHistoricalImportCommunityName());
   return normalizeEmailListInput(
     normalizeInvestorEmailContacts(record?.investorEmailContacts)
       .map(entry => entry.email)
@@ -22126,7 +22319,7 @@ function getDlrInvestorRecipientLine(report) {
 }
 
 function getInvestorRecipientCountForCommunity(propName) {
-  return normalizeInvestorEmailContacts(getCommunityRecordForScope(propName)?.investorEmailContacts).filter(entry => entry.email).length;
+  return normalizeInvestorEmailContacts(getPersistedCommunityRecordForScope(propName)?.investorEmailContacts).filter(entry => entry.email).length;
 }
 
 async function copyDlrEmailAssetsToClipboard(report) {
@@ -22248,7 +22441,8 @@ function resolveDlrSummaryUnits(summary, totalUnits, metric = "occupied") {
 function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommunityName(), monthIdx = getHistoricalImportMonthIndex(), year = getHistoricalImportYear()) {
   const communityName = matchPropertyName(propName, { fallbackToCurrent: false }) || getProp().name;
   const normalizedMonthIdx = clampNumber(monthIdx, 0, 11);
-  const record = getCommunityRecordForScope(communityName);
+  const record = getPersistedCommunityRecordForScope(communityName);
+  if (!record) return null;
   const primaryCommunityPhotoAsset = normalizeCommunityPhotoBank(record?.photoBank)[0] || null;
   const reportDetail = buildPortfolioDetailsForMonth(normalizedMonthIdx, { [communityName]: record })[0] || null;
   const reportSummary = reportDetail?.summary || {};
@@ -22257,7 +22451,7 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     : null;
   const previousReportSummary = previousReportDetail?.summary || {};
   const surveyData = normalizeMarketSurveyData(record.marketSurveyData);
-  const dlrSummary = getCommunityDlrSummary(communityName);
+  const dlrSummary = normalizeDlrSummary(record.latestDlrSummary);
   const dailyBoxScore = normalizeDlrBoxScoreSnapshot(dlrSummary.dailyBoxScore);
   const hasDailyBoxScore = hasDlrBoxScoreSnapshot(dailyBoxScore);
   const dailyBoxScoreDate = parseDlrSpecificDate(dailyBoxScore.reportDateIso);
@@ -22449,7 +22643,9 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
     expirations: renewalSummary.expirations
   });
   const floorPlanVarianceData = buildCommunityFloorPlanVarianceRows(record.communityFloorPlans, surveyData);
-  const resolvedNoteState = resolveDlrEditableNotes(dlrSummary, generatedNotes);
+  const resolvedNoteState = resolveDlrEditableNotes(dlrSummary, generatedNotes, {
+    periodKey: buildPeriodKey(reportMetricMonthIdx, year)
+  });
   const notes = resolvedNoteState.notes;
   const marketing = resolveDlrMarketingState(dlrSummary);
   const reportDateIso = hasMatchingDailyBoxScore
@@ -22865,9 +23061,9 @@ function renderCSVTab() {
     ? `Weekly comparison baseline synced ${new Date(weeklyBaseline.exportedAt).toLocaleString()}.`
     : "No weekly baseline synced yet. Use Sync This Week as Baseline after you send this week’s report so next week’s export has a true week-over-week comparison.";
   const backupSummaryText = getDailyBackupSummaryText();
-  const dlrReportDateInput = escapeHtml(buildDlrDateInputValue(historicalDlrSummary.reportDateIso));
-  const dlrReportDateLabel = historicalDlrSummary.reportDateLabel || historicalDlrSummary.reportPeriodLabel || "No specific daily report date saved";
-  const dlrSourceLine = historicalDlrSummary.dailyBoxScoreSourceFile
+  const dlrReportDateInput = escapeHtml(buildDlrDateInputValue(historicalDlrSummary?.reportDateIso));
+  const dlrReportDateLabel = historicalDlrSummary?.reportDateLabel || historicalDlrSummary?.reportPeriodLabel || "No specific daily report date saved";
+  const dlrSourceLine = historicalDlrSummary?.dailyBoxScoreSourceFile
     ? `${historicalDlrSummary.dailyBoxScoreSourceFile}${historicalDlrSummary.dailyBoxScoreImportedAt ? ` · uploaded ${formatSavedTimestampLabel(historicalDlrSummary.dailyBoxScoreImportedAt)}` : ""}`
     : "No daily box score uploaded yet";
   const historicalImportHTML = `<div class="card mb4">
@@ -25168,6 +25364,13 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       }
       return null;
     };
+    const deriveUnitsFromPct = (totalUnits, rawPercent) => {
+      const units = Number(totalUnits ?? 0);
+      const normalizedPct = normalizeAtlasPercentValue(rawPercent);
+      if (!Number.isFinite(units) || units <= 0 || normalizedPct === "") return "";
+      const computed = Math.round((Number(normalizedPct) / 100) * units);
+      return Number.isFinite(computed) ? computed : "";
+    };
     const sumNumericCells = (row, keys = []) => {
       const values = keys.map(key => getNumericCell(row, key)).filter(value => value !== null);
       return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
@@ -25275,13 +25478,18 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
       const cancelledValue = getFirstNumericCell(row, ["cancelled", "canceled", "applications_cancelled", "cancelled_applications", "canceled_applications", "application_completed_cancelled", "application_approved_cancelled"]);
       const pendingDecisionValue = getFirstNumericCell(row, ["pending_decision", "pending_applications", "application_partially_completed"]);
       const leasesSignedValue = getFirstNumericCell(row, ["leases_signed", "lease_completed", "lease_approved", "move_ins"]);
+      const totalUnitsValue = getFirstNumericCell(row, ["total_units"]);
+      const occupiedUnitsValue = getFirstNumericCell(row, ["occupied_units"]);
+      const leasedUnitsValue = getFirstNumericCell(row, ["leased_units"]);
+      const occupiedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getCell(row, "physical_occupancy_pct") || getCell(row, "physical_occupancy_") || getCell(row, "physical_occupancy") || getCell(row, "occupancy_pct"));
+      const leasedFromPctValue = deriveUnitsFromPct(totalUnitsValue, getCell(row, "leased_pct") || getCell(row, "leased_") || getCell(row, "leased"));
 
       included += 1;
       const mappedRow = {
         property: mappedName,
         month: forcedTarget.year ? buildHistoricalMonthLabel(targetMonthIdx, forcedTarget.year) : (detectedYear ? buildHistoricalMonthLabel(targetMonthIdx, targetYear) : MONTHS[targetMonthIdx]),
-        occupied: getCell(row, "occupied_units") ?? "",
-        leased: getCell(row, "leased_units") ?? "",
+        occupied: occupiedUnitsValue ?? occupiedFromPctValue ?? "",
+        leased: leasedUnitsValue ?? leasedFromPctValue ?? "",
         move_outs: getCell(row, "move_outs") ?? "",
         move_ins: getCell(row, "move_ins") ?? "",
         guest_cards: guestCardsValue ?? leadSourceTotal ?? "",
@@ -25369,7 +25577,7 @@ async function handleAtlasAdvancedWorkbook(file, options = {}) {
             applyValueToRecord(targetRecord, targetMonthIdx, targetKey, numeric);
           });
         }
-        const totalUnitsVal = Number(String(getCell(row, "total_units") ?? "").replace(/[,]/g, ""));
+        const totalUnitsVal = Number(String(totalUnitsValue ?? "").replace(/[,]/g, ""));
         if (Number.isFinite(totalUnitsVal) && totalUnitsVal > 0) {
           targetRecord.customUnits = Math.round(totalUnitsVal);
         }
