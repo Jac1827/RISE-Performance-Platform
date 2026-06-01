@@ -25578,32 +25578,6 @@ function buildCommunityProgressSingleReportData(options = {}) {
     dataAlerts: []
   };
   report.dataAlerts = buildCommunityProgressReportAlerts(report);
-  if (communityReports.length > 1) {
-    const missingFloorPlanCommunities = communityReports.filter(item => !Array.isArray(item.floorPlanVarianceRows) || item.floorPlanVarianceRows.length === 0).map(item => item.communityName);
-    if (missingFloorPlanCommunities.length > 0) {
-      report.dataAlerts.push({
-        level: "warning",
-        title: "Floor plan variance data is missing for some selected communities",
-        body: `${missingFloorPlanCommunities.join(", ")} do not yet have enough saved floor plan or market survey data to render their variance charts.`
-      });
-    }
-    const missingPhotoCommunities = communityReports.filter(item => !Array.isArray(item.photoPool) || item.photoPool.length === 0).map(item => item.communityName);
-    if (missingPhotoCommunities.length > 0) {
-      report.dataAlerts.push({
-        level: "info",
-        title: "Some selected communities do not have photos",
-        body: `${missingPhotoCommunities.join(", ")} will fall back to the ATLAS brand mark instead of a saved community photo in the individual sections.`
-      });
-    }
-    const missingRenewalCommunities = communityReports.filter(item => Number(item.renewalSnapshot?.expirations ?? 0) === 0 && Number(item.renewalSnapshot?.signed ?? 0) === 0).map(item => item.communityName);
-    if (missingRenewalCommunities.length > 0) {
-      report.dataAlerts.push({
-        level: "info",
-        title: "Renewal data is not yet populated for some selected communities",
-        body: `${missingRenewalCommunities.join(", ")} do not yet have renewal expirations or signed renewals saved for this month.`
-      });
-    }
-  }
   return report;
 }
 
