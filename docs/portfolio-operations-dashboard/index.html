@@ -1060,8 +1060,21 @@ const DASHBOARD_STORAGE_MIGRATION_KEYS = [
   PERFORMANCE_PLATFORM_STORAGE_KEY
 ];
 const DASHBOARD_SHARED_SYNC_SCOPE = "atlas_dashboard_v1";
-const DASHBOARD_SHARED_SYNC_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519f411cab/api/state";
-const DASHBOARD_SHARED_SYNC_HEALTH_ENDPOINT = "https://api.appdeploy.ai/app/582d88ce519f411cab/api/health";
+function getDashboardSharedSyncBaseUrl() {
+  const origin = String(window.location?.origin || "");
+  if (/^https?:\/\//i.test(origin)) {
+    try {
+      const host = new URL(origin).hostname.toLowerCase();
+      if (host !== "github.io" && !host.endsWith(".github.io")) {
+        return origin.replace(/\/+$/, "");
+      }
+    } catch {}
+  }
+  return "https://api.appdeploy.ai/app/582d88ce519f411cab";
+}
+const DASHBOARD_SHARED_SYNC_BASE_URL = getDashboardSharedSyncBaseUrl();
+const DASHBOARD_SHARED_SYNC_ENDPOINT = `${DASHBOARD_SHARED_SYNC_BASE_URL}/api/state`;
+const DASHBOARD_SHARED_SYNC_HEALTH_ENDPOINT = `${DASHBOARD_SHARED_SYNC_BASE_URL}/api/health`;
 const DASHBOARD_SHARED_SYNC_WRITE_TOKEN = "atlas-rise-shared-sync-2026";
 const DASHBOARD_SHARED_SYNC_META_KEY = "atlas_dashboard_shared_sync_meta_v1";
 const DASHBOARD_DAILY_BACKUP_INDEX_KEY = "atlas_dashboard_daily_backup_index_v1";
@@ -8767,9 +8780,24 @@ async function pullDashboardSharedState({ silent = false, applyRemoteIfNewer = t
 
 async function pushDashboardSharedState({ silent = false, source = "manual" } = {}) {
   try {
-    const bundle = await buildDashboardStorageBundle();
+    const localBundle = await buildDashboardStorageBundle();
+    let bundle = localBundle;
+    try {
+      const response = await fetch(`${DASHBOARD_SHARED_SYNC_ENDPOINT}?scope=${encodeURIComponent(DASHBOARD_SHARED_SYNC_SCOPE)}`, { method: "GET" });
+      if (response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const remoteBundle = payload?.record?.payload;
+        if (remoteBundle && typeof remoteBundle === "object") {
+          bundle = mergeDashboardStorageBundles(remoteBundle, localBundle);
+        }
+      }
+    } catch {}
     const response = await fetch(DASHBOARD_SHARED_SYNC_ENDPOINT, {
       method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json"
+      },
       body: JSON.stringify({
         scope: DASHBOARD_SHARED_SYNC_SCOPE,
         source,
@@ -8861,6 +8889,128 @@ async function buildDashboardStorageBundle() {
   };
 }
 
+function mergeDashboardStorageBundles(baseBundle, incomingBundle) {
+  const base = baseBundle && typeof baseBundle === "object" ? baseBundle : {};
+  const incoming = incomingBundle && typeof incomingBundle === "object" ? incomingBundle : {};
+  const baseKeys = base.keys && typeof base.keys === "object" ? base.keys : {};
+  const incomingKeys = incoming.keys && typeof incoming.keys === "object" ? incoming.keys : {};
+  const baseIndexedDb = base.indexedDb && typeof base.indexedDb === "object" ? base.indexedDb : {};
+  const incomingIndexedDb = incoming.indexedDb && typeof incoming.indexedDb === "object" ? incoming.indexedDb : {};
+  const baseCommunityData = baseIndexedDb.communityData && typeof baseIndexedDb.communityData === "object" ? baseIndexedDb.communityData : {};
+  const incomingCommunityData = incomingIndexedDb.communityData && typeof incomingIndexedDb.communityData === "object" ? incomingIndexedDb.communityData : {};
+  const baseDailyBackupIndex = Array.isArray(baseIndexedDb.dailyBackupIndex) ? baseIndexedDb.dailyBackupIndex.filter(Boolean) : [];
+  const incomingDailyBackupIndex = Array.isArray(incomingIndexedDb.dailyBackupIndex) ? incomingIndexedDb.dailyBackupIndex.filter(Boolean) : [];
+  const baseDailyBackups = baseIndexedDb.dailyBackups && typeof baseIndexedDb.dailyBackups === "object" ? baseIndexedDb.dailyBackups : {};
+  const incomingDailyBackups = incomingIndexedDb.dailyBackups && typeof incomingIndexedDb.dailyBackups === "object" ? incomingIndexedDb.dailyBackups : {};
+  const dailyBackupIndex = Array.from(new Set([...baseDailyBackupIndex, ...incomingDailyBackupIndex])).sort().reverse().slice(0, DASHBOARD_DAILY_BACKUP_RETENTION);
+  const dailyBackups = {};
+  dailyBackupIndex.forEach((dateKey) => {
+    if (incomingDailyBackups[dateKey]) dailyBackups[dateKey] = incomingDailyBackups[dateKey];
+    else if (baseDailyBackups[dateKey]) dailyBackups[dateKey] = baseDailyBackups[dateKey];
+  });
+  return {
+    ...base,
+    ...incoming,
+    keys: { ...baseKeys, ...incomingKeys },
+    indexedDb: {
+      communityData: mergeDashboardCommunityDataMaps(baseCommunityData, incomingCommunityData),
+      weeklySnapshot: incomingIndexedDb.weeklySnapshot && typeof incomingIndexedDb.weeklySnapshot === "object"
+        ? incomingIndexedDb.weeklySnapshot
+        : (baseIndexedDb.weeklySnapshot && typeof baseIndexedDb.weeklySnapshot === "object" ? baseIndexedDb.weeklySnapshot : null),
+      dailyBackupIndex,
+      dailyBackups
+    }
+  };
+}
+
+function dashboardMonthlyEntryHasData(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  return Object.values(entry).some(value => {
+    if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+    if (typeof value === "string") return value.trim().length > 0;
+    return Boolean(value);
+  });
+}
+
+function mergeDashboardMonthlyData(baseMonthlyData, incomingMonthlyData) {
+  const baseEntries = Array.isArray(baseMonthlyData) ? baseMonthlyData : [];
+  const incomingEntries = Array.isArray(incomingMonthlyData) ? incomingMonthlyData : [];
+  return Array.from({ length: 12 }, (_, idx) => {
+    const baseEntry = baseEntries[idx] && typeof baseEntries[idx] === "object" ? baseEntries[idx] : {};
+    const incomingEntry = incomingEntries[idx] && typeof incomingEntries[idx] === "object" ? incomingEntries[idx] : {};
+    if (!dashboardMonthlyEntryHasData(incomingEntry)) {
+      return baseEntry;
+    }
+    return { ...baseEntry, ...incomingEntry };
+  });
+}
+
+function mergeDashboardCommunityRecord(baseRecord, incomingRecord, name) {
+  const base = normalizeSavedCommunityRecord(name, baseRecord);
+  const incoming = normalizeSavedCommunityRecord(name, incomingRecord);
+  const mergedMonthlyData = mergeDashboardMonthlyData(base.monthlyData, incoming.monthlyData);
+  const nextSavedBudgetTargets = Array.isArray(incoming.savedBudgetTargets) && incoming.savedBudgetTargets.some(value => Number(value) > 0)
+    ? incoming.savedBudgetTargets
+    : base.savedBudgetTargets;
+  const nextSeasonal = Array.isArray(incoming.seasonal) && incoming.seasonal.some(value => Number(value) !== 0)
+    ? incoming.seasonal
+    : base.seasonal;
+  const nextPhotoBank = Array.isArray(incoming.photoBank) && incoming.photoBank.length > 0
+    ? incoming.photoBank
+    : base.photoBank;
+  const nextCommunityTeamProfiles = Array.isArray(incoming.communityTeamProfiles) && incoming.communityTeamProfiles.length > 0
+    ? incoming.communityTeamProfiles
+    : base.communityTeamProfiles;
+  const nextImportTracking = normalizeImportTracking({
+    ...(base.importTracking || {}),
+    ...(incoming.importTracking || {})
+  });
+  return {
+    ...base,
+    ...incoming,
+    monthlyData: mergedMonthlyData,
+    savedBudgetTargets: nextSavedBudgetTargets,
+    seasonal: nextSeasonal,
+    photoBank: nextPhotoBank,
+    communityTeamProfiles: nextCommunityTeamProfiles,
+    importTracking: nextImportTracking,
+    financialLedger: {
+      ...(base.financialLedger && typeof base.financialLedger === "object" ? base.financialLedger : {}),
+      ...(incoming.financialLedger && typeof incoming.financialLedger === "object" ? incoming.financialLedger : {})
+    },
+    financialBudgetLedger: {
+      ...(base.financialBudgetLedger && typeof base.financialBudgetLedger === "object" ? base.financialBudgetLedger : {}),
+      ...(incoming.financialBudgetLedger && typeof incoming.financialBudgetLedger === "object" ? incoming.financialBudgetLedger : {})
+    },
+    marketSurveyHistory: {
+      ...(base.marketSurveyHistory && typeof base.marketSurveyHistory === "object" ? base.marketSurveyHistory : {}),
+      ...(incoming.marketSurveyHistory && typeof incoming.marketSurveyHistory === "object" ? incoming.marketSurveyHistory : {})
+    },
+    marketSurveyData: {
+      ...(base.marketSurveyData && typeof base.marketSurveyData === "object" ? base.marketSurveyData : {}),
+      ...(incoming.marketSurveyData && typeof incoming.marketSurveyData === "object" ? incoming.marketSurveyData : {})
+    },
+    latestDlrSummary: Object.keys(incoming.latestDlrSummary || {}).length > 0 ? incoming.latestDlrSummary : base.latestDlrSummary
+  };
+}
+
+function mergeDashboardCommunityDataMaps(baseMap, incomingMap) {
+  const base = baseMap && typeof baseMap === "object" ? baseMap : {};
+  const incoming = incomingMap && typeof incomingMap === "object" ? incomingMap : {};
+  const names = new Set([...Object.keys(base), ...Object.keys(incoming)]);
+  const merged = {};
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(base, name) && Object.prototype.hasOwnProperty.call(incoming, name)) {
+      merged[name] = mergeDashboardCommunityRecord(base[name], incoming[name], name);
+    } else if (Object.prototype.hasOwnProperty.call(incoming, name)) {
+      merged[name] = normalizeSavedCommunityRecord(name, incoming[name]);
+    } else if (Object.prototype.hasOwnProperty.call(base, name)) {
+      merged[name] = normalizeSavedCommunityRecord(name, base[name]);
+    }
+  }
+  return merged;
+}
+
 async function copyDashboardStorageBundleToClipboard() {
   const bundle = await buildDashboardStorageBundle();
   const payload = JSON.stringify(bundle, null, 2);
@@ -8926,35 +9076,35 @@ async function applyDashboardStorageBundle(bundle) {
   });
   if (indexedDbPayload) {
     if (indexedDbPayload.communityData && typeof indexedDbPayload.communityData === "object") {
-      await atlasStateSetValue(ATLAS_STATE_COMMUNITY_KEY, indexedDbPayload.communityData);
-      savedData = indexedDbPayload.communityData;
+      const mergedCommunityData = mergeDashboardCommunityDataMaps(
+        savedData && typeof savedData === "object" ? savedData : {},
+        indexedDbPayload.communityData
+      );
+      await atlasStateSetValue(ATLAS_STATE_COMMUNITY_KEY, mergedCommunityData);
+      savedData = mergedCommunityData;
       writtenCount += 1;
     }
     if (indexedDbPayload.weeklySnapshot && typeof indexedDbPayload.weeklySnapshot === "object") {
       await atlasStateSetValue(ATLAS_STATE_WEEKLY_SNAPSHOT_KEY, indexedDbPayload.weeklySnapshot);
       weeklySnapshotCache = indexedDbPayload.weeklySnapshot;
       writtenCount += 1;
-    } else if (indexedDbPayload.weeklySnapshot === null) {
-      await atlasStateDeleteValue(ATLAS_STATE_WEEKLY_SNAPSHOT_KEY);
-      weeklySnapshotCache = null;
     }
-    const backupIndex = Array.isArray(indexedDbPayload.dailyBackupIndex) ? indexedDbPayload.dailyBackupIndex.filter(Boolean) : [];
-    if (backupIndex.length > 0 || indexedDbPayload.dailyBackups) {
+    const backupMap = (indexedDbPayload.dailyBackups && typeof indexedDbPayload.dailyBackups === "object") ? indexedDbPayload.dailyBackups : {};
+    const incomingBackupIndex = Array.isArray(indexedDbPayload.dailyBackupIndex) ? indexedDbPayload.dailyBackupIndex.filter(Boolean) : [];
+    const incomingBackupDates = Array.from(new Set([
+      ...incomingBackupIndex,
+      ...Object.keys(backupMap)
+    ])).filter(dateKey => Boolean(backupMap[dateKey]));
+    if (incomingBackupDates.length > 0) {
       const existingBackupIndex = loadDailyBackupIndex();
-      dailyBackupIndexCache = backupIndex;
+      dailyBackupIndexCache = Array.from(new Set([...existingBackupIndex, ...incomingBackupDates])).sort().reverse().slice(0, DASHBOARD_DAILY_BACKUP_RETENTION);
       await atlasStateSetValue(ATLAS_STATE_DAILY_BACKUP_INDEX_KEY, dailyBackupIndexCache);
-      const backupMap = (indexedDbPayload.dailyBackups && typeof indexedDbPayload.dailyBackups === "object") ? indexedDbPayload.dailyBackups : {};
-      for (const dateKey of existingBackupIndex) {
-        if (!dailyBackupIndexCache.includes(dateKey)) {
-          await atlasStateDeleteValue(`${ATLAS_STATE_DAILY_BACKUP_PREFIX}${dateKey}`);
-        }
-      }
-      for (const dateKey of backupIndex) {
+      for (const dateKey of incomingBackupDates) {
         if (backupMap[dateKey]) {
           await atlasStateSetValue(`${ATLAS_STATE_DAILY_BACKUP_PREFIX}${dateKey}`, backupMap[dateKey]);
         }
       }
-      writtenCount += backupIndex.length > 0 ? backupIndex.length : 1;
+      writtenCount += incomingBackupDates.length;
     }
     removeLegacyCommunityStorageKeys();
     removeLegacyDailyBackupStorageKeys();
