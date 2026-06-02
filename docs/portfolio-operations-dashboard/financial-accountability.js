@@ -3371,7 +3371,7 @@
     }
 
     const periodsObserved = Array.from(new Set(records.map((record) => record.period))).sort(comparePeriod);
-    const elapsedMonths = periodsObserved.length || Number(String(asOf).slice(5, 7)) || 1;
+    const elapsedMonths = Number(String(asOf).slice(5, 7)) || periodsObserved.length || 1;
     const ytdRollup = buildFinancialRollup(records, elapsedMonths);
     const currentMonthRawRecords = dataset.records.filter((record) => record.property === property && record.period === asOf);
     const currentMonthBudgetMatches = countApprovedBudgetMatches(currentMonthRawRecords, approvedIndex);
@@ -3774,6 +3774,8 @@
     const financialSummaries = propertySummaries.map((summary) => summary.financial).filter(Boolean);
     const leasingSummaries = propertySummaries.map((summary) => summary.leasing).filter(Boolean);
     const operationsSummaries = propertySummaries.map((summary) => summary.operations).filter(Boolean);
+    const totalOperationsUnits = operationsSummaries.reduce((sum, entry) => sum + Math.max(0, Number(entry.units) || 0), 0);
+    const totalTurns = operationsSummaries.reduce((sum, entry) => sum + Math.max(0, Number(entry.turns) || 0), 0);
     const remainingMonths =
       financialSummaries.find((entry) => entry.remainingMonths != null)?.remainingMonths ??
       Math.max(12 - (Number(String(asOf).slice(5, 7)) || 0), 0);
@@ -3812,9 +3814,19 @@
       priorMonthLabel: financialSummaries.find((entry) => entry.priorMonthLabel)?.priorMonthLabel || shiftPeriod(asOf, -1),
       priorYearLabel: financialSummaries.find((entry) => entry.priorYearLabel)?.priorYearLabel || shiftPeriod(asOf, -12),
       score: average(propertySummaries.map((summary) => summary.score)),
-      occupancyPct: average(leasingSummaries.map((entry) => entry.occupancyPct)),
-      delinquencyPct: average(leasingSummaries.map((entry) => entry.delinquencyPct)),
-      turnsPer100: average(operationsSummaries.map((entry) => entry.turnsPer100)),
+      occupancyPct: weightedAverage(
+        leasingSummaries.map((entry) => ({
+          value: entry.occupancyPct,
+          weight: Math.max(0, Number(entry.units) || 0),
+        })),
+      ),
+      delinquencyPct: weightedAverage(
+        leasingSummaries.map((entry) => ({
+          value: entry.delinquencyPct,
+          weight: Math.max(0, Number(entry.units) || 0),
+        })),
+      ),
+      turnsPer100: totalOperationsUnits > 0 ? (totalTurns / totalOperationsUnits) * 100 : null,
       atRiskCount: propertySummaries.filter((summary) => summary.score != null && summary.score < 55).length,
       watchCount: propertySummaries.filter((summary) => summary.score != null && summary.score >= 55 && summary.score < 75).length,
       topProperties: propertySummaries.slice(0, 3),
