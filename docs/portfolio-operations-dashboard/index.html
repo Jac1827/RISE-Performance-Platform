@@ -25253,7 +25253,6 @@ function buildDashboardDlrInvestorOverview(propName = getHistoricalImportCommuni
   });
   const notes = resolvedNoteState.notes;
   const marketing = resolveDlrMarketingState(dlrSummary);
-  const trendingOccupancyPct = Number(nextRows[Math.min(3, Math.max(nextRows.length - 1, 0))]?.projectedOccupancy ?? occupancyPct) || occupancyPct;
   const reportDateIso = hasMatchingDailyBoxScore
     ? (dailyBoxScore.reportDateIso || dlrSummary.reportDateIso)
     : dlrSummary.reportDateIso;
