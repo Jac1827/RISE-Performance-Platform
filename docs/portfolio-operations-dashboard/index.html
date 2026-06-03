@@ -24403,6 +24403,14 @@ function buildDlrForwardLookChart(report) {
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const stepX = rows.length > 1 ? chartWidth / (rows.length - 1) : 0;
+  const tickCount = 4;
+  const ticks = Array.from({ length: tickCount + 1 }, (_, idx) => {
+    const value = (maxPct / tickCount) * idx;
+    return {
+      value,
+      y: top + chartHeight - ((idx / tickCount) * chartHeight)
+    };
+  });
   const pointFor = (value, idx) => {
     const x = left + (stepX * idx);
     const y = top + chartHeight - ((Math.max(0, Number(value) || 0) / maxPct) * chartHeight);
@@ -24434,6 +24442,10 @@ function buildDlrForwardLookChart(report) {
   }).join("") : "";
   return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;display:block">
     <rect x="0" y="0" width="${width}" height="${height}" rx="14" fill="rgba(239,246,255,0.55)"/>
+    ${ticks.map(tick => `<g>
+      <line x1="${left}" y1="${tick.y}" x2="${width - right}" y2="${tick.y}" stroke="rgba(27,58,75,0.08)" stroke-width="1"/>
+      <text x="${left - 8}" y="${tick.y + 4}" text-anchor="end" font-size="10" fill="#7d8590">${escapeHtml(formatDlrPercent(tick.value, 0))}</text>
+    </g>`).join("")}
     <line x1="${left}" y1="${top + chartHeight}" x2="${width - right}" y2="${top + chartHeight}" stroke="#cbd5e1" stroke-width="1"/>
     ${hasBudgetData ? `<polyline fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4" points="${budgetPath}"/>` : ""}
     ${hasMarketLine ? `<polyline fill="none" stroke="#0f766e" stroke-width="2" stroke-dasharray="3 3" points="${marketPath}"/>` : ""}
@@ -25998,13 +26010,6 @@ function buildCommunityProgressTrendSection(report) {
       projected: false
     }));
   const currentRow = rows[rows.length - 1] || {};
-  const netAbsorptionMarketSeries = rows.map(row => ({
-    monthIdx: row.monthIdx,
-    shortLabel: row.shortLabel,
-    primary: row.marketLeasedPct,
-    secondary: row.marketExposurePct,
-    projected: false
-  }));
   const netAbsorptionSeries = rows.map(row => ({
     monthIdx: row.monthIdx,
     shortLabel: row.shortLabel,
@@ -26057,23 +26062,9 @@ function buildCommunityProgressTrendSection(report) {
             <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">${escapeHtml(formatDlrSignedNumber(currentRow.netAbsorption))}</div>
           </div>
           <div style="text-align:right;font-size:12px;color:#475569">
-            <div>${escapeHtml(formatDlrMetricValue(currentRow.marketLeasedPct))} leased vs ${escapeHtml(formatDlrMetricValue(currentRow.marketExposurePct))} exposure</div>
-            <div style="margin-top:4px">Market leased performance and recorded absorption</div>
+            <div>${escapeHtml(formatDlrMetricValue(currentRow.moveIns))} move-ins vs ${escapeHtml(formatDlrMetricValue(currentRow.moveOuts))} move-outs</div>
+            <div style="margin-top:4px">Recorded month-over-month absorption</div>
           </div>
-        </div>
-        <div style="margin-bottom:14px">
-          <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px">Market Aggregate Lease Performance</div>
-          ${buildCommunityProgressDualLineChart(netAbsorptionMarketSeries, {
-            kind: "pct",
-            primaryLabel: "Market Leased %",
-            secondaryLabel: "Market Exposure %",
-            primaryLineColor: "#0f766e",
-            primaryDotColor: "#0f766e",
-            secondaryLineColor: "#2563eb",
-            secondaryDotColor: "#2563eb",
-            axisFormatter: value => formatDlrPercent(value, 0),
-            highlightMonthIdx: rows.length - 1
-          })}
         </div>
         <div>
           <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px">Recorded Month-over-Month Absorption</div>
