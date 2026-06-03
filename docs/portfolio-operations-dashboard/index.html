@@ -25818,16 +25818,6 @@ function buildCommunityProgressNarrative({
 }
 
 function buildCommunityProgressThumbnailRail(report) {
-  const communityPhotos = (Array.isArray(report?.photoPoolResolved) ? report.photoPoolResolved : report?.photoPool ?? [])
-    .map(photo => {
-      const src = String(photo?.resolvedSrc || photo?.previewSrc || photo?.src || "").trim();
-      return src ? {
-        src,
-        label: String(photo?.community || report?.communityName || "Community")
-      } : null;
-    })
-    .filter(Boolean)
-    .slice(0, 3);
   const leadership = (Array.isArray(report?.regionalStaffResolved) ? report.regionalStaffResolved : report?.regionalStaff ?? [])
     .map(member => {
       const src = String(member?.resolvedSrc || member?.photo?.previewSrc || member?.photo?.src || "").trim();
@@ -25838,12 +25828,12 @@ function buildCommunityProgressThumbnailRail(report) {
     })
     .filter(Boolean)
     .slice(0, 5);
-  const thumbs = [...communityPhotos, ...leadership];
+  const thumbs = leadership;
   if (thumbs.length === 0) return "";
   return `<div style="display:flex;justify-content:flex-end;margin-top:10px">
     <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;max-width:380px">
       ${thumbs.map(item => `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:46px">
-        <div style="width:42px;height:42px;border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.55);background:#0f172a;box-shadow:0 6px 16px rgba(15,23,42,0.12)">
+        <div style="width:40px;height:40px;border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.55);background:#0f172a;box-shadow:0 6px 16px rgba(15,23,42,0.12)">
           <img src="${item.src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
         </div>
         <div style="width:46px;font-size:8px;line-height:1.1;text-align:center;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.label)}</div>
