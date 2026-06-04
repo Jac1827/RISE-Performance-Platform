@@ -23950,16 +23950,16 @@ function buildPortfolioDlrOverviewDocument(report) {
     const physicalPct = Number(communityReport.occupancyPct ?? 0) || 0;
     const leasedPct = Number(communityReport.leasedPct ?? 0) || 0;
     return `<tr>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px">
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px">
         <div style="font-weight:700;color:#0f172a">${escapeHtml(communityReport.communityName)}</div>
         <div style="font-size:11px;color:#64748b">${escapeHtml(investorName)}</div>
       </td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${physicalPct.toFixed(1)}%</td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${leasedPct.toFixed(1)}%</td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Math.round(communityReport.trafficMetrics?.approvals ?? 0)}</td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatSignedDisplay(communityReport.monthAbsorption ?? 0)}</td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${Number(communityReport.renewalSnapshot?.retentionRate ?? 0).toFixed(1)}%</td>
-      <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${communityReport && isDlrDailyBoxScoreReady(communityReport) ? "Live DLR" : "Saved MTD"}</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${physicalPct.toFixed(1)}%</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${leasedPct.toFixed(1)}%</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${Math.round(communityReport.trafficMetrics?.approvals ?? 0)}</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatSignedDisplay(communityReport.monthAbsorption ?? 0)}</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${Number(communityReport.renewalSnapshot?.retentionRate ?? 0).toFixed(1)}%</td>
+      <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${communityReport && isDlrDailyBoxScoreReady(communityReport) ? "Live DLR" : "Saved MTD"}</td>
     </tr>`;
   }).join("");
   const notesHtml = [
@@ -24050,13 +24050,13 @@ function buildPortfolioDlrOverviewDocument(report) {
         </thead>
         <tbody>
           ${(report.forwardLook ?? []).map(row => `<tr>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;font-weight:700">${escapeHtml(row.label)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
-            <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;font-weight:700">${escapeHtml(row.label)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
+            <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
           </tr>`).join("")}
         </tbody>
       </table>
@@ -24469,8 +24469,11 @@ function buildDlrOccupancyPositionChart(report) {
   const currentPct = Math.max(0, Math.min(Number(report.occupancyPct) || 0, 100));
   const leasedPct = Math.max(0, Math.min(Number(report.leasedPct) || 0, 100));
   const metrics = [
-    { label: "Occupied", pct: currentPct, color: "#1d4ed8", detail: `${formatDlrMetricValue(report.occupiedUnits)} units` },
-    { label: "Leased", pct: leasedPct, color: "#0f766e", detail: `${formatDlrMetricValue(report.leasedUnits)} units` },
+const metrics = [
+  { label: "Occupied", pct: currentPct, color: "#1d4ed8", detail: `${formatDlrMetricValue(report.occupiedUnits)} units` },
+  { label: "Leased", pct: leasedPct, color: "#0f766e", detail: `${formatDlrMetricValue(report.leasedUnits)} units` },
+  { label: "Budget", pct: budgetPct, color: "#94a3b8", detail: budgetPct !== null ? "current target" : "budget not saved" }
+];
     { label: "Budget", pct: budgetPct, color: "#94a3b8", detail: budgetPct !== null ? "current target" : "budget not saved" }
   ];
   const bars = metrics.map(item => `
@@ -24599,45 +24602,98 @@ function buildDlrFloorPlanVarianceChart(report) {
       row.baths != null ? `${row.baths} ba` : "",
       row.sqft != null ? `${Math.round(row.sqft).toLocaleString()} sf` : ""
     ].filter(Boolean).join(" · ");
-    return `<div style="display:grid;grid-template-columns:150px minmax(170px,1.1fr) minmax(280px,1fr) 120px 120px 92px 100px 100px minmax(150px,0.9fr);gap:12px;align-items:center;padding:10px 0;border-top:1px solid #e5e7eb">
-      <div style="font-size:12px;color:#334155">
-        <div style="font-size:13px;font-weight:700;color:#0f172a">${escapeHtml(communityDisplayLabel)}</div>
-        ${communityDisplayMeta ? `<div style="font-size:10px;color:#64748b;margin-top:3px">${escapeHtml(communityDisplayMeta)}</div>` : ""}
+return `<div style="display:grid;grid-template-columns:132px minmax(150px,1fr) minmax(220px,1fr) 92px 92px 72px 84px 84px minmax(120px,0.9fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb">
+  <div style="font-size:11px;color:#334155;line-height:1.35">
+    <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.25">${escapeHtml(communityDisplayLabel)}</div>
+    ${communityDisplayMeta ? `<div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.35">${escapeHtml(communityDisplayMeta)}</div>` : ""}
+  </div>
+  <div>
+    <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.25">${escapeHtml(row.name)}</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.35">${escapeHtml(meta || "Budget plan")}</div>
+  </div>
+  <div>
+    <div style="position:relative;height:12px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid #dbe4f0">
+      <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#94a3b8"></div>
+      ${variance == null ? "" : variance >= 0
+        ? `<div style="position:absolute;left:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:0 999px 999px 0"></div>`
+        : `<div style="position:absolute;right:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:999px 0 0 999px"></div>`}
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#64748b;margin-top:3px;line-height:1.25">
+      <span>Below</span>
+      <span>At</span>
+      <span>Above</span>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>Budget</strong><br>${formatDlrCurrency(row.budgetRent)}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>Market</strong><br>${formatDlrCurrency(row.marketRent)}</div>
+  <div style="font-size:11px;font-weight:700;color:${varianceColor};line-height:1.25">${row.variance == null ? "—" : formatSignedDisplay(variance, 0, "")}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>% Occupied</strong><br>${compCalcFormatPercentValue(row.occupancyPct)}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>% Leased</strong><br>${compCalcFormatPercentValue(row.leasedPct)}</div>
+  <div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">Recommendation</div>
+    <div style="display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:6px 8px;border-radius:999px;background:${recommendation.bg};border:1px solid ${recommendation.color}33;font-size:10px;font-weight:700;line-height:1.25;color:${recommendation.color};text-align:center">
+      ${escapeHtml(recommendation.label)}
+    </div>
+  </div>
+</div>`;
       </div>
       <div>
-        <div style="font-size:13px;font-weight:700;color:#0f172a">${escapeHtml(row.name)}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px">${escapeHtml(meta || "Budget plan")}</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.25">${escapeHtml(row.name)}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.35">${escapeHtml(meta || "Budget plan")}</div>
       </div>
       <div>
-        <div style="position:relative;height:16px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid #dbe4f0">
+        <div style="position:relative;height:12px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid #dbe4f0">
           <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#94a3b8"></div>
           ${variance == null ? "" : variance >= 0
             ? `<div style="position:absolute;left:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:0 999px 999px 0"></div>`
             : `<div style="position:absolute;right:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:999px 0 0 999px"></div>`}
         </div>
-        <div style="display:flex;justify-content:space-between;gap:10px;font-size:10px;color:#64748b;margin-top:4px">
-          <span>Below budget</span>
-          <span>At budget</span>
-          <span>Above budget</span>
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#64748b;margin-top:3px;line-height:1.25">
+          <span>Below</span>
+          <span>At</span>
+          <span>Above</span>
         </div>
       </div>
-      <div style="font-size:12px;color:#334155"><strong>Budget</strong><br>${formatDlrCurrency(row.budgetRent)}</div>
-      <div style="font-size:12px;color:#334155"><strong>Market</strong><br>${formatDlrCurrency(row.marketRent)}</div>
-      <div style="font-size:12px;font-weight:700;color:${varianceColor}">${row.variance == null ? "—" : formatSignedDisplay(variance, 0, "")}</div>
-      <div style="font-size:12px;color:#334155"><strong>% Occupied</strong><br>${compCalcFormatPercentValue(row.occupancyPct)}</div>
-      <div style="font-size:12px;color:#334155"><strong>% Leased</strong><br>${compCalcFormatPercentValue(row.leasedPct)}</div>
-      <div>
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">Recommendation</div>
-        <div style="display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:${recommendation.bg};border:1px solid ${recommendation.color}33;font-size:11px;font-weight:700;line-height:1.35;color:${recommendation.color};text-align:center">
-          ${escapeHtml(recommendation.label)}
-        </div>
-      </div>
+return `<div style="display:grid;grid-template-columns:132px minmax(150px,1fr) minmax(220px,1fr) 92px 92px 72px 84px 84px minmax(120px,0.9fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb">
+  <div style="font-size:11px;color:#334155;line-height:1.35">
+    <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.25">${escapeHtml(communityDisplayLabel)}</div>
+    ${communityDisplayMeta ? `<div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.35">${escapeHtml(communityDisplayMeta)}</div>` : ""}
+  </div>
+  <div>
+    <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.25">${escapeHtml(row.name)}</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.35">${escapeHtml(meta || "Budget plan")}</div>
+  </div>
+  <div>
+    <div style="position:relative;height:12px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid #dbe4f0">
+      <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#94a3b8"></div>
+      ${variance == null ? "" : variance >= 0
+        ? `<div style="position:absolute;left:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:0 999px 999px 0"></div>`
+        : `<div style="position:absolute;right:50%;top:1px;bottom:1px;width:${varianceWidth}%;background:${varianceColor};border-radius:999px 0 0 999px"></div>`}
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#64748b;margin-top:3px;line-height:1.25">
+      <span>Below</span>
+      <span>At</span>
+      <span>Above</span>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>Budget</strong><br>${formatDlrCurrency(row.budgetRent)}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>Market</strong><br>${formatDlrCurrency(row.marketRent)}</div>
+  <div style="font-size:11px;font-weight:700;color:${varianceColor};line-height:1.25">${row.variance == null ? "—" : formatSignedDisplay(variance, 0, "")}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>% Occupied</strong><br>${compCalcFormatPercentValue(row.occupancyPct)}</div>
+  <div style="font-size:11px;color:#334155;line-height:1.25"><strong>% Leased</strong><br>${compCalcFormatPercentValue(row.leasedPct)}</div>
+  <div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px">Recommendation</div>
+    <div style="display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:6px 8px;border-radius:999px;background:${recommendation.bg};border:1px solid ${recommendation.color}33;font-size:10px;font-weight:700;line-height:1.25;color:${recommendation.color};text-align:center">
+      ${escapeHtml(recommendation.label)}
+    </div>
+  </div>
+</div>`;
     </div>`;
   }).join("");
-  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
+  return `<div style="padding:12px 12px 14px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
     <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px">
       <div>
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Floor Plan Rent Variance</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Floor Plan Rent Variance</div>
         <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">${rowsWithVariance.length} plan${rowsWithVariance.length === 1 ? "" : "s"} compared</div>
       </div>
       <div style="text-align:right;font-size:12px;color:#475569">
@@ -24721,11 +24777,11 @@ function buildSideBySideComparisonChart(title, rows = [], options = {}) {
       </div>
     </div>`;
   }).join("");
-  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
+  return `<div style="padding:12px 12px 14px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
     <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap">
       <div>
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">${escapeHtml(title)}</div>
-        ${subtitle ? `<div style="font-size:12px;color:#64748b;margin-top:5px;line-height:1.6">${escapeHtml(subtitle)}</div>` : ""}
+        ${subtitle ? `<div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.45">${escapeHtml(subtitle)}</div>` : ""}
       </div>
       <div style="text-align:right;font-size:12px;color:#475569">
         <div>${cleaned.length} metric${cleaned.length === 1 ? "" : "s"} compared</div>
@@ -25470,13 +25526,13 @@ function buildDlrInvestorOverviewDocument(report) {
     </div>`).join("")}
   </div>`;
   const forwardRows = report.forwardLook.map(row => `<tr>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;font-weight:700">${escapeHtml(row.label)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;font-weight:700">${escapeHtml(row.label)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
   </tr>`).join("");
   const notesHtml = [
     { label: "Tours", items: report.notes.tours },
@@ -26255,7 +26311,7 @@ function buildCommunityProgressTrafficMixPanel(report) {
   }
   const items = getTopLeadSourceFacts(report.leadSourceBreakdown);
   const total = Math.max(report.leadSourceBreakdownTotal || 0, 1);
-  return `<div style="padding:16px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
+  return `<div style="padding:12px 12px 14px;border:1px solid #dbe4f0;border-radius:16px;background:#ffffff">
     <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px">
       <div>
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Traffic Mix</div>
@@ -26949,13 +27005,13 @@ function buildCommunityProgressReportDocument(report) {
     ${buildCommunityProgressTrafficMixPanel(report)}
   </div>`;
   const forwardRows = (report.forwardLook ?? []).map(row => `<tr>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;font-weight:700">${escapeHtml(row.label)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
-    <td style="padding:8px 10px;border-top:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;font-weight:700">${escapeHtml(row.label)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.leaseExpirations)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveOuts)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrMetricValue(row.pendingMoveIns)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.budgetedOccupancy)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center">${formatDlrPercent(row.projectedOccupancy)}</td>
+    <td style="padding:6px 8px;border-top:1px solid #e5e7eb;font-size:11px;text-align:center;font-weight:700">${formatDlrMetricValue(row.moveInsNeeded)}</td>
   </tr>`).join("");
   const communitySectionsHtml = Array.isArray(report.communityReports) && report.communityReports.length > 1
     ? (communityProgressViewMode === "pdf"
@@ -27288,14 +27344,16 @@ function renderCommunityProgressReportingWorkspace() {
         <div class="report-hub-card">
           <div class="card-title" style="margin-bottom:8px">Forward Look</div>
           <div style="margin-bottom:10px">${buildDlrForwardLookChart(report)}</div>
-          <div style="display:grid;grid-template-columns:repeat(${Math.max(report.forwardLook.length,1)},1fr);gap:8px">
-            ${report.forwardLook.map(row => `<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px">
-              <div style="font-size:0.68rem;font-weight:700;color:#4493f8">${escapeHtml(row.label)}</div>
-              <div style="font-size:0.64rem;color:var(--muted);margin-top:6px">Expirations ${formatDlrMetricValue(row.leaseExpirations)}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Pending outs ${formatDlrMetricValue(row.pendingMoveOuts)}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Pending ins ${formatDlrMetricValue(row.pendingMoveIns)}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Budget occ ${formatDlrPercent(row.budgetedOccupancy)}</div>
-              <div style="font-size:0.64rem;color:var(--muted)">Projected occ ${formatDlrPercent(row.projectedOccupancy)}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px">
+            ${report.forwardLook.map(row => `<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 9px">
+              <div style="font-size:0.72rem;font-weight:700;color:#4493f8;line-height:1.2;margin-bottom:5px">${escapeHtml(row.label)}</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;font-size:0.62rem;color:var(--muted);line-height:1.35">
+                <div>Exp <strong style="color:var(--text)">${formatDlrMetricValue(row.leaseExpirations)}</strong></div>
+                <div>Outs <strong style="color:var(--text)">${formatDlrMetricValue(row.pendingMoveOuts)}</strong></div>
+                <div>Ins <strong style="color:var(--text)">${formatDlrMetricValue(row.pendingMoveIns)}</strong></div>
+                <div>Proj <strong style="color:var(--text)">${formatDlrPercent(row.projectedOccupancy)}</strong></div>
+              </div>
+              <div style="font-size:0.62rem;color:var(--muted);margin-top:5px;line-height:1.35">Budget <strong style="color:var(--text)">${formatDlrPercent(row.budgetedOccupancy)}</strong> · Need <strong style="color:var(--text)">${formatDlrMetricValue(row.moveInsNeeded)}</strong></div>
             </div>`).join("") || `<div style="font-size:0.68rem;color:var(--muted)">No forward-looking months are available yet.</div>`}
           </div>
         </div>
