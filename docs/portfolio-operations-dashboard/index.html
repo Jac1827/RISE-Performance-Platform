@@ -25911,6 +25911,183 @@ function buildCommunityProgressTrendCard({
   </div>`;
 }
 
+const COMMUNITY_PROGRESS_BEDROOM_RENT_BUCKETS = [
+  { beds: 1, label: "1 Bedroom" },
+  { beds: 2, label: "2 Bedroom" },
+  { beds: 3, label: "3 Bedroom" }
+];
+
+function getCommunityProgressBedroomBucket(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  return [1, 2, 3].includes(rounded) && Math.abs(numeric - rounded) < 0.25 ? rounded : null;
+}
+
+function isCommunityProgressAptiqMarketRentRate(rate = {}, surveyData = {}) {
+  const marketRent = Number(rate?.marketRent);
+  if (!Number.isFinite(marketRent) || marketRent <= 0) return false;
+  const source = String(rate?.sourceSheet ?? "").trim().toLowerCase();
+  if (/community setup|budget workbook|set-up|rate schedule/.test(source)) return false;
+  if (/^https?:\/\//i.test(source)) return false;
+  return Boolean(source || surveyData?.sourceFileName || surveyData?.sourceKind || surveyData?.uploadedAt);
+}
+
+function buildCommunityProgressBedroomRentComparisonRows(floorPlans = [], surveyData = {}) {
+  const buckets = new Map(COMMUNITY_PROGRESS_BEDROOM_RENT_BUCKETS.map(bucket => [bucket.beds, {
+    ...bucket,
+    subjectTotal: 0,
+    subjectWeight: 0,
+    subjectCount: 0,
+    marketTotal: 0,
+    marketWeight: 0,
+    marketCount: 0
+  }]));
+  const addSample = (bucketKey, side, value, weight = 1) => {
+    const bucket = buckets.get(bucketKey);
+    const numeric = Number(value);
+    const numericWeight = Math.max(1, Number(weight) || 1);
+    if (!bucket || !Number.isFinite(numeric) || numeric <= 0) return;
+    bucket[`${side}Total`] += numeric * numericWeight;
+    bucket[`${side}Weight`] += numericWeight;
+    bucket[`${side}Count`] += 1;
+  };
+  normalizeCommunityFloorPlans(floorPlans).forEach(plan => {
+    const bucket = getCommunityProgressBedroomBucket(plan?.beds);
+    addSample(bucket, "subject", plan?.marketedRent, plan?.units);
+  });
+  normalizeMarketSurveyFloorPlanRates(surveyData?.floorPlanRates)
+    .filter(rate => isCommunityProgressAptiqMarketRentRate(rate, surveyData))
+    .forEach(rate => {
+      const bucket = getCommunityProgressBedroomBucket(rate?.beds);
+      addSample(bucket, "market", rate?.marketRent, rate?.units);
+    });
+  return [...buckets.values()].map(bucket => {
+    const subjectAvgRent = bucket.subjectWeight > 0 ? bucket.subjectTotal / bucket.subjectWeight : null;
+    const marketAvgRent = bucket.marketWeight > 0 ? bucket.marketTotal / bucket.marketWeight : null;
+    const gap = subjectAvgRent !== null && marketAvgRent !== null ? subjectAvgRent - marketAvgRent : null;
+    return {
+      beds: bucket.beds,
+      label: bucket.label,
+      subjectAvgRent,
+      marketAvgRent,
+      subjectCount: bucket.subjectCount,
+      marketCount: bucket.marketCount,
+      subjectWeight: bucket.subjectWeight,
+      marketWeight: bucket.marketWeight,
+      gap,
+      gapPct: gap !== null && marketAvgRent > 0 ? (gap / marketAvgRent) * 100 : null
+    };
+  });
+}
+
+function aggregateCommunityProgressBedroomRentComparisonRows(reports = []) {
+  const buckets = new Map(COMMUNITY_PROGRESS_BEDROOM_RENT_BUCKETS.map(bucket => [bucket.beds, {
+    ...bucket,
+    subjectTotal: 0,
+    subjectWeight: 0,
+    subjectCount: 0,
+    marketTotal: 0,
+    marketWeight: 0,
+    marketCount: 0
+  }]));
+  (Array.isArray(reports) ? reports : []).forEach(report => {
+    (Array.isArray(report?.floorPlanRentComparisonRows) ? report.floorPlanRentComparisonRows : []).forEach(row => {
+      const bucket = buckets.get(Number(row?.beds));
+      if (!bucket) return;
+      const subjectWeight = Math.max(0, Number(row?.subjectWeight) || 0);
+      const marketWeight = Math.max(0, Number(row?.marketWeight) || 0);
+      if (subjectWeight > 0 && Number.isFinite(Number(row?.subjectAvgRent))) {
+        bucket.subjectTotal += Number(row.subjectAvgRent) * subjectWeight;
+        bucket.subjectWeight += subjectWeight;
+        bucket.subjectCount += Math.max(0, Number(row.subjectCount) || 0);
+      }
+      if (marketWeight > 0 && Number.isFinite(Number(row?.marketAvgRent))) {
+        bucket.marketTotal += Number(row.marketAvgRent) * marketWeight;
+        bucket.marketWeight += marketWeight;
+        bucket.marketCount += Math.max(0, Number(row.marketCount) || 0);
+      }
+    });
+  });
+  return [...buckets.values()].map(bucket => {
+    const subjectAvgRent = bucket.subjectWeight > 0 ? bucket.subjectTotal / bucket.subjectWeight : null;
+    const marketAvgRent = bucket.marketWeight > 0 ? bucket.marketTotal / bucket.marketWeight : null;
+    const gap = subjectAvgRent !== null && marketAvgRent !== null ? subjectAvgRent - marketAvgRent : null;
+    return {
+      beds: bucket.beds,
+      label: bucket.label,
+      subjectAvgRent,
+      marketAvgRent,
+      subjectCount: bucket.subjectCount,
+      marketCount: bucket.marketCount,
+      subjectWeight: bucket.subjectWeight,
+      marketWeight: bucket.marketWeight,
+      gap,
+      gapPct: gap !== null && marketAvgRent > 0 ? (gap / marketAvgRent) * 100 : null
+    };
+  });
+}
+
+function buildCommunityProgressBedroomRentComparisonCard(report) {
+  const rows = (Array.isArray(report?.floorPlanRentComparisonRows) ? report.floorPlanRentComparisonRows : [])
+    .filter(row => Number.isFinite(Number(row?.subjectAvgRent)) || Number.isFinite(Number(row?.marketAvgRent)));
+  const formatRent = value => Number.isFinite(Number(value)) && Number(value) > 0 ? formatDlrCurrency(value) : "—";
+  if (rows.length === 0) {
+    return `<div class="progress-card">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Bedroom Rent Position</div>
+      <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">No rent comparison</div>
+      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-top:10px">Add bedroom counts and marketed rents to Community Setup, then upload an AptIQ market survey with bedroom-level floor-plan rates to show this comparison.</div>
+    </div>`;
+  }
+  const comparableRows = rows.filter(row => Number.isFinite(Number(row.subjectAvgRent)) && Number.isFinite(Number(row.marketAvgRent)));
+  const avgGap = comparableRows.length > 0
+    ? comparableRows.reduce((sum, row) => sum + Number(row.gap || 0), 0) / comparableRows.length
+    : null;
+  const maxRent = Math.max(1, ...rows.flatMap(row => [Number(row.subjectAvgRent) || 0, Number(row.marketAvgRent) || 0]));
+  const rowHtml = rows.map(row => {
+    const subject = Number(row.subjectAvgRent);
+    const market = Number(row.marketAvgRent);
+    const subjectWidth = Number.isFinite(subject) && subject > 0 ? Math.max(6, Math.min((subject / maxRent) * 100, 100)) : 0;
+    const marketWidth = Number.isFinite(market) && market > 0 ? Math.max(6, Math.min((market / maxRent) * 100, 100)) : 0;
+    const gap = Number(row.gap);
+    const gapText = Number.isFinite(gap) ? compCalcFormatSignedCurrency(gap) : "Need both rents";
+    const gapColor = !Number.isFinite(gap) ? "#64748b" : gap > 0 ? "#b45309" : gap < 0 ? "#15803d" : "#475569";
+    return `<div style="padding:10px 0;border-top:1px solid #e5e7eb">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800;color:#0f172a">${escapeHtml(row.label)}</div>
+        <div style="font-size:11px;font-weight:800;color:${gapColor};text-align:right">${escapeHtml(gapText)}</div>
+      </div>
+      <div style="display:grid;gap:7px">
+        <div>
+          <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#475569;margin-bottom:4px"><span>Our avg</span><strong>${escapeHtml(formatRent(row.subjectAvgRent))}</strong></div>
+          <div style="height:9px;border-radius:999px;background:#e2e8f0;overflow:hidden"><div style="height:100%;width:${subjectWidth}%;background:#2563eb;border-radius:999px"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#475569;margin-bottom:4px"><span>AptIQ market avg</span><strong>${escapeHtml(formatRent(row.marketAvgRent))}</strong></div>
+          <div style="height:9px;border-radius:999px;background:#e2e8f0;overflow:hidden"><div style="height:100%;width:${marketWidth}%;background:#0f766e;border-radius:999px"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  return `<div class="progress-card">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px">
+      <div>
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b">Bedroom Rent Position</div>
+        <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px">${avgGap !== null ? compCalcFormatSignedCurrency(avgGap) : "Rent stack"}</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#475569">
+        <div>Our marketed rent vs AptIQ</div>
+        <div style="margin-top:4px">${comparableRows.length} bedroom bucket${comparableRows.length === 1 ? "" : "s"} compared</div>
+      </div>
+    </div>
+    ${rowHtml}
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:11px;color:#475569">
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:18px;height:0;border-top:3px solid #2563eb;display:inline-block"></span>Our avg</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:18px;height:0;border-top:3px solid #0f766e;display:inline-block"></span>AptIQ market avg</span>
+    </div>
+  </div>`;
+}
+
 function buildCommunityProgressDualLineChart(points = [], options = {}) {
   const validPoints = Array.isArray(points)
     ? points.filter(point => Number.isFinite(Number(point?.primary)) || Number.isFinite(Number(point?.secondary)))
@@ -26087,6 +26264,7 @@ function buildCommunityProgressTrendSection(report) {
         dotColor: "#2563eb",
         axisFormatter: value => formatDlrPercent(value, 0)
       })}
+      ${buildCommunityProgressBedroomRentComparisonCard(report)}
     </div>
   </div>`;
 }
@@ -26424,6 +26602,7 @@ function buildCommunityProgressSingleReportData(options = {}) {
   const leasedPct = Number.isFinite(Number(summary.leasedPct)) ? Number(summary.leasedPct) : getOccupancyPctFromUnits(leasedUnits, totalUnits, corporateUnits);
   const moveInsNeeded = Number(scheduleRow.netOccLeases) || 0;
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
+  const activeSurveyData = getCompCalculatorSurveySnapshot(detail, monthIdx, year);
   const marketPerformance = buildCommunityProgressMarketPerformance([detail], monthIdx);
   const trafficMetrics = {
     walkIn: leadSourceBreakdown ? leadSourceBreakdown.walkIn : null,
@@ -26451,7 +26630,8 @@ function buildCommunityProgressSingleReportData(options = {}) {
   trafficMetrics.tourToLeasePct = trafficMetrics.tours > 0 ? (trafficMetrics.approvals / trafficMetrics.tours) * 100 : 0;
   trafficMetrics.leadToLeasePct = trafficMetrics.guestCards > 0 ? (trafficMetrics.approvals / trafficMetrics.guestCards) * 100 : 0;
   const renewalSummary = getRenewalSummaryForMonth(monthEntry);
-  const floorPlanVarianceData = buildCommunityFloorPlanVarianceRows(record.communityFloorPlans, normalizeMarketSurveyData(record.marketSurveyData));
+  const floorPlanVarianceData = buildCommunityFloorPlanVarianceRows(record.communityFloorPlans, activeSurveyData);
+  const floorPlanRentComparisonRows = buildCommunityProgressBedroomRentComparisonRows(record.communityFloorPlans, activeSurveyData);
   const photoPool = collectMonthlyPresentationPhotos([detail], 4);
   const progressPaceRows = [
     {
@@ -26580,6 +26760,7 @@ function buildCommunityProgressSingleReportData(options = {}) {
       communityName,
       communityIdentifier: communityName
     })),
+    floorPlanRentComparisonRows,
     unmatchedMarketFloorPlans: floorPlanVarianceData.unmatchedRates,
     marketSurveyUpdatedOn: marketPerformance.updatedOn || normalizeMarketSurveyData(record.marketSurveyData).updatedOn,
     marketPerformance,
@@ -26653,6 +26834,7 @@ function buildCommunityProgressReportData(options = {}) {
     .map(item => buildCommunityDetailForMonth(item.communityName, item.sourceRecord, monthIdx))
     .filter(Boolean);
   const marketPerformance = buildCommunityProgressMarketPerformance(marketDetails, monthIdx);
+  const floorPlanRentComparisonRows = aggregateCommunityProgressBedroomRentComparisonRows(communityReports);
   const moveInsNeeded = communityReports.reduce((sum, item) => sum + Math.max(0, Number(item.moveInsNeeded) || 0), 0);
   const moveInGoalPerWeek = moveInsNeeded > 0 ? Math.max(1, Math.ceil(moveInsNeeded / 4)) : 0;
   const trafficMetrics = {
@@ -26849,6 +27031,7 @@ function buildCommunityProgressReportData(options = {}) {
           communityIdentifier: String(row.communityIdentifier || item.communityId || item.communityName || "").trim()
         }))
       : []),
+    floorPlanRentComparisonRows,
     unmatchedMarketFloorPlans: communityReports.flatMap(item => Array.isArray(item.unmatchedMarketFloorPlans) ? item.unmatchedMarketFloorPlans : []),
     marketSurveyUpdatedOn: marketPerformance.updatedOn || communityReports.map(item => item.marketSurveyUpdatedOn).filter(Boolean).sort().pop() || null,
     marketPerformance,
