@@ -4139,10 +4139,12 @@ function getDocumentedMonthlyAbsorption(monthIdx) {
 
 function getMonthsToStabilization() {
   const totalUnits = getTotalUnits();
-  if (totalUnits === 0) return { months: null, targetUnits: 0, avgNetAbsorption: 0, reason: "Enter unit count" };
-  const targetUnits = Math.ceil(totalUnits * 0.95);
-  const unitsNeeded = Math.max(targetUnits - currentOccupied, 0);
-  if (unitsNeeded === 0) return { months: 0, targetUnits, avgNetAbsorption: 0, reason: "At or above 95%" };
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
+  if (occupancyBaseUnits === 0) return { months: null, targetUnits: 0, avgNetAbsorption: 0, reason: "Enter unit count" };
+  const targetUnits = Math.ceil(occupancyBaseUnits * 0.95);
+  const comparableOccupied = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
+  const unitsNeeded = Math.max(targetUnits - comparableOccupied, 0);
+  if (unitsNeeded === 0) return { months: 0, targetUnits, avgNetAbsorption: 0, reason: "At or above 95% of eligible units" };
   const documented = getDocumentedMonthlyAbsorption(currentMonth);
   if (documented.length === 0) return { months: null, targetUnits, avgNetAbsorption: 0, reason: "No documented move-in / move-out history yet" };
   const avgNetAbsorption = documented.reduce((sum, v) => sum + v, 0) / documented.length;
@@ -4151,7 +4153,7 @@ function getMonthsToStabilization() {
     months: Math.ceil(unitsNeeded / avgNetAbsorption),
     targetUnits,
     avgNetAbsorption,
-    reason: `${unitsNeeded} units to 95% using ${documented.length} documented month(s)`
+    reason: `${unitsNeeded} units to 95% of eligible units using ${documented.length} documented month(s)`
   };
 }
 
@@ -11329,15 +11331,17 @@ function renderOverviewTab() {
   const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const oCPct = currentOccPct();
   const lCPct = currentLeasedPct();
-  const occGoalUnits = Math.ceil(totalUnits * occupancyGoal / 100);
-  const leasedGoalUnits = Math.ceil(totalUnits * leasedGoal / 100);
+  const comparableOccupied = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
+  const comparableLeased = getComparableOccupancyUnits(currentLeased, corporateLeaseUnits);
+  const occGoalUnits = occupancyBaseUnits > 0 ? Math.ceil(occupancyBaseUnits * occupancyGoal / 100) : 0;
+  const leasedGoalUnits = occupancyBaseUnits > 0 ? Math.ceil(occupancyBaseUnits * leasedGoal / 100) : 0;
   const upcomingMoveOuts30 = getEffectiveMoveOutsForMonth(currentMonth).effective;
   const upcomingMoveOuts60 = getEffectiveMoveOutsForMonth(currentMonth).effective + getEffectiveMoveOutsForMonth(Math.min(currentMonth+1,11)).effective;
   const upcomingMoveIns30  = monthlyData[currentMonth]?.moveIns  ?? 0;
-  const exposureAfter30 = Math.max(currentOccupied - upcomingMoveOuts30 + upcomingMoveIns30, 0);
-  const exposureAfter60 = Math.max(currentOccupied - upcomingMoveOuts60, 0);
-  const leasedAfter30 = Math.max(currentLeased - upcomingMoveOuts30 + upcomingMoveIns30, 0);
-  const leasedAfter60 = Math.max(currentLeased - upcomingMoveOuts60, 0);
+  const exposureAfter30 = Math.max(comparableOccupied - upcomingMoveOuts30 + upcomingMoveIns30, 0);
+  const exposureAfter60 = Math.max(comparableOccupied - upcomingMoveOuts60, 0);
+  const leasedAfter30 = Math.max(comparableLeased - upcomingMoveOuts30 + upcomingMoveIns30, 0);
+  const leasedAfter60 = Math.max(comparableLeased - upcomingMoveOuts60, 0);
   const currentMonthBudgetOcc = getBudgetOccPctForMonth(monthlyData[currentMonth], savedBudgetTargets, currentMonth);
   const schedule = computeSchedule();
   const currentRow = schedule[currentMonth] ?? {};
@@ -11396,7 +11400,7 @@ function renderOverviewTab() {
     }
     // Leased % vs budgetLeased check
     if (upcomingBudgetLeased > 0 && lCPct < upcomingBudgetLeased - 1) {
-      alertBanners += `<div class="alert-banner alert-warn"><div class="alert-icon">📊</div><div class="alert-body"><div class="alert-title">Leased % Below Upcoming Budget Target (${lCPct.toFixed(1)}% vs ${upcomingBudgetLeased.toFixed(1)}% goal)</div><div class="alert-detail">Need ${Math.max(upcomingBudgetLeasedUnits - currentLeased, 0)} more leased units to hit ${MONTHS[nextMonth]}'s leased budget</div></div></div>`;
+      alertBanners += `<div class="alert-banner alert-warn"><div class="alert-icon">📊</div><div class="alert-body"><div class="alert-title">Leased % Below Upcoming Budget Target (${lCPct.toFixed(1)}% vs ${upcomingBudgetLeased.toFixed(1)}% goal)</div><div class="alert-detail">Need ${Math.max(upcomingBudgetLeasedUnits - comparableLeased, 0)} more eligible units to hit ${MONTHS[nextMonth]}'s leased budget</div></div></div>`;
     }
   }
 
@@ -11494,27 +11498,27 @@ function renderOverviewTab() {
   const inputsGrid = `
   <div class="grid-4">
     <div class="card">
-      <div class="label">Occupied Units <span style="color:var(--muted);font-weight:400;font-size:0.72rem">(# of units)</span></div>
+      <div class="label">Occupied Units <span style="color:var(--muted);font-weight:400;font-size:0.72rem">(raw units)</span></div>
       ${numInp("currentOccupied", currentOccupied)}
       <div class="inp-pct">${oCPct.toFixed(1)}% occupied</div>
       ${pctBar(oCPct, occupancyGoal, "#4493f8")}
     </div>
     <div class="card">
-      <div class="label">Leased Units <span style="color:var(--muted);font-weight:400;font-size:0.72rem">(# of units)</span></div>
+      <div class="label">Leased Units <span style="color:var(--muted);font-weight:400;font-size:0.72rem">(raw units)</span></div>
       ${numInp("currentLeased", currentLeased)}
       <div class="inp-pct" style="color:#a371f7">${lCPct.toFixed(1)}% leased</div>
       ${pctBar(lCPct, leasedGoal, "#a371f7")}
-      ${upcomingBudgetLeased > 0 ? `<div class="pct-goal" style="color:${lCPct>=upcomingBudgetLeased?"#3fb950":"#f85149"}">${MONTHS[nextMonth]} Budget Leased: ${upcomingBudgetLeased.toFixed(1)}% (${upcomingBudgetLeasedUnits} units) ${lCPct>=upcomingBudgetLeased?"✓":"← need "+Math.max(upcomingBudgetLeasedUnits-currentLeased,0)+" more"}</div>` : ""}
+      ${upcomingBudgetLeased > 0 ? `<div class="pct-goal" style="color:${lCPct>=upcomingBudgetLeased?"#3fb950":"#f85149"}">${MONTHS[nextMonth]} Budget Leased: ${upcomingBudgetLeased.toFixed(1)}% (${upcomingBudgetLeasedUnits} eligible units) ${lCPct>=upcomingBudgetLeased?"✓":"← need "+Math.max(upcomingBudgetLeasedUnits-comparableLeased,0)+" more"}</div>` : ""}
     </div>
     <div class="card">
       <div class="label">Occupancy Goal %</div>
       ${numInp("occupancyGoal", occupancyGoal, "", 1, 100)}
-      <div class="pct-goal">= ${occGoalUnits} units</div>
+      <div class="pct-goal">= ${occGoalUnits} eligible units</div>
     </div>
     <div class="card">
       <div class="label">Leased % Goal</div>
       ${numInp("leasedGoal", leasedGoal, "", 1, 100)}
-      <div class="pct-goal">= ${leasedGoalUnits} units</div>
+      <div class="pct-goal">= ${leasedGoalUnits} eligible units</div>
     </div>
   </div>
   <div class="grid-4">
@@ -11549,7 +11553,7 @@ function renderOverviewTab() {
       ? "Stalled"
       : `${stabilization.months} mo`;
   const stabilizationSub = stabilization.months === 0
-    ? `95% reached at ${stabilization.targetUnits} units`
+    ? `95% reached at ${stabilization.targetUnits} eligible units`
     : stabilization.months === null
       ? `${stabilization.reason} · Avg net absorption ${stabilization.avgNetAbsorption.toFixed(1)}/mo`
       : `${stabilization.reason} · Avg net absorption ${stabilization.avgNetAbsorption.toFixed(1)}/mo`;
@@ -15119,13 +15123,15 @@ function getCurrentBudgetLeasedPct() {
 
 function getCurrentMoveInGoal() {
   const totalUnits = getTotalUnits();
+  const occupancyBaseUnits = getOccupancyBaseUnits(totalUnits, corporateLeaseUnits);
   const savedBudgetOccPct = getCurrentBudgetOccPct();
-  const savedBudgetOccUnits = totalUnits > 0 && savedBudgetOccPct > 0
-    ? Math.ceil(totalUnits * savedBudgetOccPct / 100)
+  const savedBudgetOccUnits = occupancyBaseUnits > 0 && savedBudgetOccPct > 0
+    ? Math.ceil(occupancyBaseUnits * savedBudgetOccPct / 100)
     : 0;
   const moveOutsThisMonth = getEffectiveMoveOutsForMonth(currentMonth).effective;
+  const comparableOccupied = getComparableOccupancyUnits(currentOccupied, corporateLeaseUnits);
   return savedBudgetOccUnits > 0
-    ? Math.max(savedBudgetOccUnits - currentOccupied + moveOutsThisMonth, 0)
+    ? Math.max(savedBudgetOccUnits - comparableOccupied + moveOutsThisMonth, 0)
     : 0;
 }
 
@@ -26271,13 +26277,15 @@ function buildCommunityProgressTrendRows(report) {
 function buildCommunityProgressStabilization(report) {
   const totalUnits = Math.max(0, Number(report?.totalUnits) || 0);
   const occupiedUnits = Math.max(0, Number(report?.occupiedUnits) || 0);
-  if (totalUnits === 0) {
+  const occupancyBaseUnits = Math.max(0, Number(report?.occupancyBaseUnits) || 0)
+    || getOccupancyBaseUnits(totalUnits, normalizeCorporateLeaseUnits(report?.sourceRecord?.corporateLeaseUnits, totalUnits));
+  if (occupancyBaseUnits === 0) {
     return { months: null, targetUnits: 0, avgNetAbsorption: 0, reason: "Enter unit count" };
   }
-  const targetUnits = Math.ceil(totalUnits * 0.95);
+  const targetUnits = Math.ceil(occupancyBaseUnits * 0.95);
   const unitsNeeded = Math.max(targetUnits - occupiedUnits, 0);
   if (unitsNeeded === 0) {
-    return { months: 0, targetUnits, avgNetAbsorption: 0, reason: "At or above 95%" };
+    return { months: 0, targetUnits, avgNetAbsorption: 0, reason: "At or above 95% of eligible units" };
   }
   const reportMonthIdx = Number.isInteger(report?.reportMonthIdx) ? clampNumber(report.reportMonthIdx, 0, 11) : getReportHubMonthIndex();
   const documented = (Array.isArray(report?.trendRows) ? report.trendRows : [])
@@ -26300,7 +26308,7 @@ function buildCommunityProgressStabilization(report) {
     months: Math.ceil(unitsNeeded / avgNetAbsorption),
     targetUnits,
     avgNetAbsorption,
-    reason: `${unitsNeeded} units to 95% using ${documented.length} documented month(s)`
+    reason: `${unitsNeeded} units to 95% of eligible units using ${documented.length} documented month(s)`
   };
 }
 
@@ -26372,7 +26380,7 @@ function buildCommunityProgressSnapshotWidgets(report) {
       ? "#3fb950"
       : "#d29922";
   const stabilizationSub = stabilization.months === 0
-    ? `95% reached at ${stabilization.targetUnits} units`
+    ? `95% reached at ${stabilization.targetUnits} eligible units`
     : stabilization.months === null
       ? `${stabilization.reason} · Avg net absorption ${stabilization.avgNetAbsorption.toFixed(1)}/mo`
       : `${stabilization.reason} · Avg net absorption ${stabilization.avgNetAbsorption.toFixed(1)}/mo`;
@@ -27446,6 +27454,7 @@ function buildCommunityProgressSingleReportData(options = {}) {
     reportPeriodLabel: `${formatDlrMonthYear(monthIdx, year)} month-to-date community progress`,
     generatedAt: new Date(),
     totalUnits,
+    occupancyBaseUnits: summary.occupancyBaseUnits,
     occupiedUnits,
     leasedUnits,
     occupancyPct,
@@ -27665,6 +27674,7 @@ function buildCommunityProgressReportData(options = {}) {
     reportPeriodLabel: `${formatDlrMonthYear(monthIdx, year)} month-to-date portfolio community progress`,
     generatedAt: new Date(),
     totalUnits,
+    occupancyBaseUnits: aggregateSummary.occupancyBaseUnits,
     occupiedUnits,
     leasedUnits,
     occupancyPct,
